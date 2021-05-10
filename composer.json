@@ -1,0 +1,24 @@
+{
+  "name": "abmmhasan/safeguard",
+  "description": "A Collection of useful PHP security functions.",
+  "type": "library",
+  "license": "MIT",
+  "authors": [
+    {
+      "name": "abmmhasan",
+      "email": "abmmhasan346@gmail.com"
+    }
+  ],
+  "autoload": {
+    "files": [
+      "src/functions.php"
+    ],
+    "psr-4": {
+      "AbmmHasan\\SafeGuard\\": "src/"
+    }
+  },
+  "minimum-stability": "dev",
+  "require": {
+    "php": ">=7.1"
+  }
+}
