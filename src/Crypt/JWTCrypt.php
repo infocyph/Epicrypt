@@ -24,7 +24,9 @@ final class JWTCrypt
     }
 
     /**
-     * Register predefined  JWT keys (claims)
+     * Register predefined JWT keys (claims)
+     *
+     * Required for all operation
      *
      * https://tools.ietf.org/html/rfc7519#page-9
      *
@@ -40,11 +42,13 @@ final class JWTCrypt
         $this->payload['iss'] = $issuer;
         $this->payload['aud'] = $audience;
         $this->payload['sub'] = $subject;
-        return $this->payload['jti'] = $jwtID ?? Random::string();
+        $this->payload['jti'] = $jwtID;
     }
 
     /**
      * Register predefined JWT keys (time based)
+     *
+     * Required for Token generation
      *
      * https://tools.ietf.org/html/rfc7519#page-9
      *
@@ -105,7 +109,10 @@ final class JWTCrypt
                 $signature = trim(base64_encode($signature), '=');
             }
             if ($signature === $parts[2]) {
-                return json_decode($payload, true);
+                $payload = json_decode($payload, true);
+                if ($this->verifyRegister($payload)) {
+                    return $payload;
+                }
             }
         }
         return null;
@@ -114,24 +121,20 @@ final class JWTCrypt
     /**
      * Verify payload through register information
      *
-     * @param array $payload payload obtained from JWT
-     * @param string $subject subject to match with
-     * @param string $audience applicable audience
-     * @param string $jwtID (optional) match token
+     * @param $payload
      * @return bool
      */
-    public function verifyRegister(array $payload, string $subject, string $audience, string $jwtID = ''): bool
+    private function verifyRegister($payload): bool
     {
         try {
             return !empty($payload) &&
-                count(array_intersect_key($payload, array_flip(['iat', 'nbf', 'exp', 'iss', 'aud', 'sub', 'jti']))) === 7 &&
+                count(array_intersect_key(array_filter($payload), array_flip(['iat', 'nbf', 'exp', 'iss', 'aud', 'sub', 'jti']))) === 7 &&
                 $payload['iat'] <= ($now = time()) && $payload['nbf'] <= $now && $payload['exp'] > $now &&
-                $payload['sub'] == $subject &&
-                in_array($audience, str_getcsv($payload['aud'])) &&
-                (empty($jwtID) || $jwtID == $payload['jti']);
+                $payload['sub'] == $this->payload['sub'] &&
+                in_array($this->payload['aud'], str_getcsv($payload['aud'])) &&
+                (empty($this->payload['jti']) || $this->payload['jti'] == $payload['jti']);
         } catch (Exception $e) {
             return false;
         }
-
     }
 }

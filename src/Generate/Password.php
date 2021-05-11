@@ -9,10 +9,11 @@ use Exception;
 final class Password
 {
     private static $combo = [
-        'u' => ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'J', 'K', 'M', 'N', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z'],
+        'u' => ['A', 'C', 'D', 'E', 'F', 'H', 'J', 'K', 'L', 'M', 'N', 'P', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z'],
         'l' => ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'j', 'k', 'm', 'n', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z'],
-        'd' => [2, 3, 4, 5, 6, 7, 8, 9],
-        's' => ['!', '@', '#', '$', '^', '%', '&', '*', '?', '(', ')', '.', ',']
+        'd' => [2, 3, 4, 5, 6, 7, 9],
+        's' => ['!', '@', '#', '$', '^', '%', '&', '*', '?', '(', ')', '.', ',', '+', '~', '[', ']', '{', '}'],
+        'a' => [0, 1, 6, 8, 'B', 'G', 'I', 'i', 'l', 'O', 'o', 'Q']
     ];
 
     private static $switch = [
@@ -26,21 +27,27 @@ final class Password
      * Generate a random secure password
      *
      * @param int $length
+     * @param bool $includeAmbiguous
      * @return string
      * @throws Exception
      */
-    public static function strong(int $length = 9): string
+    public static function strong(int $length = 9, bool $includeAmbiguous = true): string
     {
         if ($length < 8) {
             throw new Exception('Password length should be atleast 8');
         }
+        $set = ['u', 'l', 'd', 's', 'a'];
+        if (!$includeAmbiguous) {
+            unset($set[4]);
+        }
         do {
-            $password = self::random($length);
-            $isStrong = preg_match('/[a-z]+/', $password) &&
-                preg_match('/[A-Z]+/', $password) &&
-                preg_match("/\d/", $password) &&
-                preg_match("/\W+/", $password);
-        } while (!$isStrong);
+            $password = self::random($length, $set);
+        } while (
+            !preg_match('/[a-z]+/', $password) ||
+            !preg_match('/[A-Z]+/', $password) ||
+            !preg_match("/\d/", $password) ||
+            !preg_match("/\W+/", $password)
+        );
         return $password;
     }
 
@@ -75,7 +82,7 @@ final class Password
      * @return string
      * @throws Exception
      */
-    public static function random(int $length = 9, array $type = ['u', 'l', 'd', 's']): string
+    public static function random(int $length = 9, array $type = ['u', 'l', 'd', 's', 'a']): string
     {
         $sets = $password = [];
         foreach (self::$combo as $group => $items) {
