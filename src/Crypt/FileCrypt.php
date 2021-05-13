@@ -14,7 +14,6 @@ class FileCrypt extends StringCrypt
     private int $blockSize = 1024;
     private SplFileObject $file;
     private string $outFilePath = '';
-    private string $outFile;
 
     /**
      * Set output file path
@@ -23,9 +22,7 @@ class FileCrypt extends StringCrypt
      */
     public function setOutFile(string $pathToFile)
     {
-        if (empty($this->outFilePath = realpath($pathToFile))) {
-            $this->outFile = $pathToFile;
-        }
+        $this->outFilePath = $pathToFile;
     }
 
     /**
@@ -59,18 +56,19 @@ class FileCrypt extends StringCrypt
         } else {
             $outFile = pathinfo($this->outFilePath);
             $this->outFilePath = ($outFile['dirname'] ?? $inputLocDetails['dirname']) .
-                DIRECTORY_SEPARATOR .
-                ($outFile['filename'] ?? $inputLocDetails['filename']) .
-                ($outFile['extension'] ?? '.bin');
+                DIRECTORY_SEPARATOR . ($outFile['filename'] ?? $inputLocDetails['filename']) .
+                '.' . ($outFile['extension'] ?? 'bin');
         }
-        return $this->process($input, 'encrypt');
+        $this->setInfo('inFile', $input);
+        $this->setInfo('outFile', $this->outFilePath);
+        return $this->process($input, 'encryptionProcess');
     }
 
     /**
      * Decrypt file content
      *
-     * @param string $input
-     * @return bool|int
+     * @param string $input Input file location (realpath compatible)
+     * @return float|int
      * @throws Exception
      */
     public function decrypt(string $input)
@@ -81,20 +79,25 @@ class FileCrypt extends StringCrypt
         if (!file_exists($input) || !is_readable($input)) {
             throw new Exception("Invalid input file path ($input)!");
         }
+        $inputLocDetails = pathinfo($input);
         if (empty($this->outFilePath)) {
-            $inputLocDetails = pathinfo($input);
             $this->outFilePath = $inputLocDetails['dirname'] . DIRECTORY_SEPARATOR .
-                (empty($this->outFile) ?
-                    $inputLocDetails['filename'] . '.decompressed.txt' :
-                    $this->outFile);
+                $inputLocDetails['filename'] . '.decompressed';
+        } else {
+            $outFile = pathinfo($this->outFilePath);
+            $this->outFilePath = ($outFile['dirname'] ?? $inputLocDetails['dirname']) .
+                DIRECTORY_SEPARATOR . ($outFile['filename'] ?? $inputLocDetails['filename']) .
+                '.' . ($outFile['extension'] ?? 'decompressed');
         }
-        return $this->process($input, 'decrypt');
+        $this->setInfo('inFile', $input);
+        $this->setInfo('outFile', $this->outFilePath);
+        return $this->process($input, 'decryptionProcess');
     }
 
     /**
      * @param $input
      * @param $type
-     * @return false|int
+     * @return float|int
      * @throws Exception
      */
     private function process($input, $type)
@@ -103,18 +106,16 @@ class FileCrypt extends StringCrypt
             throw new Exception('Invalid output file path!');
         }
         $this->file = new SplFileObject($input, 'rb');
-        $writeBytes = $readBytes = 0;
         $readChunkSize = $writeChunkSize = [];
         foreach (new NoRewindIterator($this->iterate()) as $chunk) {
-            $readBytes += $readChunkSize[] = mb_strlen($chunk, '8bit');
-            $writeBytes += $writeChunkSize[] = file_put_contents($this->outFilePath, parent::$type($chunk), FILE_APPEND | LOCK_EX);
+            $readChunkSize[] = mb_strlen($chunk, '8bit');
+            $writeChunkSize[] = file_put_contents($this->outFilePath, parent::$type($chunk), FILE_APPEND | LOCK_EX);
         }
         $this->setInfo('pieces', count(array_filter($writeChunkSize)));
-        $this->setInfo('writeBlockSize', $writeChunkSize[0]);
         $this->setInfo('readBlockSize', $readChunkSize[0]);
-        $this->setInfo('bytesWritten', $writeBytes);
-        $this->setInfo('bytesRead', $readBytes);
-        return $writeBytes;
+        $this->setInfo('writeBlockSize', $writeChunkSize[0]);
+        $this->setInfo('bytesRead', array_sum($readChunkSize));
+        return $this->setInfo('bytesWritten', array_sum($writeChunkSize));
     }
 
     /**

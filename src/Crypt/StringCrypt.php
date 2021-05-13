@@ -61,7 +61,7 @@ class StringCrypt
      */
     protected function setInfo($key, $value)
     {
-        return $this->info[$key] ??= $value;
+        return $this->info[$key] = $value;
     }
 
     /**
@@ -158,16 +158,14 @@ class StringCrypt
     }
 
     /**
-     * Encrypt a string
+     * Encrypt content
      *
      * @param string $input String for encrypt
      * @return string raw format
      * @throws Exception
      */
-    public function encrypt(string $input): string
+    protected function encryptionProcess(string $input): string
     {
-        $this->setInfo('process', 'encryption');
-        $this->setInfo('type', 'raw');
         self::calculateIV();
         $encryptionKey = self::getKey();
         $cText = openssl_encrypt(
@@ -189,15 +187,13 @@ class StringCrypt
     }
 
     /**
-     * Decrypt a cypher text
+     * Decrypt cypher content
      *
      * @param string $input raw format
      * @return false|string
      */
-    public function decrypt(string $input)
+    protected function decryptionProcess(string $input)
     {
-        $this->setInfo('process', 'decryption');
-        $this->setInfo('type', 'raw');
         $ivLen = openssl_cipher_iv_length($this->encryptionMethod);
         $cTextOffset = 0;
         $encryptionKey = self::getKey();
@@ -230,6 +226,39 @@ class StringCrypt
     }
 
     /**
+     * Encrypt a string
+     *
+     * @param string $input String for encrypt
+     * @return string raw format
+     * @throws Exception
+     */
+    public function encrypt(string $input): string
+    {
+        $this->setInfo('process', 'encryption');
+        $this->setInfo('type', 'raw');
+        $output = $this->encryptionProcess($input);
+        $this->setInfo('bytesRead', mb_strlen($input, '8bit'));
+        $this->setInfo('bytesWritten', mb_strlen($output, '8bit'));
+        return $output;
+    }
+
+    /**
+     * Decrypt a cypher text
+     *
+     * @param string $input raw format
+     * @return false|string
+     */
+    public function decrypt(string $input)
+    {
+        $this->setInfo('process', 'decryption');
+        $this->setInfo('type', 'raw');
+        $output = $this->decryptionProcess($input);
+        $this->setInfo('bytesRead', mb_strlen($input, '8bit'));
+        $this->setInfo('bytesWritten', mb_strlen($output, '8bit'));
+        return $output;
+    }
+
+    /**
      * Encrypt String
      *
      * @param string $string
@@ -240,7 +269,7 @@ class StringCrypt
     {
         $this->setInfo('process', 'encryption');
         $this->setInfo('type', 'base64');
-        return trim(base64_encode(self::encrypt($string)), '=');
+        return trim(base64_encode(self::encryptionProcess($string)), '=');
     }
 
     /**
@@ -256,7 +285,7 @@ class StringCrypt
         if (!$encryptedString = base64_decode($encryptedString, true)) {
             return false;
         }
-        return self::decrypt($encryptedString);
+        return self::decryptionProcess($encryptedString);
     }
 
     /**
@@ -270,7 +299,7 @@ class StringCrypt
     {
         $this->setInfo('process', 'encryption');
         $this->setInfo('type', 'hex');
-        return bin2hex(self::encrypt($string));
+        return bin2hex(self::encryptionProcess($string));
     }
 
     /**
@@ -283,6 +312,6 @@ class StringCrypt
     {
         $this->setInfo('process', 'decryption');
         $this->setInfo('type', 'hex');
-        return self::decrypt(hex2bin($encryptedString));
+        return self::decryptionProcess(hex2bin($encryptedString));
     }
 }
