@@ -14,6 +14,7 @@ class FileCrypt extends StringCrypt
     private int $blockSize = 1024;
     private SplFileObject $file;
     private string $outFilePath = '';
+    private string $outFile;
 
     /**
      * Set output file path
@@ -22,7 +23,9 @@ class FileCrypt extends StringCrypt
      */
     public function setOutFile(string $pathToFile)
     {
-        $this->outFilePath = realpath($pathToFile);
+        if (empty($this->outFilePath = realpath($pathToFile))) {
+            $this->outFile = $pathToFile;
+        }
     }
 
     /**
@@ -30,7 +33,7 @@ class FileCrypt extends StringCrypt
      *
      * @param $size
      */
-    public function setBlockSize($size)
+    public function setReadBlockSize($size)
     {
         $this->blockSize = $size;
     }
@@ -80,7 +83,10 @@ class FileCrypt extends StringCrypt
         }
         if (empty($this->outFilePath)) {
             $inputLocDetails = pathinfo($input);
-            $this->outFilePath = $inputLocDetails['dirname'] . DIRECTORY_SEPARATOR . $inputLocDetails['filename'] . '.decompressed.txt';
+            $this->outFilePath = $inputLocDetails['dirname'] . DIRECTORY_SEPARATOR .
+                (empty($this->outFile) ?
+                    $inputLocDetails['filename'] . '.decompressed.txt' :
+                    $this->outFile);
         }
         return $this->process($input, 'decrypt');
     }
