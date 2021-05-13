@@ -6,22 +6,24 @@ namespace AbmmHasan\SafeGuard\Crypt;
 
 use Exception;
 
-final class SafeCrypt
+class StringCrypt
 {
-    private $secret = '';
-    private $salt = '';
-    private $iv = '';
+    private string $secret = '';
+    private string $salt = '';
+    private string $iv = '';
 
-    private $keyIterationCount = 10000;
-    private $keyLength = 50;
-    private $keyAlgo = 'SHA3-512';
-    private $isIVPredefined = false;
+    private int $keyIterationCount = 10000;
+    private int $keyLength = 50;
+    private string $keyAlgo = 'SHA3-512';
+    private bool $isIVPredefined = false;
 
-    private $enableSignature = true;
-    private $hmacAlgo = 'SHA3-512';
-    private $sha2Len = 64;
+    private bool $enableSignature = true;
+    private string $hmacAlgo = 'SHA3-512';
+    private int $sha2Len = 64;
 
-    private $encryptionMethod = 'aes-256-cbc';
+    private string $encryptionMethod = 'aes-256-cbc';
+
+    private array $info;
 
     /**
      * Constructor: Set Secret & Salt (& optionally IV string) for encryption/decryption
@@ -38,6 +40,28 @@ final class SafeCrypt
         if (!empty($iv)) {
             $this->isIVPredefined = true;
         }
+    }
+
+    /**
+     * Get the method details
+     *
+     * @return array
+     */
+    public function getInfo(): array
+    {
+        return $this->info;
+    }
+
+    /**
+     * Set info
+     *
+     * @param $key
+     * @param $value
+     * @return mixed
+     */
+    protected function setInfo($key, $value)
+    {
+        return $this->info[$key] ??= $value;
     }
 
     /**
@@ -110,9 +134,9 @@ final class SafeCrypt
         return openssl_pbkdf2(
             $this->secret,
             $this->salt,
-            $this->keyLength,
-            $this->keyIterationCount,
-            $this->keyAlgo
+            $this->setInfo('keyLength', $this->keyLength),
+            $this->setInfo('keyIterationCount', $this->keyIterationCount),
+            $this->setInfo('keyAlgo', $this->keyAlgo)
         );
     }
 
@@ -130,28 +154,33 @@ final class SafeCrypt
         if (empty($this->iv) && $length > 0) {
             $this->iv = openssl_random_pseudo_bytes($length);
         }
+        $this->setInfo('predefinedIV', $this->isIVPredefined);
     }
 
     /**
      * Encrypt a string
      *
-     * @param string $string
+     * @param string $input String for encrypt
      * @return string raw format
      * @throws Exception
      */
-    public function encrypt(string $string): string
+    public function encrypt(string $input): string
     {
+        $this->setInfo('process', 'encryption');
+        $this->setInfo('type', 'raw');
         self::calculateIV();
         $encryptionKey = self::getKey();
         $cText = openssl_encrypt(
-            $string,
-            $this->encryptionMethod,
+            $input,
+            $this->setInfo('encryptionMethod', $this->encryptionMethod),
             $encryptionKey,
             OPENSSL_RAW_DATA,
             $this->iv
         );
-        if ($this->enableSignature === true) {
-            $cText = hash_hmac($this->hmacAlgo, $cText, $encryptionKey, true) . $cText;
+        if ($this->setInfo('enableSignature', $this->enableSignature) === true) {
+            $cText = hash_hmac(
+                $this->setInfo('hmacAlgo', $this->hmacAlgo), $cText, $encryptionKey, true
+                ) . $cText;
         }
         if ($this->isIVPredefined === false) {
             $cText = $this->iv . $cText;
@@ -162,36 +191,38 @@ final class SafeCrypt
     /**
      * Decrypt a cypher text
      *
-     * @param string $encryptedString raw format
+     * @param string $input raw format
      * @return false|string
      */
-    public function decrypt(string $encryptedString)
+    public function decrypt(string $input)
     {
+        $this->setInfo('process', 'decryption');
+        $this->setInfo('type', 'raw');
         $ivLen = openssl_cipher_iv_length($this->encryptionMethod);
         $cTextOffset = 0;
         $encryptionKey = self::getKey();
-        if ($definedIV = $this->isIVPredefined === false) {
-            $this->iv = substr($encryptedString, 0, $ivLen);
+        if ($definedIV = ($this->setInfo('predefinedIV', $this->isIVPredefined) === false)) {
+            $this->iv = substr($input, 0, $ivLen);
             $cTextOffset += $ivLen;
         }
-        if ($this->enableSignature === true) {
+        if ($this->setInfo('enableSignature', $this->enableSignature) === true) {
             $cTextOffset += $this->sha2Len;
             $hash = substr(
-                $encryptedString,
+                $input,
                 $definedIV ? $ivLen : 0,
                 $this->sha2Len
             );
         }
-        $cText = substr($encryptedString, $cTextOffset);
+        $cText = substr($input, $cTextOffset);
 
         if ($this->enableSignature === true && !empty($hash) &&
-            !hash_equals($hash, hash_hmac($this->hmacAlgo, $cText, $encryptionKey, true))) {
+            !hash_equals($hash, hash_hmac($this->setInfo('hmacAlgo', $this->hmacAlgo), $cText, $encryptionKey, true))) {
             return false;
         }
 
         return openssl_decrypt(
             $cText,
-            $this->encryptionMethod,
+            $this->setInfo('encryptionMethod', $this->encryptionMethod),
             $encryptionKey,
             OPENSSL_RAW_DATA,
             $this->iv
@@ -207,6 +238,8 @@ final class SafeCrypt
      */
     public function encrypt64(string $string): string
     {
+        $this->setInfo('process', 'encryption');
+        $this->setInfo('type', 'base64');
         return trim(base64_encode(self::encrypt($string)), '=');
     }
 
@@ -218,6 +251,8 @@ final class SafeCrypt
      */
     public function decrypt64(string $encryptedString)
     {
+        $this->setInfo('process', 'decryption');
+        $this->setInfo('type', 'base64');
         if (!$encryptedString = base64_decode($encryptedString, true)) {
             return false;
         }
@@ -233,6 +268,8 @@ final class SafeCrypt
      */
     public function encryptHex(string $string): string
     {
+        $this->setInfo('process', 'encryption');
+        $this->setInfo('type', 'hex');
         return bin2hex(self::encrypt($string));
     }
 
@@ -244,6 +281,8 @@ final class SafeCrypt
      */
     public function decryptHex(string $encryptedString)
     {
+        $this->setInfo('process', 'decryption');
+        $this->setInfo('type', 'hex');
         return self::decrypt(hex2bin($encryptedString));
     }
 }

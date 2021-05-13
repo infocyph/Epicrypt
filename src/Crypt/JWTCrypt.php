@@ -6,11 +6,11 @@ namespace AbmmHasan\SafeGuard\Crypt;
 
 use Exception;
 
-final class JWTCrypt
+class JWTCrypt
 {
-    private $secret = '';
+    private string $secret = '';
 
-    private $payload;
+    private array $payload;
 
     /**
      * Constructor: Set Secret
@@ -34,10 +34,8 @@ final class JWTCrypt
      * @param string $audience Specify the audience of the JWT as csv
      * @param string $subject Type of JWT payload, local/global identifier for what this JWT is for
      * @param string|null $jwtID a unique string, which could be used to validate token
-     * @return string
-     * @throws Exception
      */
-    public function registerClaims(string $issuer, string $audience, string $subject, string $jwtID = null): string
+    public function registerClaims(string $issuer, string $audience, string $subject, string $jwtID = null)
     {
         $this->payload['iss'] = $issuer;
         $this->payload['aud'] = $audience;
@@ -76,7 +74,7 @@ final class JWTCrypt
      * @return string
      * @throws Exception
      */
-    public function getToken($payload, bool $encodedSignature = true): string
+    public function getToken(array|string $payload, bool $encodedSignature = true): string
     {
         if (count($this->payload) !== 7) {
             throw new Exception('Please, register predefined payload values first!');
@@ -94,11 +92,11 @@ final class JWTCrypt
     /**
      * Get content (signature verified payload)
      *
-     * @param $token
+     * @param string $token
      * @param bool $encodedSignature signature is base64 encoded
-     * @return mixed|null
+     * @return mixed
      */
-    public function getContent($token, bool $encodedSignature = true)
+    public function getContent(string $token, bool $encodedSignature = true): mixed
     {
         $parts = explode(".", $token);
         if (count($parts) === 3) {
