@@ -115,7 +115,8 @@ class FileCrypt extends StringCrypt
         $this->setInfo('readBlockSize', $readChunkSize[0]);
         $this->setInfo('writeBlockSize', $writeChunkSize[0]);
         $this->setInfo('bytesRead', array_sum($readChunkSize));
-        return $this->setInfo('bytesWritten', array_sum($writeChunkSize));
+        $this->setInfo('bytesWritten', array_sum($writeChunkSize));
+        return $writeChunkSize[0];
     }
 
     /**

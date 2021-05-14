@@ -45,11 +45,12 @@ class StringCrypt
     /**
      * Get the method details
      *
-     * @return array
+     * @param null $key
+     * @return mixed
      */
-    public function getInfo(): array
+    public function getInfo($key = null)
     {
-        return $this->info;
+        return is_null($key) ? $this->info : ($this->info[$key] ?? null);
     }
 
     /**
@@ -177,7 +178,7 @@ class StringCrypt
         );
         if ($this->setInfo('enableSignature', $this->enableSignature) === true) {
             $cText = hash_hmac(
-                $this->setInfo('hmacAlgo', $this->hmacAlgo), $cText, $encryptionKey, true
+                    $this->setInfo('hmacAlgo', $this->hmacAlgo), $cText, $encryptionKey, true
                 ) . $cText;
         }
         if ($this->isIVPredefined === false) {
