@@ -68,10 +68,10 @@ class FileCrypt extends StringCrypt
      * Decrypt file content
      *
      * @param string $input Input file location (realpath compatible)
-     * @return float|int
+     * @return string
      * @throws Exception
      */
-    public function decrypt(string $input)
+    public function decrypt(string $input): string
     {
         $this->setInfo('process', 'decryption');
         $this->setInfo('type', 'file');
@@ -100,7 +100,7 @@ class FileCrypt extends StringCrypt
      * @return float|int
      * @throws Exception
      */
-    private function process($input, $type)
+    private function process($input, $type): float|int
     {
         if (empty($this->outFilePath) || file_put_contents($this->outFilePath, '') === false) {
             throw new Exception('Invalid output file path!');

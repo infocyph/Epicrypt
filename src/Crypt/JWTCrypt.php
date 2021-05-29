@@ -74,7 +74,7 @@ class JWTCrypt
      * @return string
      * @throws Exception
      */
-    public function getToken($payload, bool $encodedSignature = true): string
+    public function getToken(array|string $payload, bool $encodedSignature = true): string
     {
         if (count($this->payload) !== 7) {
             throw new Exception('Please, register predefined payload values first!');

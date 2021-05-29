@@ -48,7 +48,7 @@ class StringCrypt
      * @param null $key
      * @return mixed
      */
-    public function getInfo($key = null)
+    public function getInfo($key = null): mixed
     {
         return is_null($key) ? $this->info : ($this->info[$key] ?? null);
     }
@@ -60,7 +60,7 @@ class StringCrypt
      * @param $value
      * @return mixed
      */
-    protected function setInfo($key, $value)
+    protected function setInfo($key, $value): mixed
     {
         return $this->info[$key] = $value;
     }
@@ -126,11 +126,11 @@ class StringCrypt
     }
 
     /**
-     * Get encryption key
+     * Generate encryption key
      *
      * @return false|string
      */
-    private function getKey()
+    private function getKey(): bool|string
     {
         return openssl_pbkdf2(
             $this->secret,
@@ -150,7 +150,7 @@ class StringCrypt
     {
         $length = openssl_cipher_iv_length($this->encryptionMethod);
         if (!empty($this->iv) && ($found = mb_strlen($this->iv, '8bit')) != $length) {
-            throw new Exception("IV length mismatch (Expected: $length, Found: $found)");
+            throw new Exception("IV length mismatch (Expected: {$length}B, Found: {$found}B)");
         }
         if (empty($this->iv) && $length > 0) {
             $this->iv = openssl_random_pseudo_bytes($length);
@@ -193,7 +193,7 @@ class StringCrypt
      * @param string $input raw format
      * @return false|string
      */
-    protected function decryptionProcess(string $input)
+    protected function decryptionProcess(string $input): bool|string
     {
         $ivLen = openssl_cipher_iv_length($this->encryptionMethod);
         $cTextOffset = 0;
@@ -249,7 +249,7 @@ class StringCrypt
      * @param string $input raw format
      * @return false|string
      */
-    public function decrypt(string $input)
+    public function decrypt(string $input): bool|string
     {
         $this->setInfo('process', 'decryption');
         $this->setInfo('type', 'raw');
@@ -279,7 +279,7 @@ class StringCrypt
      * @param string $encryptedString base64 encoded format
      * @return false|string
      */
-    public function decrypt64(string $encryptedString)
+    public function decrypt64(string $encryptedString): bool|string
     {
         $this->setInfo('process', 'decryption');
         $this->setInfo('type', 'base64');
@@ -309,7 +309,7 @@ class StringCrypt
      * @param string $encryptedString hex encoded format
      * @return false|string
      */
-    public function decryptHex(string $encryptedString)
+    public function decryptHex(string $encryptedString): bool|string
     {
         $this->setInfo('process', 'decryption');
         $this->setInfo('type', 'hex');
