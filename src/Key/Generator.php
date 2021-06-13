@@ -1,15 +1,13 @@
 <?php
 
 
-namespace AbmmHasan\SafeGuard\Cert;
+namespace AbmmHasan\SafeGuard\Key;
 
 
 use Exception;
 
-class GenerateCertificate
+class Generator
 {
-    private array $settings;
-
     private array $csrOption = [
         'private_key_bits' => 2048,
         'private_key_type' => OPENSSL_KEYTYPE_RSA,
@@ -27,9 +25,10 @@ class GenerateCertificate
         'curve_name' => 'prime256v1'
     ];
 
+    private array $pKeyInfo;
     private array $resource;
     private array $certificate;
-    private array $pKeyInfo;
+    private array $settings;
 
     /**
      * Set certificate issuer information
@@ -103,6 +102,7 @@ class GenerateCertificate
     }
 
     /**
+     * Set predefined pkey resource
      *
      * @param string|null $keyPair
      * @param string|null $csrResource
@@ -116,6 +116,8 @@ class GenerateCertificate
     }
 
     /**
+     * Get generated resources
+     *
      * @return array
      */
     public function get(): array
@@ -124,7 +126,7 @@ class GenerateCertificate
             'type' => $this->certificate['type'],
             'typeInt' => $this->pKeyInfo['type'],
             'bits' => $this->pKeyInfo['bits'],
-            'certificate' => [
+            'asset' => [
                 'private' => $this->certificate['private'],
                 'public' => $this->certificate['public'],
                 'certificate' => $this->certificate['certificate'] ?? false
@@ -134,6 +136,8 @@ class GenerateCertificate
     }
 
     /**
+     * Export generated resources to given location
+     *
      * @param string $path
      * @param string $name
      * @return bool
@@ -141,11 +145,8 @@ class GenerateCertificate
      */
     public function export(string $path, string $name = 'server'): bool
     {
-        if (
-            empty($this->certificate) ||
-            ($this->certificate['type'] !== 'dh' && (!isset($this->certificate['certificate']) || !isset($this->certificate['csr'])))
-        ) {
-            throw new Exception('Certificate not generated (properly)!');
+        if (empty($this->certificate)) {
+            throw new Exception('Certificate not generated!');
         }
         if (($e = openssl_error_string()) !== false) {
             throw new Exception($e);
@@ -170,6 +171,8 @@ class GenerateCertificate
     }
 
     /**
+     * Generate DSA resources
+     *
      * @param int $daysValidFor
      * @param string|null $passphrase
      * @param string|null $certificate
@@ -181,24 +184,14 @@ class GenerateCertificate
         $this->keyOption['digest_alg'] ??= 'SHA512';
         $this->csrOption['digest_alg'] ??= 'DSA';
         $this->certificate['type'] = 'dsa';
-        $this->generateResource($passphrase);
+        $this->generateKeyResource($passphrase);
         $this->generateCsr();
         $this->generateSigned($daysValidFor, $certificate);
     }
 
     /**
-     * @param string|null $passphrase
-     * @throws Exception
-     */
-    public function dh(string $passphrase = null)
-    {
-        $this->csrOption['private_key_type'] = $this->keyOption['private_key_type'] = OPENSSL_KEYTYPE_DH;
-        $this->csrOption['digest_alg'] ??= 'SHA512';
-        $this->certificate['type'] = 'dh';
-        $this->generateResource($passphrase);
-    }
-
-    /**
+     * Generate RSA resources
+     *
      * @param int $daysValidFor
      * @param null|string $passphrase
      * @param null|string $certificate
@@ -209,12 +202,14 @@ class GenerateCertificate
         $this->csrOption['private_key_type'] = $this->keyOption['private_key_type'] = OPENSSL_KEYTYPE_RSA;
         $this->csrOption['digest_alg'] ??= 'SHA512';
         $this->certificate['type'] = 'rsa';
-        $this->generateResource($passphrase);
+        $this->generateKeyResource($passphrase);
         $this->generateCsr();
         $this->generateSigned($daysValidFor, $certificate);
     }
 
     /**
+     * Generate ECDSA resources
+     *
      * @param int $daysValidFor
      * @param null|string $passphrase
      * @param null|string $certificate
@@ -225,7 +220,7 @@ class GenerateCertificate
         $this->csrOption['private_key_type'] = $this->keyOption['private_key_type'] = OPENSSL_KEYTYPE_EC;
         $this->csrOption['digest_alg'] ??= 'SHA512';
         $this->certificate['type'] = 'ec';
-        $this->generateResource($passphrase);
+        $this->generateKeyResource($passphrase);
         $this->generateCsr();
         $this->generateSigned($daysValidFor, $certificate);
     }
@@ -234,7 +229,7 @@ class GenerateCertificate
      * @param $passphrase
      * @throws Exception
      */
-    private function generateResource($passphrase)
+    private function generateKeyResource($passphrase)
     {
         if (empty(getenv('OPENSSL_CONF')) && (empty($this->csrOption['config']) || empty($this->keyOption['config']))) {
             throw new Exception('openssl.conf file not found!');

@@ -3,6 +3,27 @@
 use AbmmHasan\SafeGuard\Generate\Password;
 use AbmmHasan\SafeGuard\Generate\Random;
 
+if (!function_exists('generateDHPrime')) {
+    /**
+     * Generate a prime number using OpenSSL DH
+     *
+     * @param int $privateKeyBits
+     * @return string
+     * @throws Exception
+     */
+    function generateDHPrime(int $privateKeyBits = 2048): string
+    {
+        if ($privateKeyBits < 384) {
+            throw new Exception('Invalid private key bit size! Should be at-least 384.');
+        }
+
+        return openssl_pkey_get_details(openssl_pkey_new([
+            'private_key_bits' => $privateKeyBits,
+            'private_key_type' => OPENSSL_KEYTYPE_DH
+        ]))['dh']['p'];
+    }
+}
+
 if (!function_exists('generatePassword')) {
     /**
      * Generate password

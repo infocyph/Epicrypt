@@ -24,6 +24,7 @@ class StringCrypt
     private string $encryptionMethod = 'aes-256-cbc';
 
     private array $info;
+    private string $tag;
 
     /**
      * Constructor: Set Secret & Salt (& optionally IV string) for encryption/decryption
@@ -31,12 +32,14 @@ class StringCrypt
      * @param string $secret Secret string to encrypt with
      * @param string $salt Salt string for hashing
      * @param string $iv IV string (if omitted IV will be generated automatically)
+     * @param string $tag Tag for GCM/CCM type decryption only
      */
-    public function __construct(string $secret, string $salt, string $iv = '')
+    public function __construct(string $secret, string $salt, string $iv = '', string $tag = '')
     {
         $this->secret = $secret;
         $this->salt = $salt;
         $this->iv = $iv;
+        $this->tag = $tag;
         if (!empty($iv)) {
             $this->isIVPredefined = true;
         }
@@ -132,6 +135,9 @@ class StringCrypt
      */
     private function getKey(): bool|string
     {
+        if (stripos($this->encryptionMethod, '-gcm') || stripos($this->encryptionMethod, '-ccm')) {
+            $this->enableSignature = false;
+        }
         return openssl_pbkdf2(
             $this->secret,
             $this->salt,
@@ -174,7 +180,8 @@ class StringCrypt
             $this->setInfo('encryptionMethod', $this->encryptionMethod),
             $encryptionKey,
             OPENSSL_RAW_DATA,
-            $this->iv
+            $this->iv,
+            $this->info['tag']
         );
         if ($this->setInfo('enableSignature', $this->enableSignature) === true) {
             $cText = hash_hmac(
@@ -222,7 +229,8 @@ class StringCrypt
             $this->setInfo('encryptionMethod', $this->encryptionMethod),
             $encryptionKey,
             OPENSSL_RAW_DATA,
-            $this->iv
+            $this->iv,
+            $this->tag
         );
     }
 
