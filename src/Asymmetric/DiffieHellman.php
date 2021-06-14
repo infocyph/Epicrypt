@@ -1,7 +1,7 @@
 <?php
 
 
-namespace AbmmHasan\SafeGuard\Key;
+namespace AbmmHasan\SafeGuard\Asymmetric;
 
 
 use OpenSSLAsymmetricKey;
@@ -13,8 +13,8 @@ class DiffieHellman
     /**
      * Set the prime, generator & private key
      *
-     * @param string $prime prime number
-     * @param string $generator generator
+     * @param string $prime prime number (shared)
+     * @param string $generator generator (shared)
      * @param string $privateKey user private key
      */
     public function __construct(
@@ -36,25 +36,29 @@ class DiffieHellman
     /**
      * Get user public key
      *
+     * @param bool $encoded
      * @return mixed
      */
-    public function getPublicKey(): mixed
+    public function getPublicKey(bool $encoded = true): mixed
     {
-        return openssl_pkey_get_details($this->resource)['key'] ?? false;
+        $keyResource = openssl_pkey_get_details($this->resource);
+        return $encoded === true ? $keyResource['key'] : $keyResource['dh']['pub_key'];
     }
 
     /**
      * Get computed secret key
      *
      * @param $publicKey
+     * @param bool $encoded
      * @return false|string
      */
-    public function computeSecretKey($publicKey): bool|string
+    public function computeSecretKey($publicKey, bool $encoded = true): bool|string
     {
-        return openssl_dh_compute_key(
-            openssl_pkey_get_details(
+        if ($encoded) {
+            $publicKey = openssl_pkey_get_details(
                 openssl_pkey_get_public($publicKey)
-            )['dh']['pub_key'], $this->resource
-        );
+            )['dh']['pub_key'];
+        }
+        return openssl_dh_compute_key($publicKey, $this->resource);
     }
 }

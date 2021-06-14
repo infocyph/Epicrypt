@@ -1,7 +1,7 @@
 <?php
 
 
-namespace AbmmHasan\SafeGuard\Crypt;
+namespace AbmmHasan\SafeGuard\Symmetric;
 
 
 use Exception;

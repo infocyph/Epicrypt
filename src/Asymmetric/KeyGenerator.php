@@ -1,12 +1,12 @@
 <?php
 
 
-namespace AbmmHasan\SafeGuard\Key;
+namespace AbmmHasan\SafeGuard\Asymmetric;
 
 
 use Exception;
 
-class Generator
+class KeyGenerator
 {
     private array $csrOption = [
         'private_key_bits' => 2048,

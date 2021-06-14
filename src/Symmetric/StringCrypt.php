@@ -1,7 +1,7 @@
 <?php
 
 
-namespace AbmmHasan\SafeGuard\Crypt;
+namespace AbmmHasan\SafeGuard\Symmetric;
 
 
 use Exception;
@@ -25,6 +25,7 @@ class StringCrypt
 
     private array $info;
     private string $tag;
+    private string $aad;
 
     /**
      * Constructor: Set Secret & Salt (& optionally IV string) for encryption/decryption
@@ -32,17 +33,27 @@ class StringCrypt
      * @param string $secret Secret string to encrypt with
      * @param string $salt Salt string for hashing
      * @param string $iv IV string (if omitted IV will be generated automatically)
-     * @param string $tag Tag for GCM/CCM type decryption only
      */
-    public function __construct(string $secret, string $salt, string $iv = '', string $tag = '')
+    public function __construct(string $secret, string $salt, string $iv = '')
     {
         $this->secret = $secret;
         $this->salt = $salt;
         $this->iv = $iv;
-        $this->tag = $tag;
         if (!empty($iv)) {
             $this->isIVPredefined = true;
         }
+    }
+
+    /**
+     * Set Tag & Additional Authentication Data for GCM/CCM mode
+     *
+     * @param string $aad Additional Auth Info for both Encrypt/Decrypt
+     * @param string $tag Tag for decryption only
+     */
+    public function setTagNAad(string $aad = '', string $tag = '')
+    {
+        $this->tag = $tag;
+        $this->aad = $aad;
     }
 
     /**
@@ -181,7 +192,8 @@ class StringCrypt
             $encryptionKey,
             OPENSSL_RAW_DATA,
             $this->iv,
-            $this->info['tag']
+            $this->info['tag'],
+            $this->aad
         );
         if ($this->setInfo('enableSignature', $this->enableSignature) === true) {
             $cText = hash_hmac(
@@ -230,7 +242,8 @@ class StringCrypt
             $encryptionKey,
             OPENSSL_RAW_DATA,
             $this->iv,
-            $this->tag
+            $this->tag,
+            $this->aad
         );
     }
 
