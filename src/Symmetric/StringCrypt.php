@@ -192,7 +192,7 @@ class StringCrypt
             $encryptionKey,
             OPENSSL_RAW_DATA,
             $this->iv,
-            $this->info['tag'],
+            $this->info['tag'][],
             $this->aad
         );
         if ($this->setInfo('enableSignature', $this->enableSignature) === true) {

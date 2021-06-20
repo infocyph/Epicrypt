@@ -77,6 +77,7 @@ if (!function_exists('randomNumber')) {
      *
      * @param int $length
      * @return int
+     * @throws Exception
      */
     function randomNumber(int $length = 6): int
     {

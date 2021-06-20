@@ -40,16 +40,14 @@ final class Random
      *
      * @param int $length
      * @return int
+     * @throws Exception
      */
     public static function number(int $length = 6): int
     {
-        try {
-            $min = 1 . str_repeat(0, $length - 1);
-            $max = str_repeat(9, $length);
-            return random_int((int)$min, (int)$max);
-        } catch (Exception $e) {
-            return 0;
-        }
+        return random_int(
+            intval('1' . str_repeat('0', $length - 1)),
+            intval(str_repeat('9', $length))
+        );
     }
 
     /**

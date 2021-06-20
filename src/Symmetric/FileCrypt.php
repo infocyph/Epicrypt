@@ -112,11 +112,10 @@ class FileCrypt extends StringCrypt
             $writeChunkSize[] = file_put_contents($this->outFilePath, parent::$type($chunk), FILE_APPEND | LOCK_EX);
         }
         $this->setInfo('pieces', count(array_filter($writeChunkSize)));
-        $this->setInfo('readBlockSize', $readChunkSize[0]);
-        $this->setInfo('writeBlockSize', $writeChunkSize[0]);
         $this->setInfo('bytesRead', array_sum($readChunkSize));
         $this->setInfo('bytesWritten', array_sum($writeChunkSize));
-        return $writeChunkSize[0];
+        $this->setInfo('readBlockSize', $readChunkSize[0]);
+        return $this->setInfo('writeBlockSize', $writeChunkSize[0]);
     }
 
     /**

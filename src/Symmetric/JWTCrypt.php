@@ -24,7 +24,7 @@ class JWTCrypt
     }
 
     /**
-     * Register predefined JWT keys (claims)
+     * Register predefined JWT keys (general claims)
      *
      * Required for all operation
      *
@@ -44,7 +44,7 @@ class JWTCrypt
     }
 
     /**
-     * Register predefined JWT keys (time based)
+     * Register predefined JWT keys (time based claims)
      *
      * Required for Token generation
      *
@@ -126,7 +126,8 @@ class JWTCrypt
     {
         try {
             return !empty($payload) &&
-                count(array_intersect_key(array_filter($payload), array_flip(['iat', 'nbf', 'exp', 'iss', 'aud', 'sub', 'jti']))) === 7 &&
+                isset($payload['iat']) && isset($payload['nbf']) && isset($payload['exp']) &&
+                isset($payload['iss']) && isset($payload['aud']) && isset($payload['sub']) && array_key_exists('jti', $payload) &&
                 $payload['iat'] <= ($now = time()) && $payload['nbf'] <= $now && $payload['exp'] > $now &&
                 $payload['sub'] == $this->payload['sub'] &&
                 in_array($this->payload['aud'], str_getcsv($payload['aud'])) &&

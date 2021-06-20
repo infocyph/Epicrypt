@@ -42,7 +42,7 @@ class DiffieHellman
     public function getPublicKey(bool $encoded = true): mixed
     {
         $keyResource = openssl_pkey_get_details($this->resource);
-        return $encoded === true ? $keyResource['key'] : $keyResource['dh']['pub_key'];
+        return $encoded ? $keyResource['key'] : $keyResource['dh']['pub_key'];
     }
 
     /**

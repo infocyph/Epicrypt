@@ -129,6 +129,7 @@ class KeyGenerator
             'asset' => [
                 'private' => $this->certificate['private'],
                 'public' => $this->certificate['public'],
+                'csr' => $this->certificate['csr'],
                 'certificate' => $this->certificate['certificate'] ?? false
             ],
             'details' => $this->pKeyInfo[$this->certificate['type']]
@@ -153,15 +154,17 @@ class KeyGenerator
         }
         $path = rtrim($path, '/\\') . DIRECTORY_SEPARATOR;
 
+        // private, public key
         if (file_put_contents($path . $name . '.key', $this->certificate['private'], LOCK_EX) === false) {
             throw new Exception('File exporting failed!');
         }
         file_put_contents($path . $name . '.pub', $this->certificate['public'], LOCK_EX);
 
-        if ($this->certificate['type'] !== 'dh') {
-            file_put_contents($path . $name . '.crt', $this->certificate['certificate'], LOCK_EX);
-            file_put_contents($path . $name . '.csr', $this->certificate['csr'], LOCK_EX);
-        }
+        // certificate
+        file_put_contents($path . $name . '.crt', $this->certificate['certificate'], LOCK_EX);
+        file_put_contents($path . $name . '.csr', $this->certificate['csr'], LOCK_EX);
+
+        // all the details in php readable format
         file_put_contents(
             $path . $name . '.details.php',
             '<?php return ' . var_export($this->get(), true) . ';' . PHP_EOL,
@@ -208,7 +211,7 @@ class KeyGenerator
     }
 
     /**
-     * Generate ECDSA resources
+     * Generate EC resources
      *
      * @param int $daysValidFor
      * @param null|string $passphrase
@@ -260,7 +263,7 @@ class KeyGenerator
 
     private function generateSigned($validFor, $certificate)
     {
-        // Export Signed Certificate for given days
+        // Export (Signed for given days) Certificate
         openssl_x509_export(
             openssl_csr_sign($this->resource['csr'], $certificate, $this->resource['keyPair'], $validFor, $this->csrOption),
             $this->certificate['certificate']
