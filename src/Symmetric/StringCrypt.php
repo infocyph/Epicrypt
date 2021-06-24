@@ -8,10 +8,6 @@ use Exception;
 
 class StringCrypt
 {
-    private string $secret = '';
-    private string $salt = '';
-    private string $iv = '';
-
     private int $keyIterationCount = 10000;
     private int $keyLength = 50;
     private string $keyAlgo = 'SHA3-512';
@@ -24,8 +20,8 @@ class StringCrypt
     private string $encryptionMethod = 'aes-256-cbc';
 
     private array $info;
-    private string $tag;
-    private string $aad;
+    protected string $aad;
+    protected string $tag;
 
     /**
      * Constructor: Set Secret & Salt (& optionally IV string) for encryption/decryption
@@ -34,23 +30,23 @@ class StringCrypt
      * @param string $salt Salt string for hashing
      * @param string $iv IV string (if omitted IV will be generated automatically)
      */
-    public function __construct(string $secret, string $salt, string $iv = '')
+    public function __construct(
+        private string $secret,
+        private string $salt,
+        private string $iv = '')
     {
-        $this->secret = $secret;
-        $this->salt = $salt;
-        $this->iv = $iv;
         if (!empty($iv)) {
             $this->isIVPredefined = true;
         }
     }
 
     /**
-     * Set Tag & Additional Authentication Data for GCM/CCM mode
+     * Set Additional Authentication Data & Tag for GCM/CCM mode
      *
      * @param string $aad Additional Auth Info for both Encrypt/Decrypt
      * @param string $tag Tag for decryption only
      */
-    public function setTagNAad(string $aad = '', string $tag = '')
+    public function setAadNTag(string $aad = '', string $tag = '')
     {
         $this->tag = $tag;
         $this->aad = $aad;

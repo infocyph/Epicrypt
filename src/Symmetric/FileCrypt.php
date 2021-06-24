@@ -107,6 +107,7 @@ class FileCrypt extends StringCrypt
         }
         $this->file = new SplFileObject($input, 'rb');
         $readChunkSize = $writeChunkSize = [];
+        // ToDo: implement tag and aad
         foreach (new NoRewindIterator($this->iterate()) as $chunk) {
             $readChunkSize[] = mb_strlen($chunk, '8bit');
             $writeChunkSize[] = file_put_contents($this->outFilePath, parent::$type($chunk), FILE_APPEND | LOCK_EX);
