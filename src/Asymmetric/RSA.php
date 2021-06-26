@@ -40,7 +40,7 @@ class RSA
         }
         $key = $this->prepareInput($key);
         $key = openssl_pkey_get_public($key);
-        $this->check($key);
+        $this->check($key, true);
         if (false === openssl_public_encrypt(
                 $data,
                 $encrypted,
@@ -75,7 +75,7 @@ class RSA
         }
         $key = $this->prepareInput($key);
         $key = openssl_pkey_get_private($key, $passphrase);
-        $this->check($key);
+        $this->check($key, true);
         if (false === openssl_private_decrypt(
                 $data,
                 $decrypted,

@@ -9,11 +9,14 @@ use Generator;
 use NoRewindIterator;
 use SplFileObject;
 
-class FileCrypt extends StringCrypt
+class FileCrypt
 {
+    use Common;
+
     private int $blockSize = 1024;
     private SplFileObject $file;
     private string $outFilePath = '';
+    private array $tags = [];
 
     /**
      * Set output file path
@@ -33,6 +36,16 @@ class FileCrypt extends StringCrypt
     public function setReadBlockSize($size)
     {
         $this->blockSize = $size;
+    }
+
+    /**
+     * Set Tag(s) for GCM/CCM mode
+     *
+     * @param array $tags
+     */
+    public function setTags(array $tags)
+    {
+        $this->tags = $tags;
     }
 
     /**
@@ -105,12 +118,13 @@ class FileCrypt extends StringCrypt
         if (empty($this->outFilePath) || file_put_contents($this->outFilePath, '') === false) {
             throw new Exception('Invalid output file path!');
         }
+        $this->disableSignatureForGcmCcm();
         $this->file = new SplFileObject($input, 'rb');
         $readChunkSize = $writeChunkSize = [];
-        // ToDo: implement tag and aad
-        foreach (new NoRewindIterator($this->iterate()) as $chunk) {
+        foreach (new NoRewindIterator($this->iterate()) as $index => $chunk) {
             $readChunkSize[] = mb_strlen($chunk, '8bit');
-            $writeChunkSize[] = file_put_contents($this->outFilePath, parent::$type($chunk), FILE_APPEND | LOCK_EX);
+            $this->tag = $this->tags[$index] ?? '';
+            $writeChunkSize[] = file_put_contents($this->outFilePath, self::$type($chunk), FILE_APPEND | LOCK_EX);
         }
         $this->setInfo('pieces', count(array_filter($writeChunkSize)));
         $this->setInfo('bytesRead', array_sum($readChunkSize));

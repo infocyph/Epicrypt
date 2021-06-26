@@ -26,7 +26,7 @@ class Signature
     }
 
     /**
-     * Sign data using RSA (private key)
+     * Sign data using Private key
      *
      * @param string $data Data to sign
      * @param OpenSSLAsymmetricKey|array|string|OpenSSLCertificate $key Private key resource
@@ -58,7 +58,7 @@ class Signature
     }
 
     /**
-     * Verify signature using RSA (public key)
+     * Verify signature using Public key
      *
      * @param string $data Signed data
      * @param OpenSSLAsymmetricKey|array|string|OpenSSLCertificate $key Public key resource
@@ -77,12 +77,13 @@ class Signature
         $key = $this->prepareInput($key);
         $key = openssl_pkey_get_public($key);
         $this->check($key);
-        if (-1 === ($result = openssl_verify(
-                $data,
-                $signature,
-                $key,
-                $this->signatureAlgo
-            ))) {
+        $result = openssl_verify(
+            $data,
+            $signature,
+            $key,
+            $this->signatureAlgo
+        );
+        if (-1 === $result || false === $result) {
             throw new Exception('Signature verification failed; ' . $this->getSSLError());
         }
         return $result === 1;

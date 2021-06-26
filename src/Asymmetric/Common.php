@@ -24,15 +24,16 @@ trait Common
 
     /**
      * @param $result
+     * @param bool $isRSA
      * @throws Exception
      */
-    private function check($result)
+    private function check($result, bool $isRSA = false)
     {
         if (false === $result) {
             throw new Exception('Unable to load key; ' . $this->getSSLError());
         }
 
-        if (!isset(openssl_pkey_get_details($result)['rsa'])) {
+        if ($isRSA && !isset(openssl_pkey_get_details($result)['rsa'])) {
             throw new Exception('Only RSA is supported!');
         }
     }
