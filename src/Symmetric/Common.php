@@ -15,7 +15,7 @@ trait Common
 
     private bool $enableSignature = true;
     private string $hmacAlgo = 'SHA3-512';
-    private int $sha2Len = 64;
+    private int $sigLen = 64;
 
     private string $encryptionMethod = 'aes-256-ctr';
 
@@ -127,7 +127,7 @@ trait Common
     public function setSignatureProperty(string $algorithm = 'SHA3-512', int $length = 64)
     {
         $this->hmacAlgo = $algorithm;
-        $this->sha2Len = $length;
+        $this->sigLen = $length;
     }
 
     /**
@@ -221,11 +221,11 @@ trait Common
             $cTextOffset += $ivLen;
         }
         if ($this->setInfo('enableSignature', $this->enableSignature) === true) {
-            $cTextOffset += $this->sha2Len;
+            $cTextOffset += $this->sigLen;
             $hash = substr(
                 $input,
                 $definedIV ? $ivLen : 0,
-                $this->sha2Len
+                $this->sigLen
             );
         }
         $cText = substr($input, $cTextOffset);
