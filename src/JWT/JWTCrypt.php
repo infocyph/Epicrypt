@@ -1,11 +1,12 @@
 <?php
 
 
-namespace AbmmHasan\SafeGuard\Symmetric;
+namespace AbmmHasan\SafeGuard\JWT;
 
 
 use Exception;
 
+//ToDo: Add both symmetric and asymmetric
 class JWTCrypt
 {
     private string $secret = '';
@@ -100,8 +101,8 @@ class JWTCrypt
     {
         $parts = explode(".", $token);
         if (count($parts) === 3) {
-            $header = base64_decode($parts[0]);
-            $payload = base64_decode($parts[1]);
+            $header = base64_decode($parts[0], true);
+            $payload = base64_decode($parts[1], true);
             $signature = hash_hmac('SHA512', $header . $payload, $this->secret);
             if ($encodedSignature) {
                 $signature = trim(base64_encode($signature), '=');
@@ -127,7 +128,8 @@ class JWTCrypt
         try {
             return !empty($payload) &&
                 isset($payload['iat']) && isset($payload['nbf']) && isset($payload['exp']) &&
-                isset($payload['iss']) && isset($payload['aud']) && isset($payload['sub']) && array_key_exists('jti', $payload) &&
+                isset($payload['iss']) && isset($payload['aud']) && isset($payload['sub']) &&
+                array_key_exists('jti', $payload) &&
                 $payload['iat'] <= ($now = time()) && $payload['nbf'] <= $now && $payload['exp'] > $now &&
                 $payload['sub'] == $this->payload['sub'] &&
                 in_array($this->payload['aud'], str_getcsv($payload['aud'])) &&

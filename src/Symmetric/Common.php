@@ -164,11 +164,11 @@ trait Common
     private function calculateIV()
     {
         $length = openssl_cipher_iv_length($this->encryptionMethod);
-        if (!empty($this->iv) && ($found = mb_strlen($this->iv, '8bit')) != $length) {
-            throw new Exception("IV length mismatch (Expected: {$length}B, Found: {$found}B)");
-        }
         if (empty($this->iv) && $length > 0) {
             $this->iv = openssl_random_pseudo_bytes($length);
+        }
+        if (($found = mb_strlen($this->iv, '8bit')) != $length) {
+            throw new Exception("IV length mismatch (Expected: {$length}B, Found: {$found}B)");
         }
         $this->setInfo('predefinedIV', $this->isIVPredefined);
     }
@@ -241,9 +241,8 @@ trait Common
             $encryptionKey,
             OPENSSL_RAW_DATA,
             $this->iv,
-            base64_decode($this->tag),
+            base64_decode($this->tag, true),
             $this->aad
         );
     }
-
 }
