@@ -8,7 +8,7 @@ use Exception;
 use OpenSSLAsymmetricKey;
 use OpenSSLCertificate;
 
-class Signature
+class AsymmetricSignature
 {
     use Common;
 

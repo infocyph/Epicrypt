@@ -13,7 +13,7 @@ class FileCrypt
 {
     use Common;
 
-    private int $blockSize = 1024;
+    private int $blockSize;
     private SplFileObject $file;
     private string $outFilePath = '';
     private array $tags = [];
@@ -26,16 +26,6 @@ class FileCrypt
     public function setOutFile(string $pathToFile)
     {
         $this->outFilePath = $pathToFile;
-    }
-
-    /**
-     * Set block size
-     *
-     * @param $size
-     */
-    public function setReadBlockSize($size)
-    {
-        $this->blockSize = $size;
     }
 
     /**
@@ -52,13 +42,15 @@ class FileCrypt
      * Encrypt file content
      *
      * @param string $input Input file location (realpath compatible)
+     * @param int $blockSize Set read block size
      * @return string
      * @throws Exception
      */
-    public function encrypt(string $input): string
+    public function encrypt(string $input, int $blockSize = 1024): string
     {
         $this->setInfo('process', 'encryption');
         $this->setInfo('type', 'file');
+        $this->blockSize = $blockSize;
         $input = realpath($input);
         if (!file_exists($input) || !is_readable($input)) {
             throw new Exception("Invalid input file path ($input)!");
@@ -81,13 +73,15 @@ class FileCrypt
      * Decrypt file content
      *
      * @param string $input Input file location (realpath compatible)
+     * @param int $blockSize Set read block size (retrieved write block size during encryption)
      * @return string
      * @throws Exception
      */
-    public function decrypt(string $input): string
+    public function decrypt(string $input, int $blockSize): string
     {
         $this->setInfo('process', 'decryption');
         $this->setInfo('type', 'file');
+        $this->blockSize = $blockSize;
         $input = realpath($input);
         if (!file_exists($input) || !is_readable($input)) {
             throw new Exception("Invalid input file path ($input)!");
@@ -108,6 +102,8 @@ class FileCrypt
     }
 
     /**
+     * Content processor
+     *
      * @param $input
      * @param $type
      * @return float|int
@@ -120,16 +116,13 @@ class FileCrypt
         }
         $this->disableSignatureForGcmCcm();
         $this->file = new SplFileObject($input, 'rb');
-        $readChunkSize = $writeChunkSize = [];
+        $writeChunkSize = [];
         foreach (new NoRewindIterator($this->iterate()) as $index => $chunk) {
-            $readChunkSize[] = mb_strlen($chunk, '8bit');
             $this->tag = $this->tags[$index] ?? '';
             $writeChunkSize[] = file_put_contents($this->outFilePath, self::$type($chunk), FILE_APPEND | LOCK_EX);
         }
         $this->setInfo('pieces', count(array_filter($writeChunkSize)));
-        $this->setInfo('bytesRead', array_sum($readChunkSize));
         $this->setInfo('bytesWritten', array_sum($writeChunkSize));
-        $this->setInfo('readBlockSize', $readChunkSize[0]);
         return $this->setInfo('writeBlockSize', $writeChunkSize[0]);
     }
 

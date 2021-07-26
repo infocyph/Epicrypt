@@ -18,16 +18,16 @@ class DiffieHellman
      * @param string $privateKey user private key
      */
     public function __construct(
-        private string $prime,
-        private string $generator,
-        private string $privateKey
+        string $prime,
+        string $generator,
+        string $privateKey
     )
     {
         $this->resource = openssl_pkey_new([
             'dh' => [
-                'p' => $this->prime,
-                'g' => $this->generator,
-                'priv_key' => $this->privateKey
+                'p' => $prime,
+                'g' => $generator,
+                'priv_key' => $privateKey
             ],
             'private_key_type' => OPENSSL_KEYTYPE_DH
         ]);
@@ -37,7 +37,7 @@ class DiffieHellman
      * Get user public key
      *
      * @param bool $encoded
-     * @return mixed
+     * @return string
      */
     public function getPublicKey(bool $encoded = true): mixed
     {
@@ -48,11 +48,11 @@ class DiffieHellman
     /**
      * Get computed secret key
      *
-     * @param $publicKey
+     * @param $publicKey string public key resource
      * @param bool $encoded
      * @return false|string
      */
-    public function computeSecretKey($publicKey, bool $encoded = true): bool|string
+    public function computeSecretKey(string $publicKey, bool $encoded = true): bool|string
     {
         if ($encoded) {
             $publicKey = openssl_pkey_get_details(
