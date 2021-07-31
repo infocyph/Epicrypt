@@ -11,7 +11,7 @@ use SodiumException;
 
 class Asymmetric
 {
-    use Common, DER;
+    use Common, MBStringConverter;
 
     private int|string $algorithm = OPENSSL_ALGO_SHA512;
 
@@ -22,9 +22,16 @@ class Asymmetric
         'RS384' => OPENSSL_ALGO_SHA384,
         'RS512' => OPENSSL_ALGO_SHA512,
         'ES256' => OPENSSL_ALGO_SHA256,
-        'ES384' => OPENSSL_ALGO_SHA384
+        'ES384' => OPENSSL_ALGO_SHA384,
+        'ES512' => OPENSSL_ALGO_SHA512,
     ];
     private array $algorithmA2T = [];
+
+    private array $keyLength = [
+        'ES256' => 64,
+        'ES384' => 96,
+        'ES512' => 132
+    ];
 
     /**
      * Constructor: Set Key
@@ -56,10 +63,7 @@ class Asymmetric
             ->Sign($header . "." . $payload, $this->secret, $this->passphrase);
 
         if (str_starts_with($this->algorithmTitle, 'ES')) {
-            $signature = $this->toSignature(
-                $signature,
-                intval(str_replace('ES', '', $this->algorithmTitle))
-            );
+            $signature = $this->fromAsn1($signature, $this->keyLength[$this->algorithmTitle]);
         }
 
         return $header . "." . $payload . "." . $this->base64UrlEncode($signature);
@@ -77,7 +81,7 @@ class Asymmetric
         [$parts, $header, $payload, $signature] = $this->decodeResource($token);
 
         if (str_starts_with($header->alg, 'ES')) {
-            $signature = $this->fromSignature($signature);
+            $signature = $this->toAsn1($signature, $this->keyLength[$this->algorithmTitle]);
         }
 
         if ((new AsymmetricSignature(true, $this->algorithm))

@@ -184,7 +184,6 @@ class KeyGenerator
     public function dsa(int $daysValidFor = 365, string $passphrase = null, string $certificate = null)
     {
         $this->csrOption['private_key_type'] = $this->keyOption['private_key_type'] = OPENSSL_KEYTYPE_DSA;
-        $this->keyOption['digest_alg'] ??= 'SHA512';
         $this->csrOption['digest_alg'] ??= 'DSA';
         $this->certificate['type'] = 'dsa';
         $this->generateKeyResource($passphrase);

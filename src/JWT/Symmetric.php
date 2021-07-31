@@ -6,6 +6,7 @@ namespace AbmmHasan\SafeGuard\JWT;
 
 use ArrayAccess;
 use Exception;
+use SodiumException;
 
 class Symmetric
 {
@@ -41,9 +42,10 @@ class Symmetric
      * Get JWT token for a given payload
      *
      * @param object|array|string $payload
+     * @param mixed|null $keyId
      * @param array|object $header
      * @return string
-     * @throws Exception
+     * @throws SodiumException
      */
     public function encode(object|array|string $payload, mixed $keyId = null, array|object $header = []): string
     {
