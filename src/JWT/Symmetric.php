@@ -4,6 +4,7 @@
 namespace AbmmHasan\SafeGuard\JWT;
 
 
+use ArrayAccess;
 use Exception;
 
 class Symmetric
@@ -24,12 +25,17 @@ class Symmetric
         'SHA384' => 'HS384',
         'SHA512' => 'HS512'
     ];
-//        'ES384' => array('openssl', 'SHA384'),
-//        'ES256' => array('openssl', 'SHA256'),
-//        'RS256' => array('openssl', 'SHA256'),
-//        'RS384' => array('openssl', 'SHA384'),
-//        'RS512' => array('openssl', 'SHA512'),
-//        'EdDSA' => array('sodium_crypto', 'EdDSA'),
+
+    /**
+     * Constructor: Set Secret
+     *
+     * @param string|array|ArrayAccess $secret Secret string to encrypt with
+     */
+    public function __construct(string|array|ArrayAccess $secret)
+    {
+        $this->secret = $secret;
+        $this->payload['iat'] = time();
+    }
 
     /**
      * Get JWT token for a given payload
@@ -39,19 +45,12 @@ class Symmetric
      * @return string
      * @throws Exception
      */
-    public function encode(object|array|string $payload, array|object $header = []): string
+    public function encode(object|array|string $payload, mixed $keyId = null, array|object $header = []): string
     {
-        if (count($this->payload) !== 7) {
-            throw new Exception('Please, register predefined payload values first!');
-        }
-        $this->payload += (array)$payload;
-        $header = self::base64UrlEncode(self::jsonEncode([
-                'alg' => $this->algorithmTitle,
-                'typ' => 'JWT'
-            ] + (array)$header));
-        $payload = self::base64UrlEncode(self::jsonEncode($this->payload));
+        [$header, $payload] = $this->encodeHeaderNPayload($payload, $header, $keyId);
+
         return $header . "." . $payload . "." .
-            self::base64UrlEncode(
+            $this->base64UrlEncode(
                 hash_hmac($this->algorithm, $header . "." . $payload, $this->secret, true)
             );
     }
@@ -65,24 +64,7 @@ class Symmetric
      */
     public function decode(string $token): object
     {
-        $parts = array_filter(explode(".", $token));
-
-        if (count($parts) !== 3) {
-            throw new Exception('Invalid JWT string/segment!');
-        }
-        if (empty($header = self::jsonDecode(self::base64UrlDecode($parts[0])))) {
-            throw new Exception('Invalid header!');
-        }
-        if (empty($payload = self::jsonDecode(self::base64UrlDecode($parts[1])))) {
-            throw new Exception('Invalid payload/claims!');
-        }
-        if (empty($signature = self::base64UrlDecode($parts[2]))) {
-            throw new Exception('Invalid signature!');
-        }
-
-        if (empty($header->alg) || !isset($this->algorithmT2A[$header->alg])) {
-            throw new Exception("Invalid/Unsupported algorithm!");
-        }
+        [$parts, $header, $payload, $signature] = $this->decodeResource($token);
 
         if (hash_equals(
             $signature,
@@ -94,26 +76,5 @@ class Symmetric
             throw new Exception("Token verification failed!");
         }
         throw new Exception("Signature verification failed!");
-    }
-
-    /**
-     * Verify payload through register information
-     *
-     * @param $payload
-     * @return bool
-     * @throws Exception
-     */
-    private function verifyRegister($payload): bool
-    {
-        try {
-            return !empty($payload) &&
-                isset($payload['iss']) && $payload['sub'] == $this->payload['sub'] &&
-                $payload['iat'] <= ($now = time()) && $payload['nbf'] > $payload['iat'] &&
-                $payload['nbf'] < $payload['exp'] && $payload['exp'] >= $now &&
-                in_array($this->payload['aud'], str_getcsv($payload['aud'])) &&
-                (empty($this->payload['jti']) || $this->payload['jti'] === $payload['jti']);
-        } catch (Exception $e) {
-            throw new Exception("Invalid payload!");
-        }
     }
 }

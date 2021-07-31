@@ -24,6 +24,7 @@
     "ext-json": "*",
     "ext-openssl": "*",
     "ext-mbstring": "*",
-    "ext-ctype": "*"
+    "ext-ctype": "*",
+    "ext-sodium": "*"
   }
 }
