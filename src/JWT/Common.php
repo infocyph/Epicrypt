@@ -82,8 +82,7 @@ trait Common
      * @param array|object $header
      * @param mixed $keyId
      * @return array
-     * @throws SodiumException
-     * @throws Exception
+     * @throws SodiumException|Exception
      */
     private function encodeHeaderNPayload(object|array|string $payload, array|object $header, mixed $keyId): array
     {
@@ -110,8 +109,7 @@ trait Common
     /**
      * @param string $token
      * @return array
-     * @throws SodiumException
-     * @throws Exception
+     * @throws SodiumException|Exception
      */
     private function decodeResource(string $token): array
     {

@@ -4,7 +4,7 @@
 namespace AbmmHasan\SafeGuard\JWT;
 
 
-use AbmmHasan\SafeGuard\Asymmetric\AsymmetricSignature;
+use AbmmHasan\SafeGuard\Asymmetric\Signature;
 use ArrayAccess;
 use Exception;
 use SodiumException;
@@ -23,7 +23,7 @@ class Asymmetric
         'RS512' => OPENSSL_ALGO_SHA512,
         'ES256' => OPENSSL_ALGO_SHA256,
         'ES384' => OPENSSL_ALGO_SHA384,
-        'ES512' => OPENSSL_ALGO_SHA512,
+//        'ES512' => OPENSSL_ALGO_SHA512,
     ];
     private array $algorithmA2T = [];
 
@@ -59,7 +59,7 @@ class Asymmetric
     {
         [$header, $payload] = $this->encodeHeaderNPayload($payload, $header, $keyId);
 
-        $signature = (new AsymmetricSignature(true, $this->algorithm))
+        $signature = (new Signature(true, $this->algorithm))
             ->Sign($header . "." . $payload, $this->secret, $this->passphrase);
 
         if (str_starts_with($this->algorithmTitle, 'ES')) {
@@ -84,7 +84,7 @@ class Asymmetric
             $signature = $this->toAsn1($signature, $this->keyLength[$this->algorithmTitle]);
         }
 
-        if ((new AsymmetricSignature(true, $this->algorithm))
+        if ((new Signature(true, $this->algorithm))
             ->verify("$parts[0].$parts[1]", $this->secret, $signature)) {
             if ($this->verifyRegister((array)$payload)) {
                 return $payload;

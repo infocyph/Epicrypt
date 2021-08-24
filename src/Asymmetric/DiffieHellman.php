@@ -36,8 +36,8 @@ class DiffieHellman
     /**
      * Get user public key
      *
-     * @param bool $encoded
-     * @return string
+     * @param bool $encoded Get encoded resource?
+     * @return string public key
      */
     public function getPublicKey(bool $encoded = true): mixed
     {
@@ -48,9 +48,9 @@ class DiffieHellman
     /**
      * Get computed secret key
      *
-     * @param $publicKey string public key resource
-     * @param bool $encoded
-     * @return false|string
+     * @param $publicKey string Second party public key resource
+     * @param bool $encoded Is provided resource encoded?
+     * @return false|string Common Secret key
      */
     public function computeSecretKey(string $publicKey, bool $encoded = true): bool|string
     {
