@@ -7,6 +7,7 @@ namespace AbmmHasan\SafeGuard\Asymmetric;
 use Exception;
 use OpenSSLAsymmetricKey;
 use OpenSSLCertificate;
+use SodiumException;
 
 class Signature
 {
@@ -19,7 +20,7 @@ class Signature
      * @param int|string $signatureAlgo
      */
     public function __construct(
-        private bool $isBinary = true,
+        private bool       $isBinary = true,
         private int|string $signatureAlgo = OPENSSL_ALGO_SHA512
     )
     {
@@ -30,9 +31,9 @@ class Signature
      *
      * @param string $data Data to sign
      * @param OpenSSLAsymmetricKey|array|string|OpenSSLCertificate $key Private key resource
-     * @param string|null $passphrase (optional) Password used for private key encryption
+     * @param string|null $passphrase (optional) Password used for OpenSSl private key encryption
      * @return string Signature
-     * @throws Exception
+     * @throws Exception|SodiumException
      */
     public function Sign(string $data, OpenSSLAsymmetricKey|array|string|OpenSSLCertificate $key, string $passphrase = null): string
     {
@@ -40,21 +41,18 @@ class Signature
             throw new Exception('Invalid input data!');
         }
         $key = $this->prepareInput($key);
-        $key = openssl_pkey_get_private($key, $passphrase);
-        $this->check($key);
-        if (false === openssl_sign(
-                $data,
-                $signature,
-                $key,
-                $this->signatureAlgo
-            )) {
-            throw new Exception('Unable to generate signature; ' . $this->getSSLError());
+
+        if ($this->signatureAlgo === 'detached' || $this->signatureAlgo === 'sodium') {
+            $signature = sodium_crypto_sign_detached($data, $key);
+        } else {
+            $signature = $this->openSSLSign($key, $data, $passphrase);
         }
 
         if ($this->isBinary) {
             return $signature;
         }
-        return base64_encode($signature);
+
+        return sodium_bin2base64($signature, SODIUM_BASE64_VARIANT_ORIGINAL_NO_PADDING);
     }
 
     /**
@@ -69,12 +67,31 @@ class Signature
     public function verify(string $data, OpenSSLAsymmetricKey|array|string|OpenSSLCertificate $key, string $signature): bool
     {
         if (!$this->isBinary) {
-            $data = base64_decode($data, true);
+            $signature = sodium_base642bin($signature, SODIUM_BASE64_VARIANT_ORIGINAL_NO_PADDING);
         }
         if (empty($data)) {
             throw new Exception('Invalid input data!');
         }
         $key = $this->prepareInput($key);
+
+        if ($this->signatureAlgo === 'detached' || $this->signatureAlgo === 'sodium') {
+            return sodium_crypto_sign_verify_detached($signature, $data, $key);
+        } else {
+            return $this->openSSLVerify($key, $data, $signature);
+        }
+    }
+
+    /**
+     * Verify Signature with OpenSSL
+     *
+     * @param $key
+     * @param $data
+     * @param $signature
+     * @return bool
+     * @throws Exception
+     */
+    private function openSSLVerify($key, $data, $signature): bool
+    {
         $key = openssl_pkey_get_public($key);
         $this->check($key);
         $result = openssl_verify(
@@ -87,5 +104,29 @@ class Signature
             throw new Exception('Signature verification failed; ' . $this->getSSLError());
         }
         return $result === 1;
+    }
+
+    /**
+     * Sign using OpenSSL
+     *
+     * @param $key
+     * @param $data
+     * @param $passphrase
+     * @return mixed
+     * @throws Exception
+     */
+    private function openSSLSign($key, $data, $passphrase): mixed
+    {
+        $key = openssl_pkey_get_private($key, $passphrase);
+        $this->check($key);
+        if (false === openssl_sign(
+                $data,
+                $signature,
+                $key,
+                $this->signatureAlgo
+            )) {
+            throw new Exception('Unable to generate signature; ' . $this->getSSLError());
+        }
+        return $signature;
     }
 }

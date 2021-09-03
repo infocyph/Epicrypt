@@ -42,8 +42,8 @@ class FileCrypt
      * Encrypt file content
      *
      * @param string $input Input file location (realpath compatible)
-     * @param int $blockSize Set read block size
-     * @return string
+     * @param int $blockSize Set read block size (in bytes)
+     * @return string Write block size (in bytes)
      * @throws Exception
      */
     public function encrypt(string $input, int $blockSize = 1024): string
@@ -123,7 +123,7 @@ class FileCrypt
         }
         $this->setInfo('pieces', count(array_filter($writeChunkSize)));
         $this->setInfo('bytesWritten', array_sum($writeChunkSize));
-        return $this->setInfo('writeBlockSize', $writeChunkSize[0]);
+        return $this->setInfo('writeBlockSize', current($writeChunkSize));
     }
 
     /**

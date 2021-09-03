@@ -12,7 +12,7 @@ final class Password
         'u' => ['A', 'C', 'D', 'E', 'F', 'H', 'J', 'K', 'L', 'M', 'N', 'P', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z'],
         'l' => ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'j', 'k', 'm', 'n', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z'],
         'd' => [2, 3, 4, 5, 6, 7, 9],
-        's' => ['!', '@', '#', '$', '^', '%', '&', '*', '?', '(', ')', '.', ',', '+', '~', '[', ']', '{', '}'],
+        's' => ['!', '@', '#', '$', '^', '%', '&', '*', '?', '(', ')', '.', ',', '+', '~', '[', ']', '{', '}', '_', '-', '='],
         'a' => [0, 1, 6, 8, 'B', 'G', 'I', 'i', 'l', 'O', 'o', 'Q']
     ];
 
@@ -34,7 +34,7 @@ final class Password
     public static function strong(int $length = 9, bool $includeAmbiguous = true): string
     {
         if ($length < 8) {
-            throw new Exception('Password length should be atleast 8');
+            throw new Exception('Password length should be at-least 8');
         }
         $set = ['u', 'l', 'd', 's', 'a'];
         if (!$includeAmbiguous) {

@@ -45,12 +45,4 @@ class SodiumAuth
         }
         return false;
     }
-
-    /**
-     * @return string
-     */
-    public static function getSecret(): string
-    {
-        return sodium_crypto_auth_keygen();
-    }
 }

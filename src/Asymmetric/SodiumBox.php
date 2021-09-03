@@ -2,7 +2,6 @@
 
 namespace AbmmHasan\SafeGuard\Asymmetric;
 
-use Exception;
 use SodiumException;
 
 class SodiumBox
@@ -68,31 +67,5 @@ class SodiumBox
                 $publicKey
             )
         );
-    }
-
-    /**
-     * Get a key pair & nonce
-     *
-     * @param string|null $seed (optional) Seed for deterministic key generation
-     * @return object Key resource
-     * @throws SodiumException
-     * @throws Exception
-     */
-    public static function getKeypair(string $seed = null): object
-    {
-        if (!is_null($seed)) {
-            if ($length = strlen($seed) !== 32) {
-                throw new Exception("Invalid Seed size (Expected: 32B, Found: {$length}B)!");
-            }
-            $keypair = sodium_crypto_box_seed_keypair($seed);
-        } else {
-            $keypair = sodium_crypto_box_keypair();
-        }
-
-        return (object)[
-            'private' => sodium_crypto_box_secretkey($keypair),
-            'public' => sodium_crypto_box_publickey($keypair),
-            'nonce' => random_bytes(SODIUM_CRYPTO_BOX_NONCEBYTES)
-        ];
     }
 }
