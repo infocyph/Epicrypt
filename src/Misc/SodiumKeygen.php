@@ -59,7 +59,7 @@ class SodiumKeygen
     }
 
     /**
-     * Sodium Box & Box Seal keygen (Asymmetric)
+     * Sodium Box & Seal keygen (Asymmetric)
      *
      * @param string|null $seed (optional) Seed for deterministic key generation
      * @return object Key resource

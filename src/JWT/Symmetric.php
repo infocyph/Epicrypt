@@ -12,10 +12,6 @@ class Symmetric
 {
     use Common;
 
-    private string $algorithm = 'SHA512';
-
-    private string $algorithmTitle = 'HS512';
-
     private array $algorithmT2A = [
         'HS256' => 'SHA256',
         'HS384' => 'SHA384',
@@ -31,10 +27,12 @@ class Symmetric
      * Constructor: Set Secret
      *
      * @param string|array|ArrayAccess $secret Secret string to encrypt with
+     * @throws Exception
      */
     public function __construct(string|array|ArrayAccess $secret)
     {
         $this->secret = $secret;
+        $this->setAlgorithm('HS512');
         $this->payload['iat'] = time();
     }
 

@@ -5,17 +5,14 @@ namespace AbmmHasan\SafeGuard\JWT;
 
 
 use AbmmHasan\SafeGuard\Asymmetric\Signature;
+use AbmmHasan\SafeGuard\Misc\MBStringConverter;
 use ArrayAccess;
 use Exception;
 use SodiumException;
 
 class Asymmetric
 {
-    use Common, MBStringConverter;
-
-    private int|string $algorithm = OPENSSL_ALGO_SHA512;
-
-    private string $algorithmTitle = 'RS512';
+    use Common;
 
     private array $algorithmT2A = [
         'RS256' => OPENSSL_ALGO_SHA256,
@@ -37,11 +34,13 @@ class Asymmetric
      * Constructor: Set Key
      *
      * @param string|array|ArrayAccess $key
-     * @param null|string $passphrase
+     * @param null $passphrase
+     * @throws Exception
      */
     public function __construct(string|array|ArrayAccess $key, private $passphrase = null)
     {
         $this->secret = $key;
+        $this->setAlgorithm('RS512');
         $this->payload['iat'] = time();
     }
 
@@ -63,7 +62,7 @@ class Asymmetric
             ->Sign($header . "." . $payload, $this->secret, $this->passphrase);
 
         if (str_starts_with($this->algorithmTitle, 'ES')) {
-            $signature = $this->fromAsn1($signature, $this->keyLength[$this->algorithmTitle]);
+            $signature = (new MBStringConverter())->fromAsn1($signature, $this->keyLength[$this->algorithmTitle]);
         }
 
         return $header . "." . $payload . "." . $this->base64UrlEncode($signature);
@@ -81,7 +80,7 @@ class Asymmetric
         [$parts, $header, $payload, $signature] = $this->decodeResource($token);
 
         if (str_starts_with($header->alg, 'ES')) {
-            $signature = $this->toAsn1($signature, $this->keyLength[$this->algorithmTitle]);
+            $signature = (new MBStringConverter())->toAsn1($signature, $this->keyLength[$this->algorithmTitle]);
         }
 
         if ((new Signature(true, $this->algorithm))

@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace AbmmHasan\SafeGuard\JWT;
+namespace AbmmHasan\SafeGuard\Misc;
 
 use Exception;
 
-trait MBStringConverter
+Class MBStringConverter
 {
     private string $asn1Seq = '30';
     private string $asn1Int = '02';
@@ -17,12 +17,14 @@ trait MBStringConverter
     private int $byteSize = 2;
 
     /**
+     * Convert MB String to ASN1 String
+     *
      * @param string $signature
      * @param int $length
      * @return string
      * @throws Exception
      */
-    private function toAsn1(string $signature, int $length): string
+    public function toAsn1(string $signature, int $length): string
     {
         $signature = bin2hex($signature);
 
@@ -53,12 +55,14 @@ trait MBStringConverter
     }
 
     /**
+     * Convert ASN1 String to MB String
+     *
      * @param string $signature
      * @param int $length
      * @return string
      * @throws Exception
      */
-    private function fromAsn1(string $signature, int $length): string
+    public function fromAsn1(string $signature, int $length): string
     {
         $message = bin2hex($signature);
         $position = 0;

@@ -4,7 +4,7 @@ namespace AbmmHasan\SafeGuard\Asymmetric;
 
 use SodiumException;
 
-class SodiumBoxSeal
+class SodiumSeal
 {
 
     /**

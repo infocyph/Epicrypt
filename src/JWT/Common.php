@@ -14,6 +14,10 @@ trait Common
 
     private array $payload;
 
+    private int|string $algorithm;
+
+    private string $algorithmTitle;
+
     /**
      * Set hashing algorithm
      *
@@ -78,6 +82,8 @@ trait Common
     }
 
     /**
+     * Encode resource (Header & Payload)
+     *
      * @param object|array|string $payload
      * @param array|object $header
      * @param mixed $keyId
@@ -107,6 +113,8 @@ trait Common
     }
 
     /**
+     * Decode/Parse Token
+     *
      * @param string $token
      * @return array
      * @throws SodiumException|Exception
