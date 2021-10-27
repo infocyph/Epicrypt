@@ -7,7 +7,7 @@ use SodiumException;
 class SodiumSign
 {
     public function __construct(
-        private bool   $isBinary = true
+        private bool $isBinary = true
     )
     {
 

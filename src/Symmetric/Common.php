@@ -193,7 +193,7 @@ trait Common
             $generatedTag,
             $this->aad
         );
-        $this->info['tag'][] = base64_encode($generatedTag);
+        $this->info['tag'][] = sodium_bin2base64($generatedTag, SODIUM_BASE64_VARIANT_ORIGINAL_NO_PADDING);
         if ($this->setInfo('enableSignature', $this->enableSignature) === true) {
             $cText = hash_hmac(
                     $this->setInfo('hmacAlgo', $this->hmacAlgo), $cText, $encryptionKey, true
@@ -210,6 +210,7 @@ trait Common
      *
      * @param string $input raw format
      * @return false|string
+     * @throws \SodiumException
      */
     private function decryptionProcess(string $input): bool|string
     {
@@ -241,7 +242,7 @@ trait Common
             $encryptionKey,
             OPENSSL_RAW_DATA,
             $this->iv,
-            base64_decode($this->tag, true),
+            sodium_base642bin($this->tag, SODIUM_BASE64_VARIANT_ORIGINAL_NO_PADDING),
             $this->aad
         );
     }

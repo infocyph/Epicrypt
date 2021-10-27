@@ -27,7 +27,7 @@ final class Random
             }
             return $prefix .
                 substr(
-                    str_replace(['+', '/', '='], '', base64_encode(random_bytes($length))),
+                    str_replace(['+', '/', '\\'], '', sodium_bin2base64(random_bytes($length), SODIUM_BASE64_VARIANT_ORIGINAL_NO_PADDING)),
                     0, $length)
                 . $postfix;
         } catch (Exception $e) {

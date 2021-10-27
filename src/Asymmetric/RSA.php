@@ -20,7 +20,7 @@ class RSA
      */
     public function __construct(
         private bool $isBinary = true,
-        private int $padding = OPENSSL_PKCS1_OAEP_PADDING
+        private int  $padding = OPENSSL_PKCS1_OAEP_PADDING
     )
     {
     }
@@ -53,7 +53,7 @@ class RSA
         if ($this->isBinary) {
             return $encrypted;
         }
-        return base64_encode($encrypted);
+        return sodium_bin2base64($encrypted, SODIUM_BASE64_VARIANT_ORIGINAL_NO_PADDING);
     }
 
     /**
@@ -68,7 +68,7 @@ class RSA
     public function decrypt(string $data, OpenSSLAsymmetricKey|array|string|OpenSSLCertificate $key, string $passphrase = null): string
     {
         if (!$this->isBinary) {
-            $data = base64_decode($data, true);
+            $data = sodium_base642bin($data, SODIUM_BASE64_VARIANT_ORIGINAL_NO_PADDING);
         }
         if (empty($data)) {
             throw new Exception('Invalid input data!');

@@ -5,6 +5,7 @@ namespace AbmmHasan\SafeGuard\Symmetric;
 
 
 use Exception;
+use SodiumException;
 
 class StringCrypt
 {
@@ -43,6 +44,7 @@ class StringCrypt
      *
      * @param string $input raw format
      * @return false|string
+     * @throws SodiumException
      */
     public function decrypt(string $input): bool|string
     {
@@ -67,7 +69,7 @@ class StringCrypt
         $this->disableSignatureForGcmCcm();
         $this->setInfo('process', 'encryption');
         $this->setInfo('type', 'base64');
-        return trim(base64_encode(self::encryptionProcess($string)), '=');
+        return sodium_bin2base64(self::encryptionProcess($string), SODIUM_BASE64_VARIANT_ORIGINAL_NO_PADDING);
     }
 
     /**
@@ -75,13 +77,14 @@ class StringCrypt
      *
      * @param string $encryptedString base64 encoded format
      * @return false|string
+     * @throws SodiumException
      */
     public function decrypt64(string $encryptedString): bool|string
     {
         $this->disableSignatureForGcmCcm();
         $this->setInfo('process', 'decryption');
         $this->setInfo('type', 'base64');
-        if (!$encryptedString = base64_decode($encryptedString, true)) {
+        if (!$encryptedString = sodium_base642bin($encryptedString, SODIUM_BASE64_VARIANT_ORIGINAL_NO_PADDING)) {
             return false;
         }
         return self::decryptionProcess($encryptedString);
@@ -107,6 +110,7 @@ class StringCrypt
      *
      * @param string $encryptedString hex encoded format
      * @return false|string
+     * @throws SodiumException
      */
     public function decryptHex(string $encryptedString): bool|string
     {
