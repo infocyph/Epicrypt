@@ -4,17 +4,14 @@
 namespace AbmmHasan\SafeGuard\Symmetric;
 
 
+use AbmmHasan\SafeGuard\Misc\ReadFile;
 use Exception;
-use Generator;
-use NoRewindIterator;
-use SplFileObject;
 
 class FileCrypt
 {
     use Common;
 
     private int $blockSize;
-    private SplFileObject $file;
     private string $outFilePath = '';
     private array $tags = [];
 
@@ -115,26 +112,14 @@ class FileCrypt
             throw new Exception('Invalid output file path!');
         }
         $this->disableSignatureForGcmCcm();
-        $this->file = new SplFileObject($input, 'rb');
         $writeChunkSize = [];
-        foreach (new NoRewindIterator($this->iterate()) as $index => $chunk) {
+        $fileObject = new ReadFile($input, 'rb');
+        foreach ($fileObject->binary($this->blockSize) as $index => $chunk) {
             $this->tag = $this->tags[$index] ?? '';
             $writeChunkSize[] = file_put_contents($this->outFilePath, self::$type($chunk), FILE_APPEND | LOCK_EX);
         }
         $this->setInfo('pieces', count(array_filter($writeChunkSize)));
         $this->setInfo('bytesWritten', array_sum($writeChunkSize));
         return $this->setInfo('writeBlockSize', current($writeChunkSize));
-    }
-
-    /**
-     * @return Generator
-     */
-    private function iterate(): Generator
-    {
-        $count = 0;
-        while (!$this->file->eof()) {
-            yield $this->file->fread($this->blockSize);
-            $count++;
-        }
     }
 }

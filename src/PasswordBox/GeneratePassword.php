@@ -1,12 +1,12 @@
 <?php
 
 
-namespace AbmmHasan\SafeGuard\Generate;
+namespace AbmmHasan\SafeGuard\PasswordBox;
 
 
 use Exception;
 
-final class Password
+final class GeneratePassword
 {
     private static array $combo = [
         'u' => ['A', 'C', 'D', 'E', 'F', 'H', 'J', 'K', 'L', 'M', 'N', 'P', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z'],

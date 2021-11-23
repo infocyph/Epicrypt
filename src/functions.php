@@ -1,7 +1,7 @@
 <?php
 
-use AbmmHasan\SafeGuard\Generate\Password;
 use AbmmHasan\SafeGuard\Generate\Random;
+use AbmmHasan\SafeGuard\PasswordBox\GeneratePassword;
 
 if (!function_exists('getDHPrime')) {
     /**
@@ -36,9 +36,9 @@ if (!function_exists('generatePassword')) {
     function generatePassword(int $length = 9, $strong = true): string
     {
         if ($strong) {
-            return Password::strong($length);
+            return GeneratePassword::strong($length);
         }
-        return Password::random($length);
+        return GeneratePassword::random($length);
     }
 }
 
