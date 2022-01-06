@@ -6,7 +6,7 @@ namespace AbmmHasan\SafeGuard\Misc;
 
 use Exception;
 
-class OpenSSLKeygen
+final class OpenSSLKeygen
 {
     private array $csrOption = [
         'private_key_bits' => 2048,

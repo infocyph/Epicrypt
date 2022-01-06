@@ -5,7 +5,7 @@ namespace AbmmHasan\SafeGuard\Misc;
 use Exception;
 use SodiumException;
 
-class SodiumKeygen
+final class SodiumKeygen
 {
     /**
      * Sodium Session Exchange keygen (Asymmetric)
@@ -88,9 +88,39 @@ class SodiumKeygen
      *
      * @return string Key resource
      */
-    public static function getSecret(): string
+    public static function auth(): string
     {
         return sodium_crypto_auth_keygen();
+    }
+
+    /**
+     * Sodium Secret Stream keygen (Symmetric; xchacha20poly1305)
+     *
+     * @return string Key resource
+     */
+    public static function secretStream(): string
+    {
+        return sodium_crypto_secretstream_xchacha20poly1305_keygen();
+    }
+
+    /**
+     * Sodium Short Hash keygen
+     *
+     * @return string Key resource
+     */
+    public static function shortHash(): string
+    {
+        return sodium_crypto_shorthash_keygen();
+    }
+
+    /**
+     * Sodium Generic Hash keygen
+     *
+     * @return string Key resource
+     */
+    public static function genericHash(): string
+    {
+        return sodium_crypto_generichash_keygen();
     }
 
     /**

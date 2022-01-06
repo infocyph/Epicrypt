@@ -11,12 +11,11 @@ use SplFileObject;
  * Memory-safe file reader
  *
  * @method ReadFile character() Get character iterator
- * @method ReadFile char() Get character iterator
  * @method ReadFile line() Get line iterator
  * @method ReadFile csv(string $separator = ",", string $enclosure = "\"", string $escape = "\\") Get line iterator parsed as CSV
  * @method ReadFile binary(int $bytes = 1024) Get binary iterator
  */
-class ReadFile
+final class ReadFile
 {
     private SplFileObject $file;
     public int $count = 0;
@@ -40,17 +39,41 @@ class ReadFile
      */
     public function __call($type, $params)
     {
-        if (!file_exists($this->filename)) {
-            throw new Exception("File not found");
-        }
-        $this->file = new SplFileObject($this->filename, $this->mode);
+        $this->initiate();
         return new NoRewindIterator(match (strtolower($type)) {
-            'character', 'char' => $this->characterIterator(),
+            'character' => $this->characterIterator(),
             'line' => $this->lineIterator(),
             'csv' => $this->csvIterator(...$params),
             'binary' => $this->binaryIterator(...$params),
             default => throw new Exception("Unknown iterator type($type)!")
         });
+    }
+
+    /**
+     * @param $property
+     * @param mixed ...$params
+     * @return mixed
+     * @throws Exception
+     */
+    public function set($property, ...$params): mixed
+    {
+        $this->initiate();
+        return $this->file->$property(...$params);
+    }
+
+    /**
+     * SplFileObject initiator
+     *
+     * @throws Exception
+     */
+    private function initiate()
+    {
+        if (!isset($this->file)) {
+            if (!file_exists($this->filename) || !is_readable($this->filename)) {
+                throw new Exception("Invalid file path!");
+            }
+            $this->file = new SplFileObject($this->filename, $this->mode);
+        }
     }
 
     /**

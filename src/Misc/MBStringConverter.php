@@ -6,7 +6,7 @@ namespace AbmmHasan\SafeGuard\Misc;
 
 use Exception;
 
-class MBStringConverter
+final class MBStringConverter
 {
     private string $asn1Seq = '30';
     private string $asn1Int = '02';

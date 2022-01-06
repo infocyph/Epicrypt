@@ -40,6 +40,6 @@ class SodiumSecretBox
         if (!$this->isBinary) {
             $encryptedMessage = sodium_base642bin($encryptedMessage, SODIUM_BASE64_VARIANT_ORIGINAL_NO_PADDING);
         }
-        return sodium_crypto_secretbox($encryptedMessage, $this->nonce, $this->key);
+        return sodium_crypto_secretbox_open($encryptedMessage, $this->nonce, $this->key);
     }
 }
