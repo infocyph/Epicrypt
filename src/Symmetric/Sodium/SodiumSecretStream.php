@@ -1,6 +1,6 @@
 <?php
 
-namespace AbmmHasan\SafeGuard\Symmetric;
+namespace AbmmHasan\SafeGuard\Symmetric\Sodium;
 
 use AbmmHasan\SafeGuard\Misc\ReadFile;
 use SodiumException;
@@ -15,7 +15,7 @@ class SodiumSecretStream
         private string $key,
     )
     {
-
+        // ToDo: Still incomplete. WIP!
     }
 
     public function encryptFile(string $inputPath, string $outputPath, int $blockSize = 1024)

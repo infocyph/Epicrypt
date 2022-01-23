@@ -1,7 +1,7 @@
 <?php
 
 
-namespace AbmmHasan\SafeGuard\Symmetric;
+namespace AbmmHasan\SafeGuard\Symmetric\OpenSSL;
 
 
 use Exception;
@@ -9,7 +9,7 @@ use SodiumException;
 
 class StringCrypt
 {
-    use Common;
+    use SSLCommon;
 
     /**
      * Set Tag for GCM/CCM mode
@@ -42,17 +42,17 @@ class StringCrypt
     /**
      * Decrypt a cypher text
      *
-     * @param string $input raw format
+     * @param string $encryptedString raw format
      * @return false|string
      * @throws SodiumException
      */
-    public function decrypt(string $input): bool|string
+    public function decrypt(string $encryptedString): bool|string
     {
         $this->disableSignatureForGcmCcm();
         $this->setInfo('process', 'decryption');
         $this->setInfo('type', 'raw');
-        $output = $this->decryptionProcess($input);
-        $this->setInfo('bytesRead', mb_strlen($input, '8bit'));
+        $output = $this->decryptionProcess($encryptedString);
+        $this->setInfo('bytesRead', mb_strlen($encryptedString, '8bit'));
         $this->setInfo('bytesWritten', mb_strlen($output, '8bit'));
         return $output;
     }
@@ -60,16 +60,19 @@ class StringCrypt
     /**
      * Encrypt String
      *
-     * @param string $string
+     * @param string $input
      * @return string base64 encoded format
-     * @throws Exception
+     * @throws SodiumException|Exception
      */
-    public function encrypt64(string $string): string
+    public function encrypt64(string $input): string
     {
         $this->disableSignatureForGcmCcm();
         $this->setInfo('process', 'encryption');
         $this->setInfo('type', 'base64');
-        return sodium_bin2base64(self::encryptionProcess($string), SODIUM_BASE64_VARIANT_ORIGINAL_NO_PADDING);
+        $output = sodium_bin2base64($this->encryptionProcess($input), SODIUM_BASE64_VARIANT_ORIGINAL_NO_PADDING);
+        $this->setInfo('bytesRead', mb_strlen($input, '8bit'));
+        $this->setInfo('bytesWritten', mb_strlen($output, '8bit'));
+        return $output;
     }
 
     /**
@@ -87,22 +90,28 @@ class StringCrypt
         if (!$encryptedString = sodium_base642bin($encryptedString, SODIUM_BASE64_VARIANT_ORIGINAL_NO_PADDING)) {
             return false;
         }
-        return self::decryptionProcess($encryptedString);
+        $output = $this->decryptionProcess($encryptedString);
+        $this->setInfo('bytesRead', mb_strlen($encryptedString, '8bit'));
+        $this->setInfo('bytesWritten', mb_strlen($output, '8bit'));
+        return $output;
     }
 
     /**
      * Encrypt String
      *
-     * @param string $string
+     * @param string $input
      * @return string hex encoded format
      * @throws Exception
      */
-    public function encryptHex(string $string): string
+    public function encryptHex(string $input): string
     {
         $this->disableSignatureForGcmCcm();
         $this->setInfo('process', 'encryption');
         $this->setInfo('type', 'hex');
-        return bin2hex(self::encryptionProcess($string));
+        $output = bin2hex($this->encryptionProcess($input));
+        $this->setInfo('bytesRead', mb_strlen($input, '8bit'));
+        $this->setInfo('bytesWritten', mb_strlen($output, '8bit'));
+        return $output;
     }
 
     /**
@@ -117,6 +126,9 @@ class StringCrypt
         $this->disableSignatureForGcmCcm();
         $this->setInfo('process', 'decryption');
         $this->setInfo('type', 'hex');
-        return self::decryptionProcess(hex2bin($encryptedString));
+        $output = $this->decryptionProcess(hex2bin($encryptedString));
+        $this->setInfo('bytesRead', mb_strlen($encryptedString, '8bit'));
+        $this->setInfo('bytesWritten', mb_strlen($output, '8bit'));
+        return $output;
     }
 }

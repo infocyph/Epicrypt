@@ -1,6 +1,6 @@
 <?php
 
-namespace AbmmHasan\SafeGuard\Symmetric;
+namespace AbmmHasan\SafeGuard\Symmetric\Sodium;
 
 use SodiumException;
 

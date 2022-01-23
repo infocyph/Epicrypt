@@ -1,7 +1,7 @@
 <?php
 
 
-namespace AbmmHasan\SafeGuard\Asymmetric;
+namespace AbmmHasan\SafeGuard\Asymmetric\OpenSSL;
 
 
 use OpenSSLAsymmetricKey;

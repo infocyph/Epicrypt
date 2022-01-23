@@ -1,7 +1,7 @@
 <?php
 
 
-namespace AbmmHasan\SafeGuard\Symmetric;
+namespace AbmmHasan\SafeGuard\Symmetric\OpenSSL;
 
 
 use AbmmHasan\SafeGuard\Misc\ReadFile;
@@ -9,7 +9,7 @@ use Exception;
 
 class FileCrypt
 {
-    use Common;
+    use SSLCommon;
 
     private int $blockSize;
     private string $outFilePath = '';

@@ -1,12 +1,12 @@
 <?php
 
 
-namespace AbmmHasan\SafeGuard\Symmetric;
+namespace AbmmHasan\SafeGuard\Symmetric\OpenSSL;
 
 
 use Exception;
 
-trait Common
+trait SSLCommon
 {
     private int $keyIterationCount = 10000;
     private int $keyLength = 50;

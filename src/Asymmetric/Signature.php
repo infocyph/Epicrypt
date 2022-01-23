@@ -42,7 +42,7 @@ class Signature
         }
         $key = $this->prepareInput($key);
 
-        if ($this->signatureAlgo === 'detached' || $this->signatureAlgo === 'sodium') {
+        if ($this->signatureAlgo === 'sodium_detached') {
             $signature = sodium_crypto_sign_detached($data, $key);
         } else {
             $signature = $this->openSSLSign($key, $data, $passphrase);
@@ -74,7 +74,7 @@ class Signature
         }
         $key = $this->prepareInput($key);
 
-        if ($this->signatureAlgo === 'detached' || $this->signatureAlgo === 'sodium') {
+        if ($this->signatureAlgo === 'sodium_detached') {
             return sodium_crypto_sign_verify_detached($signature, $data, $key);
         } else {
             return $this->openSSLVerify($key, $data, $signature);

@@ -1,7 +1,7 @@
 <?php
 
 
-namespace AbmmHasan\SafeGuard\Misc;
+namespace AbmmHasan\SafeGuard\Asymmetric\OpenSSL;
 
 
 use Exception;
