@@ -26,9 +26,8 @@ class SodiumAead
     public function __construct(
         private string $additionalData,
         private string $algorithm = 'xchacha20poly1305_ietf',
-        private bool   $isBinary = true
-    )
-    {
+        private bool $isBinary = true
+    ) {
         $this->keygen = "sodium_crypto_aead_{$this->algorithm}_keygen";
         $this->encrypt = "sodium_crypto_aead_{$this->algorithm}_encrypt";
         $this->decrypt = "sodium_crypto_aead_{$this->algorithm}_decrypt";
@@ -103,7 +102,9 @@ class SodiumAead
     private function checkSupport()
     {
         if (!isset($this->availableAlgorithms[$this->algorithm])) {
-            throw new Exception("Invalid algorithm! Available: " . implode(', ', array_keys($this->availableAlgorithms)));
+            throw new Exception(
+                "Invalid algorithm! Available: " . implode(', ', array_keys($this->availableAlgorithms))
+            );
         }
 
         if ($this->algorithm === 'aes256gcm' && !sodium_crypto_aead_aes256gcm_is_available()) {

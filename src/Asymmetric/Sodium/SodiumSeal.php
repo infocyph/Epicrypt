@@ -14,8 +14,7 @@ class SodiumSeal
      */
     public function __construct(
         private bool $isBinary = true
-    )
-    {
+    ) {
     }
 
     /**
@@ -51,10 +50,12 @@ class SodiumSeal
             $encrypted = sodium_base642bin($encrypted, SODIUM_BASE64_VARIANT_ORIGINAL_NO_PADDING);
         }
 
-        return sodium_crypto_box_seal_open($encrypted,
+        return sodium_crypto_box_seal_open(
+            $encrypted,
             sodium_crypto_box_keypair_from_secretkey_and_publickey(
                 $privateKey,
                 sodium_crypto_box_publickey_from_secretkey($privateKey)
-            ));
+            )
+        );
     }
 }

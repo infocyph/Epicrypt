@@ -6,7 +6,7 @@
   "authors": [
     {
       "name": "abmmhasan",
-      "email": "abmmhasan346@gmail.com"
+      "email": "abmmhasan@gmail.com"
     }
   ],
   "autoload": {
@@ -17,14 +17,32 @@
       "AbmmHasan\\SafeGuard\\": "src/"
     }
   },
+  "autoload-dev": {
+    "psr-4": {
+      "AbmmHasan\\SafeGuard\\Tests\\": "tests/"
+    }
+  },
   "minimum-stability": "dev",
   "prefer-stable": true,
   "require": {
-    "php": ">=8.0",
+    "php": ">=8.0"
+  },
+  "suggest": {
     "ext-json": "*",
     "ext-openssl": "*",
     "ext-mbstring": "*",
     "ext-ctype": "*",
     "ext-sodium": "*"
+  },
+  "require-dev": {
+    "pestphp/pest": "^2.9",
+    "symfony/var-dumper": "^6.3",
+    "rector/rector": "^0.17.6"
+  },
+  "config": {
+    "optimize-autoloader": true,
+    "allow-plugins": {
+      "pestphp/pest-plugin": true
+    }
   }
 }

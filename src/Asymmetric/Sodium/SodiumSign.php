@@ -8,9 +8,7 @@ class SodiumSign
 {
     public function __construct(
         private bool $isBinary = true
-    )
-    {
-
+    ) {
     }
 
     /**

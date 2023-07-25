@@ -21,8 +21,7 @@ class DiffieHellman
         string $prime,
         string $generator,
         string $privateKey
-    )
-    {
+    ) {
         $this->resource = openssl_pkey_new([
             'dh' => [
                 'p' => $prime,

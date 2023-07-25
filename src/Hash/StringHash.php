@@ -9,10 +9,9 @@ class StringHash
     public function __construct(
         private string $algorithm,
         private string $secret = '',
-        private bool   $isBinary = false,
-        private array  $options = []
-    )
-    {
+        private bool $isBinary = false,
+        private array $options = []
+    ) {
     }
 
     /**

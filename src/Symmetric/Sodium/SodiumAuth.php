@@ -9,10 +9,8 @@ class SodiumAuth
 
     public function __construct(
         private string $secret,
-        private bool   $isBinary = true
-    )
-    {
-
+        private bool $isBinary = true
+    ) {
     }
 
     /**

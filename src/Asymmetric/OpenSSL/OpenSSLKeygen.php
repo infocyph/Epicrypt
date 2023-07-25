@@ -41,8 +41,15 @@ final class OpenSSLKeygen
      * @param string $name Common Name (e.g. Domain name)
      * @param string $email Email address
      */
-    public function __construct(string $country, string $province, string $locality, string $organization, string $unit, string $name, string $email)
-    {
+    public function __construct(
+        string $country,
+        string $province,
+        string $locality,
+        string $organization,
+        string $unit,
+        string $name,
+        string $email
+    ) {
         $this->settings = [
             "countryName" => $country,
             "stateOrProvinceName" => $province,
@@ -264,7 +271,13 @@ final class OpenSSLKeygen
     {
         // Export (Signed for given days) Certificate
         openssl_x509_export(
-            openssl_csr_sign($this->resource['csr'], $certificate, $this->resource['keyPair'], $validFor, $this->csrOption),
+            openssl_csr_sign(
+                $this->resource['csr'],
+                $certificate,
+                $this->resource['keyPair'],
+                $validFor,
+                $this->csrOption
+            ),
             $this->certificate['certificate']
         );
     }

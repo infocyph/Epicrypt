@@ -9,10 +9,9 @@ class FileHash
 {
     public function __construct(
         private string $algorithm,
-        private int    $blockSize = 1024,
-        private int    $hashLength = SODIUM_CRYPTO_GENERICHASH_BYTES
-    )
-    {
+        private int $blockSize = 1024,
+        private int $hashLength = SODIUM_CRYPTO_GENERICHASH_BYTES
+    ) {
     }
 
     /**

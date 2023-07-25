@@ -8,8 +8,7 @@ class SodiumSessionExchange
 {
     public function __construct(
         private string $keypair
-    )
-    {
+    ) {
     }
 
     /**

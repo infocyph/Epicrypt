@@ -17,10 +17,12 @@ if (!function_exists('getDHPrime')) {
             throw new Exception('Invalid private key bit size! Should be at-least 384.');
         }
 
-        return openssl_pkey_get_details(openssl_pkey_new([
-            'private_key_bits' => $privateKeyBits,
-            'private_key_type' => OPENSSL_KEYTYPE_DH
-        ]))['dh']['p'];
+        return openssl_pkey_get_details(
+            openssl_pkey_new([
+                'private_key_bits' => $privateKeyBits,
+                'private_key_type' => OPENSSL_KEYTYPE_DH
+            ])
+        )['dh']['p'];
     }
 }
 

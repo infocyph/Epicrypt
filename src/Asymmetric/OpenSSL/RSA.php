@@ -21,9 +21,8 @@ class RSA
      */
     public function __construct(
         private bool $isBinary = true,
-        private int  $padding = OPENSSL_PKCS1_OAEP_PADDING
-    )
-    {
+        private int $padding = OPENSSL_PKCS1_OAEP_PADDING
+    ) {
     }
 
     /**
@@ -66,8 +65,11 @@ class RSA
      * @return string Decrypted data
      * @throws Exception
      */
-    public function decrypt(string $data, OpenSSLAsymmetricKey|array|string|OpenSSLCertificate $key, string $passphrase = null): string
-    {
+    public function decrypt(
+        string $data,
+        OpenSSLAsymmetricKey|array|string|OpenSSLCertificate $key,
+        string $passphrase = null
+    ): string {
         if (!$this->isBinary) {
             $data = sodium_base642bin($data, SODIUM_BASE64_VARIANT_ORIGINAL_NO_PADDING);
         }

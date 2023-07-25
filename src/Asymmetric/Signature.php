@@ -20,10 +20,9 @@ class Signature
      * @param int|string $signatureAlgo
      */
     public function __construct(
-        private bool       $isBinary = true,
+        private bool $isBinary = true,
         private int|string $signatureAlgo = OPENSSL_ALGO_SHA512
-    )
-    {
+    ) {
     }
 
     /**
@@ -35,8 +34,11 @@ class Signature
      * @return string Signature
      * @throws Exception|SodiumException
      */
-    public function Sign(string $data, OpenSSLAsymmetricKey|array|string|OpenSSLCertificate $key, string $passphrase = null): string
-    {
+    public function Sign(
+        string $data,
+        OpenSSLAsymmetricKey|array|string|OpenSSLCertificate $key,
+        string $passphrase = null
+    ): string {
         if (empty($data)) {
             throw new Exception('Invalid input data!');
         }
@@ -64,8 +66,11 @@ class Signature
      * @return bool Verified or Not
      * @throws Exception
      */
-    public function verify(string $data, OpenSSLAsymmetricKey|array|string|OpenSSLCertificate $key, string $signature): bool
-    {
+    public function verify(
+        string $data,
+        OpenSSLAsymmetricKey|array|string|OpenSSLCertificate $key,
+        string $signature
+    ): bool {
         if (!$this->isBinary) {
             $signature = sodium_base642bin($signature, SODIUM_BASE64_VARIANT_ORIGINAL_NO_PADDING);
         }

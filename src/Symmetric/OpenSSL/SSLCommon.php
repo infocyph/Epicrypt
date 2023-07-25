@@ -34,8 +34,8 @@ trait SSLCommon
     public function __construct(
         private string $secret,
         private string $salt,
-        private string $iv = '')
-    {
+        private string $iv = ''
+    ) {
         if (!empty($iv)) {
             $this->isIVPredefined = true;
         }
@@ -196,7 +196,10 @@ trait SSLCommon
         $this->info['tag'][] = sodium_bin2base64($generatedTag, SODIUM_BASE64_VARIANT_ORIGINAL_NO_PADDING);
         if ($this->setInfo('enableSignature', $this->enableSignature) === true) {
             $cText = hash_hmac(
-                    $this->setInfo('hmacAlgo', $this->hmacAlgo), $cText, $encryptionKey, true
+                    $this->setInfo('hmacAlgo', $this->hmacAlgo),
+                    $cText,
+                    $encryptionKey,
+                    true
                 ) . $cText;
         }
         if ($this->isIVPredefined === false) {

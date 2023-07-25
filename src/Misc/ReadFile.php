@@ -40,13 +40,15 @@ final class ReadFile
     public function __call($type, $params)
     {
         $this->initiate();
-        return new NoRewindIterator(match (strtolower($type)) {
-            'character' => $this->characterIterator(),
-            'line' => $this->lineIterator(),
-            'csv' => $this->csvIterator(...$params),
-            'binary' => $this->binaryIterator(...$params),
-            default => throw new Exception("Unknown iterator type($type)!")
-        });
+        return new NoRewindIterator(
+            match (strtolower($type)) {
+                'character' => $this->characterIterator(),
+                'line' => $this->lineIterator(),
+                'csv' => $this->csvIterator(...$params),
+                'binary' => $this->binaryIterator(...$params),
+                default => throw new Exception("Unknown iterator type($type)!")
+            }
+        );
     }
 
     /**

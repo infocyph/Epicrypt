@@ -14,9 +14,8 @@ class SodiumBox
     public function __construct(
         private string $privateKey,
         private string $nonce,
-        private bool   $isBinary = true
-    )
-    {
+        private bool $isBinary = true
+    ) {
     }
 
     /**

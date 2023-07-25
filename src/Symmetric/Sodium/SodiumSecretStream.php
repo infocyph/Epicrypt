@@ -13,8 +13,7 @@ class SodiumSecretStream
      */
     public function __construct(
         private string $key,
-    )
-    {
+    ) {
         // ToDo: Still incomplete. WIP!
     }
 
@@ -49,7 +48,7 @@ class SodiumSecretStream
         }
         $fileObject = new ReadFile($inputPath, 'rb');
         $header = $fileObject->set('fread', 24);
-        $state = sodium_crypto_secretstream_xchacha20poly1305_init_pull($header,$this->key);
+        $state = sodium_crypto_secretstream_xchacha20poly1305_init_pull($header, $this->key);
         foreach ($fileObject->binary($blockSize) as $index => $chunk) {
             $writeChunkSize[] = file_put_contents(
                 $outputPath,
