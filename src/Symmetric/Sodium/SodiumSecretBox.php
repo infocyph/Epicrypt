@@ -2,6 +2,7 @@
 
 namespace AbmmHasan\SafeGuard\Symmetric\Sodium;
 
+use Exception;
 use SodiumException;
 
 class SodiumSecretBox
@@ -39,5 +40,19 @@ class SodiumSecretBox
             $encryptedMessage = sodium_base642bin($encryptedMessage, SODIUM_BASE64_VARIANT_ORIGINAL_NO_PADDING);
         }
         return sodium_crypto_secretbox_open($encryptedMessage, $this->nonce, $this->key);
+    }
+
+    /**
+     * Sodium Secret Box keygen (Symmetric)
+     *
+     * @return object Key resource
+     * @throws Exception
+     */
+    public static function secretBox(): object
+    {
+        return (object)[
+            'key' => sodium_crypto_secretbox_keygen(),
+            'nonce' => random_bytes(SODIUM_CRYPTO_SECRETBOX_NONCEBYTES)
+        ];
     }
 }

@@ -10,10 +10,10 @@ use SplFileObject;
 /**
  * Memory-safe file reader
  *
- * @method ReadFile character() Get character iterator
- * @method ReadFile line() Get line iterator
- * @method ReadFile csv(string $separator = ",", string $enclosure = "\"", string $escape = "\\") Get line iterator parsed as CSV
- * @method ReadFile binary(int $bytes = 1024) Get binary iterator
+ * @method ReadFile character() Character iterator
+ * @method ReadFile line() Line iterator
+ * @method ReadFile csv(string $separator = ",", string $enclosure = "\"", string $escape = "\\") CSV iterator
+ * @method ReadFile binary(int $bytes = 1024) Binary iterator
  */
 final class ReadFile
 {

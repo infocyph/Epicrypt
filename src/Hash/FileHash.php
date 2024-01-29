@@ -30,7 +30,7 @@ class FileHash
         return match ($this->algorithm) {
             'blake2b' => sodium_bin2hex($this->chunkedGenericHash($filePath, $secret)),
             default => match (true) {
-                empty($this->secret) => hash_file($this->algorithm, $filePath),
+                empty($secret) => hash_file($this->algorithm, $filePath),
                 default => hash_hmac_file($this->algorithm, $filePath, $secret)
             }
         };

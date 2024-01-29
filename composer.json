@@ -25,9 +25,7 @@
   "minimum-stability": "dev",
   "prefer-stable": true,
   "require": {
-    "php": ">=8.0"
-  },
-  "suggest": {
+    "php": ">=8.2",
     "ext-json": "*",
     "ext-openssl": "*",
     "ext-mbstring": "*",
@@ -35,9 +33,9 @@
     "ext-sodium": "*"
   },
   "require-dev": {
-    "pestphp/pest": "^2.9",
+    "pestphp/pest": "^2.24",
     "symfony/var-dumper": "^6.3",
-    "rector/rector": "^0.17.6"
+    "rector/rector": "^0.18"
   },
   "config": {
     "optimize-autoloader": true,

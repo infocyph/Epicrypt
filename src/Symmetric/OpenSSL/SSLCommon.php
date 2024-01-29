@@ -182,8 +182,8 @@ trait SSLCommon
      */
     private function encryptionProcess(string $input): string
     {
-        self::calculateIV();
-        $encryptionKey = self::getKey();
+        $this->calculateIV();
+        $encryptionKey = $this->getKey();
         $cText = openssl_encrypt(
             $input,
             $this->setInfo('encryptionMethod', $this->encryptionMethod),
@@ -193,7 +193,9 @@ trait SSLCommon
             $generatedTag,
             $this->aad
         );
-        $this->info['tag'][] = sodium_bin2base64($generatedTag, SODIUM_BASE64_VARIANT_ORIGINAL_NO_PADDING);
+        if ($generatedTag) {
+            $this->info['tag'][] = sodium_bin2base64($generatedTag, SODIUM_BASE64_VARIANT_ORIGINAL_NO_PADDING);
+        }
         if ($this->setInfo('enableSignature', $this->enableSignature) === true) {
             $cText = hash_hmac(
                     $this->setInfo('hmacAlgo', $this->hmacAlgo),
@@ -219,7 +221,7 @@ trait SSLCommon
     {
         $ivLen = openssl_cipher_iv_length($this->encryptionMethod);
         $cTextOffset = 0;
-        $encryptionKey = self::getKey();
+        $encryptionKey = $this->getKey();
         if ($definedIV = ($this->setInfo('predefinedIV', $this->isIVPredefined) === false)) {
             $this->iv = substr($input, 0, $ivLen);
             $cTextOffset += $ivLen;

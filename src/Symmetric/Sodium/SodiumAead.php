@@ -19,14 +19,16 @@ class SodiumAead
     private string $decrypt;
 
     /**
-     * @param string $additionalData
-     * @param string $algorithm
-     * @param bool $isBinary
+     * Provide required data for aead operation
+     *
+     * @param string $additionalData Additional, authenticated data
+     * @param string $algorithm Algorithm
+     * @param bool $isBinary get result as binary?
      */
     public function __construct(
-        private string $additionalData,
-        private string $algorithm = 'xchacha20poly1305_ietf',
-        private bool $isBinary = true
+        private readonly string $additionalData,
+        private readonly string $algorithm = 'xchacha20poly1305_ietf',
+        private readonly bool $isBinary = true
     ) {
         $this->keygen = "sodium_crypto_aead_{$this->algorithm}_keygen";
         $this->encrypt = "sodium_crypto_aead_{$this->algorithm}_encrypt";
@@ -36,12 +38,11 @@ class SodiumAead
     /**
      * Encrypt data
      *
-     * @param string $message
-     * @param string $key
-     * @param string $nonce
+     * @param string $message The message to encrypt
+     * @param string $key The key to encrypt with
+     * @param string $nonce A number that must be only used once, per message
      * @return mixed
-     * @throws SodiumException
-     * @throws Exception
+     * @throws SodiumException|Exception
      */
     public function encrypt(string $message, string $key, string $nonce): mixed
     {
@@ -62,9 +63,9 @@ class SodiumAead
     /**
      * Decrypt the encrypted data
      *
-     * @param string $encrypted
-     * @param string $key
-     * @param string $nonce
+     * @param string $encrypted The encrypted message
+     * @param string $key The key to decrypt with
+     * @param string $nonce The nounce used during encryption
      * @return mixed
      * @throws SodiumException
      * @throws Exception
@@ -84,7 +85,9 @@ class SodiumAead
     }
 
     /**
-     * @return array
+     * Retrieves the key and nonce for the encryption algorithm.
+     *
+     * @return array Returns an array containing the key and nonce.
      * @throws Exception
      */
     public function getKey(): array
@@ -97,9 +100,12 @@ class SodiumAead
     }
 
     /**
-     * @throws Exception
+     * Checks if the specified algorithm is supported.
+     *
+     * @return void
+     * @throws Exception if the algorithm is not supported
      */
-    private function checkSupport()
+    private function checkSupport(): void
     {
         if (!isset($this->availableAlgorithms[$this->algorithm])) {
             throw new Exception(

@@ -4,6 +4,7 @@
 namespace AbmmHasan\SafeGuard\Asymmetric;
 
 
+use AbmmHasan\SafeGuard\Asymmetric\OpenSSL\Common;
 use Exception;
 use OpenSSLAsymmetricKey;
 use OpenSSLCertificate;
@@ -34,7 +35,7 @@ class Signature
      * @return string Signature
      * @throws Exception|SodiumException
      */
-    public function Sign(
+    public function sign(
         string $data,
         OpenSSLAsymmetricKey|array|string|OpenSSLCertificate $key,
         string $passphrase = null

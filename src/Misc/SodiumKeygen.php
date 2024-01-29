@@ -68,7 +68,7 @@ final class SodiumKeygen
     public static function box(string $seed = null): object
     {
         if (!is_null($seed)) {
-            if ($length = strlen($seed) !== 32) {
+            if (($length = strlen($seed)) !== 32) {
                 throw new Exception("Invalid Seed size (Expected: 32B, Found: {$length}B)!");
             }
             $keypair = sodium_crypto_box_seed_keypair($seed);

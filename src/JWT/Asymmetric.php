@@ -59,7 +59,7 @@ class Asymmetric
         [$header, $payload] = $this->encodeHeaderNPayload($payload, $header, $keyId);
 
         $signature = (new Signature(true, $this->algorithm))
-            ->Sign($header . "." . $payload, $this->secret, $this->passphrase);
+            ->sign($header . "." . $payload, $this->secret, $this->passphrase);
 
         if (str_starts_with($this->algorithmTitle, 'ES')) {
             $signature = (new MBStringConverter())->fromAsn1($signature, $this->keyLength[$this->algorithmTitle]);

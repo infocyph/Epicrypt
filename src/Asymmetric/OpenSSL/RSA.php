@@ -4,7 +4,6 @@
 namespace AbmmHasan\SafeGuard\Asymmetric\OpenSSL;
 
 
-use AbmmHasan\SafeGuard\Asymmetric\Common;
 use Exception;
 use OpenSSLAsymmetricKey;
 use OpenSSLCertificate;

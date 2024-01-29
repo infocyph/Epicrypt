@@ -4,6 +4,7 @@
 namespace AbmmHasan\SafeGuard\Asymmetric\OpenSSL;
 
 
+use Exception;
 use OpenSSLAsymmetricKey;
 
 class DiffieHellman
@@ -59,5 +60,26 @@ class DiffieHellman
             )['dh']['pub_key'];
         }
         return openssl_dh_compute_key($publicKey, $this->resource);
+    }
+
+    /**
+     * Generate a prime number
+     *
+     * @param int $privateKeyBitSize
+     * @return string
+     * @throws Exception
+     */
+    public static function getPrime(int $privateKeyBitSize = 2048): string
+    {
+        if ($privateKeyBitSize < 384) {
+            throw new Exception('Invalid private key bit size! Should be at-least 384.');
+        }
+
+        return openssl_pkey_get_details(
+            openssl_pkey_new([
+                'private_key_bits' => $privateKeyBitSize,
+                'private_key_type' => OPENSSL_KEYTYPE_DH
+            ])
+        )['dh']['p'];
     }
 }

@@ -54,7 +54,8 @@ class FileCrypt
         }
         $inputLocDetails = pathinfo($input);
         if (empty($this->outFilePath)) {
-            $this->outFilePath = $inputLocDetails['dirname'] . DIRECTORY_SEPARATOR . $inputLocDetails['filename'] . '.bin';
+            $this->outFilePath = $inputLocDetails['dirname'] . DIRECTORY_SEPARATOR .
+                $inputLocDetails['filename'] . '.bin';
         } else {
             $outFile = pathinfo($this->outFilePath);
             $this->outFilePath = ($outFile['dirname'] ?? $inputLocDetails['dirname']) .

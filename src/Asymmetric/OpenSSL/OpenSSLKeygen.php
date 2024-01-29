@@ -66,15 +66,17 @@ final class OpenSSLKeygen
      *
      * @param $key
      * @param $value
+     * @return OpenSSLKeygen
      * @throws Exception
      */
-    public function setCsrOptions($key, $value)
+    public function setCsrOptions($key, $value): OpenSSLKeygen
     {
         if ($key === 'config') {
             $this->setConfPath($value);
         } else {
             $this->csrOption[$key] = $value;
         }
+        return $this;
     }
 
     /**
@@ -82,30 +84,34 @@ final class OpenSSLKeygen
      *
      * @param $key
      * @param $value
+     * @return OpenSSLKeygen
      * @throws Exception
      */
-    public function setKeyOptions($key, $value)
+    public function setKeyOptions($key, $value): OpenSSLKeygen
     {
         if ($key === 'config') {
             $this->setConfPath($value);
         } else {
             $this->keyOption[$key] = $value;
         }
+        return $this;
     }
 
     /**
      * Set openssl.conf file path
      *
      * @param string $path
+     * @return OpenSSLKeygen
      * @throws Exception
      */
-    public function setConfPath(string $path)
+    public function setConfPath(string $path): OpenSSLKeygen
     {
         $path = realpath($path);
         if (empty($path)) {
             throw new Exception('Invalid openssl.conf file path!');
         }
         $this->csrOption['config'] = $this->keyOption['config'] = $path;
+        return $this;
     }
 
     /**
@@ -113,13 +119,15 @@ final class OpenSSLKeygen
      *
      * @param string|null $keyPair
      * @param string|null $csrResource
+     * @return OpenSSLKeygen
      */
-    public function setResource(string $keyPair = null, string $csrResource = null)
+    public function setResource(string $keyPair = null, string $csrResource = null): OpenSSLKeygen
     {
         $this->resource = [
             'keyPair' => $keyPair,
             'csr' => $csrResource,
         ];
+        return $this;
     }
 
     /**
@@ -186,9 +194,10 @@ final class OpenSSLKeygen
      * @param int $daysValidFor
      * @param string|null $passphrase
      * @param string|null $certificate
+     * @return OpenSSLKeygen
      * @throws Exception
      */
-    public function dsa(int $daysValidFor = 365, string $passphrase = null, string $certificate = null)
+    public function dsa(int $daysValidFor = 365, string $passphrase = null, string $certificate = null): OpenSSLKeygen
     {
         $this->csrOption['private_key_type'] = $this->keyOption['private_key_type'] = OPENSSL_KEYTYPE_DSA;
         $this->csrOption['digest_alg'] ??= 'DSA';
@@ -196,6 +205,7 @@ final class OpenSSLKeygen
         $this->generateKeyResource($passphrase);
         $this->generateCsr();
         $this->generateSigned($daysValidFor, $certificate);
+        return $this;
     }
 
     /**
@@ -204,9 +214,10 @@ final class OpenSSLKeygen
      * @param int $daysValidFor
      * @param null|string $passphrase
      * @param null|string $certificate
+     * @return OpenSSLKeygen
      * @throws Exception
      */
-    public function rsa(int $daysValidFor = 365, string $passphrase = null, string $certificate = null)
+    public function rsa(int $daysValidFor = 365, string $passphrase = null, string $certificate = null): OpenSSLKeygen
     {
         $this->csrOption['private_key_type'] = $this->keyOption['private_key_type'] = OPENSSL_KEYTYPE_RSA;
         $this->csrOption['digest_alg'] ??= 'SHA512';
@@ -214,6 +225,7 @@ final class OpenSSLKeygen
         $this->generateKeyResource($passphrase);
         $this->generateCsr();
         $this->generateSigned($daysValidFor, $certificate);
+        return $this;
     }
 
     /**
@@ -222,9 +234,10 @@ final class OpenSSLKeygen
      * @param int $daysValidFor
      * @param null|string $passphrase
      * @param null|string $certificate
+     * @return OpenSSLKeygen
      * @throws Exception
      */
-    public function ec(int $daysValidFor = 365, string $passphrase = null, string $certificate = null)
+    public function ec(int $daysValidFor = 365, string $passphrase = null, string $certificate = null): OpenSSLKeygen
     {
         $this->csrOption['private_key_type'] = $this->keyOption['private_key_type'] = OPENSSL_KEYTYPE_EC;
         $this->csrOption['digest_alg'] ??= 'SHA512';
@@ -232,13 +245,14 @@ final class OpenSSLKeygen
         $this->generateKeyResource($passphrase);
         $this->generateCsr();
         $this->generateSigned($daysValidFor, $certificate);
+        return $this;
     }
 
     /**
      * @param $passphrase
      * @throws Exception
      */
-    private function generateKeyResource($passphrase)
+    private function generateKeyResource($passphrase): void
     {
         if (empty(getenv('OPENSSL_CONF')) && (empty($this->csrOption['config']) || empty($this->keyOption['config']))) {
             throw new Exception('openssl.conf file not found!');
@@ -256,7 +270,7 @@ final class OpenSSLKeygen
         openssl_pkey_export($this->resource['keyPair'], $this->certificate['private'], $passphrase, $this->keyOption);
     }
 
-    private function generateCsr()
+    private function generateCsr(): void
     {
         if (empty($this->resource['csr'])) {
             // Generate a Certificate Signing Request
@@ -267,7 +281,7 @@ final class OpenSSLKeygen
         openssl_csr_export($this->resource['csr'], $this->certificate['csr']);
     }
 
-    private function generateSigned($validFor, $certificate)
+    private function generateSigned($validFor, $certificate): void
     {
         // Export (Signed for given days) Certificate
         openssl_x509_export(

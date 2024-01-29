@@ -16,7 +16,7 @@ class StringCrypt
      *
      * @param string $tag Tag for decryption only
      */
-    public function setTag(string $tag)
+    public function setTag(string $tag): void
     {
         $this->tag = $tag;
     }

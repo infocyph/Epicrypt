@@ -43,4 +43,14 @@ class SodiumAuth
         }
         return false;
     }
+
+    /**
+     * Generate a key for use with sodium_crypto_auth.
+     *
+     * @return string The generated key.
+     */
+    public static function getKey(): string
+    {
+        return sodium_crypto_auth_keygen();
+    }
 }
