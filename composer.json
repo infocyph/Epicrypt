@@ -33,7 +33,7 @@
     "ext-sodium": "*"
   },
   "require-dev": {
-    "pestphp/pest": "^2.24",
+    "pestphp/pest": "^2.24 || ^3.0",
     "symfony/var-dumper": "^6.3",
     "rector/rector": "^0.18"
   },
