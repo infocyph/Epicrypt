@@ -1,0 +1,1505 @@
+diff --git a/.github/workflows/ci.yml b/.github/workflows/build.yml
+similarity index 69%
+rename from .github/workflows/ci.yml
+rename to .github/workflows/build.yml
+index e35cf79..d162ea8 100644
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/build.yml
+@@ -1,24 +1,26 @@
+-name: "build"
++name: "Security & Standards"
+ 
+ on:
++  schedule:
++    - cron: '0 0 * * 0'
+   push:
+-    branches: [ 'main' ]
+-  pull_request:
+     branches: [ '*' ]
++  pull_request:
++    branches: [ "main", "master", "develop" ]
+ 
+ jobs:
+   run:
+     runs-on: ${{ matrix.operating-system }}
+     strategy:
+       matrix:
+-        operating-system: [ ubuntu-latest, macos-latest, windows-latest ]
+-        php-versions: [ '8.1', '8.2' ]
++        operating-system: [ ubuntu-latest ]
++        php-versions: [ '8.2', '8.3' ]
+         dependency-version: [ prefer-lowest, prefer-stable ]
+ 
+     name: PHP ${{ matrix.php-versions }} - ${{ matrix.operating-system }} - ${{ matrix.dependency-version }}
+     steps:
+       - name: Checkout
+-        uses: actions/checkout@v3
++        uses: actions/checkout@v4
+ 
+       - name: Setup PHP
+         uses: shivammathur/setup-php@v2
+@@ -36,11 +38,8 @@ jobs:
+       - name: Install dependencies
+         run: composer install --no-interaction --prefer-dist --optimize-autoloader
+ 
+-      - name: Auditing packages
++      - name: Package Audit
+         run: composer audit
+ 
+       - name: Test
+-        run: ./vendor/bin/pest
+-#
+-#      - name: Rector(Dry) Tests
+-#        run: php vendor/bin/rector process --dry-run --config=rector.php
+\ No newline at end of file
++        run: composer tests
+\ No newline at end of file
+diff --git a/src/Asymmetric/Sodium/SodiumBox.php b/src/Asymmetric/Sodium/SodiumBox.php
+deleted file mode 100644
+index e5af203..0000000
+--- a/src/Asymmetric/Sodium/SodiumBox.php
++++ /dev/null
+@@ -1,70 +0,0 @@
+-<?php
+-
+-namespace AbmmHasan\SafeGuard\Asymmetric\Sodium;
+-
+-use SodiumException;
+-
+-class SodiumBox
+-{
+-    /**
+-     * @param string $privateKey User private key
+-     * @param string $nonce Shared secret
+-     * @param bool $isBinary Is transportable resource binary?
+-     */
+-    public function __construct(
+-        private string $privateKey,
+-        private string $nonce,
+-        private bool $isBinary = true
+-    ) {
+-    }
+-
+-    /**
+-     * Encrypt the message
+-     *
+-     * @param string $message Message for encryption
+-     * @param string $publicKey Second party public key
+-     * @return string Encrypted message
+-     * @throws SodiumException
+-     */
+-    public function encrypt(string $message, string $publicKey): string
+-    {
+-        $encrypted = sodium_crypto_box(
+-            $message,
+-            $this->nonce,
+-            sodium_crypto_box_keypair_from_secretkey_and_publickey(
+-                $this->privateKey,
+-                $publicKey
+-            )
+-        );
+-
+-        if ($this->isBinary) {
+-            return $encrypted;
+-        }
+-
+-        return sodium_bin2base64($encrypted, SODIUM_BASE64_VARIANT_ORIGINAL_NO_PADDING);
+-    }
+-
+-    /**
+-     * Decrypt the message
+-     *
+-     * @param string $encrypted Encrypted message
+-     * @param string $publicKey Second party public key
+-     * @return false|string Decrypted message
+-     * @throws SodiumException
+-     */
+-    public function decrypt(string $encrypted, string $publicKey): bool|string
+-    {
+-        if (!$this->isBinary) {
+-            $encrypted = sodium_base642bin($encrypted, SODIUM_BASE64_VARIANT_ORIGINAL_NO_PADDING);
+-        }
+-
+-        return sodium_crypto_box_open(
+-            $encrypted,
+-            $this->nonce,
+-            sodium_crypto_box_keypair_from_secretkey_and_publickey(
+-                $this->privateKey,
+-                $publicKey
+-            )
+-        );
+-    }
+-}
+diff --git a/src/Asymmetric/Sodium/SodiumSeal.php b/src/Asymmetric/Sodium/SodiumSeal.php
+deleted file mode 100644
+index 0018fcc..0000000
+--- a/src/Asymmetric/Sodium/SodiumSeal.php
++++ /dev/null
+@@ -1,61 +0,0 @@
+-<?php
+-
+-namespace AbmmHasan\SafeGuard\Asymmetric\Sodium;
+-
+-use SodiumException;
+-
+-class SodiumSeal
+-{
+-
+-    /**
+-     * Set predefined property
+-     *
+-     * @param bool $isBinary Is transportable resource binary?
+-     */
+-    public function __construct(
+-        private bool $isBinary = true
+-    ) {
+-    }
+-
+-    /**
+-     * Encrypt the message (using anonymous public key)
+-     *
+-     * @param string $message Message for encryption
+-     * @param string $publicKey Public key
+-     * @return string Encrypted message
+-     * @throws SodiumException
+-     */
+-    public function encrypt(string $message, string $publicKey): string
+-    {
+-        $encrypted = sodium_crypto_box_seal($message, $publicKey);
+-
+-        if ($this->isBinary) {
+-            return $encrypted;
+-        }
+-
+-        return sodium_bin2base64($encrypted, SODIUM_BASE64_VARIANT_ORIGINAL_NO_PADDING);
+-    }
+-
+-    /**
+-     * Decrypt the message (using anonymous public key)
+-     *
+-     * @param string $encrypted Encrypted message
+-     * @param string $privateKey Private key
+-     * @return false|string Decrypted message
+-     * @throws SodiumException
+-     */
+-    public function decrypt(string $encrypted, string $privateKey): bool|string
+-    {
+-        if (!$this->isBinary) {
+-            $encrypted = sodium_base642bin($encrypted, SODIUM_BASE64_VARIANT_ORIGINAL_NO_PADDING);
+-        }
+-
+-        return sodium_crypto_box_seal_open(
+-            $encrypted,
+-            sodium_crypto_box_keypair_from_secretkey_and_publickey(
+-                $privateKey,
+-                sodium_crypto_box_publickey_from_secretkey($privateKey)
+-            )
+-        );
+-    }
+-}
+diff --git a/src/Asymmetric/Sodium/SodiumSign.php b/src/Asymmetric/Sodium/SodiumSign.php
+deleted file mode 100644
+index 7298da2..0000000
+--- a/src/Asymmetric/Sodium/SodiumSign.php
++++ /dev/null
+@@ -1,51 +0,0 @@
+-<?php
+-
+-namespace AbmmHasan\SafeGuard\Asymmetric\Sodium;
+-
+-use SodiumException;
+-
+-class SodiumSign
+-{
+-    public function __construct(
+-        private bool $isBinary = true
+-    ) {
+-    }
+-
+-    /**
+-     * Sign a message
+-     *
+-     * @param string $message Message to sign
+-     * @param string $privateKey Secret key
+-     * @return string Signed message
+-     * @throws SodiumException
+-     */
+-    public function getSignedMessage(string $message, string $privateKey): string
+-    {
+-        $encrypted = sodium_crypto_sign($message, $privateKey);
+-
+-        if ($this->isBinary) {
+-            return $encrypted;
+-        }
+-
+-        return sodium_bin2base64($encrypted, SODIUM_BASE64_VARIANT_ORIGINAL_NO_PADDING);
+-    }
+-
+-    /**
+-     * Verify attached signature and get the message
+-     *
+-     * @param string $signedMessage Signed message
+-     * @param string $publicKey Public key
+-     * @return false|string Signature verified message
+-     * @throws SodiumException
+-     */
+-    public function getVerifiedMessage(string $signedMessage, string $publicKey): bool|string
+-    {
+-        if (!$this->isBinary) {
+-            $signedMessage = sodium_base642bin($signedMessage, SODIUM_BASE64_VARIANT_ORIGINAL_NO_PADDING);
+-        }
+-
+-        return sodium_crypto_sign_open($signedMessage, $publicKey);
+-    }
+-
+-
+-}
+diff --git a/src/Misc/SodiumKeygen.php b/src/Misc/SodiumKeygen.php
+deleted file mode 100644
+index 441e227..0000000
+--- a/src/Misc/SodiumKeygen.php
++++ /dev/null
+@@ -1,139 +0,0 @@
+-<?php
+-
+-namespace AbmmHasan\SafeGuard\Misc;
+-
+-use Exception;
+-use SodiumException;
+-
+-final class SodiumKeygen
+-{
+-    /**
+-     * Sodium Session Exchange keygen (Asymmetric)
+-     *
+-     * @param string|null $seed (optional) Seed for deterministic key generation
+-     * @return object Key resource
+-     * @throws SodiumException|Exception
+-     */
+-    public static function sessionExchange(string $seed = null): object
+-    {
+-        if (!is_null($seed)) {
+-            if (($length = strlen($seed)) !== 32) {
+-                throw new Exception("Invalid Seed size (Expected: 32B, Found: {$length}B)!");
+-            }
+-            $keypair = sodium_crypto_kx_seed_keypair($seed);
+-        } else {
+-            $keypair = sodium_crypto_kx_keypair();
+-        }
+-
+-        return (object)[
+-            'keypair' => $keypair,
+-            'private' => sodium_crypto_kx_secretkey($keypair),
+-            'public' => sodium_crypto_kx_publickey($keypair)
+-        ];
+-    }
+-
+-    /**
+-     * Sodium Sign & Detached Sign keygen (Asymmetric)
+-     *
+-     * @param string|null $seed (optional) Seed for deterministic key generation
+-     * @return object Key resource
+-     * @throws SodiumException|Exception
+-     */
+-    public static function sign(string $seed = null): object
+-    {
+-        if (!is_null($seed)) {
+-            if (($length = strlen($seed)) !== SODIUM_CRYPTO_SIGN_SEEDBYTES) {
+-                throw new Exception(
+-                    "Invalid Seed size (Expected: " . SODIUM_CRYPTO_SIGN_SEEDBYTES . "B, Found: {$length}B)!"
+-                );
+-            }
+-            $keypair = sodium_crypto_sign_seed_keypair($seed);
+-        } else {
+-            $keypair = sodium_crypto_sign_keypair();
+-        }
+-
+-        return (object)[
+-            'private' => sodium_crypto_sign_secretkey($keypair),
+-            'public' => sodium_crypto_sign_publickey($keypair)
+-        ];
+-    }
+-
+-    /**
+-     * Sodium Box & Seal keygen (Asymmetric)
+-     *
+-     * @param string|null $seed (optional) Seed for deterministic key generation
+-     * @return object Key resource
+-     * @throws SodiumException|Exception
+-     */
+-    public static function box(string $seed = null): object
+-    {
+-        if (!is_null($seed)) {
+-            if (($length = strlen($seed)) !== 32) {
+-                throw new Exception("Invalid Seed size (Expected: 32B, Found: {$length}B)!");
+-            }
+-            $keypair = sodium_crypto_box_seed_keypair($seed);
+-        } else {
+-            $keypair = sodium_crypto_box_keypair();
+-        }
+-
+-        return (object)[
+-            'private' => sodium_crypto_box_secretkey($keypair),
+-            'public' => sodium_crypto_box_publickey($keypair),
+-            'nonce' => random_bytes(SODIUM_CRYPTO_BOX_NONCEBYTES)
+-        ];
+-    }
+-
+-    /**
+-     * Sodium Auth keygen (Symmetric)
+-     *
+-     * @return string Key resource
+-     */
+-    public static function auth(): string
+-    {
+-        return sodium_crypto_auth_keygen();
+-    }
+-
+-    /**
+-     * Sodium Secret Stream keygen (Symmetric; xchacha20poly1305)
+-     *
+-     * @return string Key resource
+-     */
+-    public static function secretStream(): string
+-    {
+-        return sodium_crypto_secretstream_xchacha20poly1305_keygen();
+-    }
+-
+-    /**
+-     * Sodium Short Hash keygen
+-     *
+-     * @return string Key resource
+-     */
+-    public static function shortHash(): string
+-    {
+-        return sodium_crypto_shorthash_keygen();
+-    }
+-
+-    /**
+-     * Sodium Generic Hash keygen
+-     *
+-     * @return string Key resource
+-     */
+-    public static function genericHash(): string
+-    {
+-        return sodium_crypto_generichash_keygen();
+-    }
+-
+-    /**
+-     * Sodium Secret Box keygen (Symmetric)
+-     *
+-     * @return object Key resource
+-     * @throws Exception
+-     */
+-    public static function secretBox(): object
+-    {
+-        return (object)[
+-            'key' => sodium_crypto_secretbox_keygen(),
+-            'nonce' => random_bytes(SODIUM_CRYPTO_SECRETBOX_NONCEBYTES)
+-        ];
+-    }
+-}
+diff --git a/src/Sodium/SodiumAead.php b/src/Sodium/SodiumAead.php
+new file mode 100644
+index 0000000..62e1dae
+--- /dev/null
++++ b/src/Sodium/SodiumAead.php
+@@ -0,0 +1,151 @@
++<?php
++
++namespace Infocyph\Epicrypt\Sodium;
++
++use Exception;
++use Infocyph\Epicrypt\Exceptions\SodiumCryptoException;
++use SodiumException;
++
++final class Aead
++{
++    private array $keyLength = [
++        'aes-256-gcm' => 12,
++        'chacha20-poly1305' => 8,
++        'chacha20-poly1305-ietf' => 12,
++        'xchacha20-poly1305-ietf' => 24
++    ];
++    private array $algorithms = [
++        'aes-256-gcm' => 'aes256gcm',
++        'chacha20-poly1305' => 'chacha20poly1305',
++        'chacha20-poly1305-ietf' => 'chacha20poly1305_ietf',
++        'xchacha20-poly1305-ietf' => 'xchacha20poly1305_ietf'
++    ];
++
++    /**
++     * Provide required data for operation
++     *
++     * @param string $algorithm Algorithm
++     * @param bool $isMessageBinary Message is binary?
++     * @param bool $isSecretBinary Secrets (nonce, encryption key) are binary?
++     */
++    public function __construct(
++        private readonly string $algorithm = 'xchacha20-poly1305-ietf',
++        private readonly bool $isMessageBinary = false,
++        private readonly bool $isSecretBinary = false
++    ) {
++    }
++
++    /**
++     * Encrypts the given message using the specified key and nonce.
++     *
++     * @param string $message The message to be encrypted.
++     * @param string $key The key used for encryption.
++     * @param string $nonce The nonce used for encryption (must be only used once, per message).
++     * @param string $additionalData Additional, authenticated data
++     * @return string The encrypted message.
++     * @throws SodiumCryptoException|SodiumException
++     */
++    public function encrypt(
++        #[\SensitiveParameter] string $message,
++        #[\SensitiveParameter] string $key,
++        string $nonce,
++        string $additionalData
++    ): string {
++        $this->checkSupport();
++
++        if (!$this->isSecretBinary) {
++            $key = sodium_base642bin($key, SODIUM_BASE64_VARIANT_ORIGINAL_NO_PADDING);
++            $nonce = sodium_base642bin($nonce, SODIUM_BASE64_VARIANT_ORIGINAL_NO_PADDING);
++        }
++
++        $encrypted = call_user_func_array(
++            'sodium_crypto_aead_' . $this->algorithms[$this->algorithm] . '_encrypt',
++            [$message, $additionalData, $nonce, $key]
++        );
++
++        if ($this->isMessageBinary) {
++            return $encrypted;
++        }
++
++        return base64_encode($encrypted);
++    }
++
++    /**
++     * Decrypts the given encrypted data using the specified key and nonce.
++     *
++     * @param string $encrypted The encrypted data to be decrypted.
++     * @param string $key The key used for decryption.
++     * @param string $nonce The nonce used for decryption.
++     * @param string $additionalData Additional, authenticated data
++     * @return string|false The decrypted data.
++     * @throws SodiumCryptoException|SodiumException
++     */
++    public function decrypt(
++        string $encrypted,
++        #[\SensitiveParameter] string $key,
++        string $nonce,
++        string $additionalData
++    ): string|false {
++        $this->checkSupport();
++
++        if (!$this->isSecretBinary) {
++            $key = sodium_base642bin($key, SODIUM_BASE64_VARIANT_ORIGINAL_NO_PADDING);
++            $nonce = sodium_base642bin($nonce, SODIUM_BASE64_VARIANT_ORIGINAL_NO_PADDING);
++        }
++
++        if (!$this->isMessageBinary) {
++            $encrypted = base64_decode($encrypted, true);
++        }
++
++        return call_user_func_array(
++            'sodium_crypto_aead_' . $this->algorithms[$this->algorithm] . '_decrypt',
++            [$encrypted, $additionalData, $nonce, $key]
++        );
++    }
++
++    /**
++     * Get nonce, usable once per message
++     *
++     * @return string The generated nonce.
++     * @throws Exception
++     */
++    public function generateNonce(): string
++    {
++        $nonce = random_bytes($this->keyLength[$this->algorithm]);
++        return $this->isSecretBinary ? $nonce : sodium_bin2base64($nonce, SODIUM_BASE64_VARIANT_ORIGINAL_NO_PADDING);
++    }
++
++    /**
++     * Retrieves the global encryption key.
++     *
++     * @return string The encryption key.
++     * @throws SodiumCryptoException|SodiumException
++     */
++    public function generateEncryptionKey(): string
++    {
++        $this->checkSupport();
++        $encryptionKey = call_user_func('sodium_crypto_aead_' . $this->algorithms[$this->algorithm] . '_keygen');
++        return $this->isSecretBinary ? $encryptionKey : sodium_bin2base64(
++            $encryptionKey,
++            SODIUM_BASE64_VARIANT_ORIGINAL_NO_PADDING
++        );
++    }
++
++    /**
++     * Checks if the specified algorithm is supported and if hardware support is available for AES-256-GCM.
++     *
++     * @throws SodiumCryptoException
++     */
++    private function checkSupport(): void
++    {
++        if (!isset($this->algorithms[$this->algorithm])) {
++            throw new SodiumCryptoException(
++                "Invalid algorithm! Available: " . implode(', ', array_keys($this->algorithms))
++            );
++        }
++
++        if ($this->algorithm === 'aes-256-gcm' && !sodium_crypto_aead_aes256gcm_is_available()) {
++            throw new SodiumCryptoException('Hardware support not available for AES-256-GCM!');
++        }
++    }
++}
+diff --git a/src/Sodium/SodiumAuth.php b/src/Sodium/SodiumAuth.php
+new file mode 100644
+index 0000000..e169dd2
+--- /dev/null
++++ b/src/Sodium/SodiumAuth.php
+@@ -0,0 +1,76 @@
++<?php
++
++namespace Infocyph\Epicrypt\Sodium;
++
++use SodiumException;
++
++final readonly class Auth
++{
++
++    /**
++     * Constructor for the SodiumAuth class.
++     *
++     * @param bool $isMessageBinary (optional) Whether the authentication result should be in binary format.
++     * @param bool $isSecretBinary Secret is binary?
++     */
++    public function __construct(
++        private bool $isMessageBinary = false,
++        private bool $isSecretBinary = false
++    ) {
++    }
++
++    /**
++     * Compute the authenticity of a message.
++     *
++     * @param string $message The message to be authenticated.
++     * @param string $secret The secret key used for authenticity.
++     * @return string The computed authentication in binary format or base64-encoded format.
++     * @throws SodiumException
++     */
++    public function compute(string $message, #[\SensitiveParameter] string $secret): string
++    {
++        if (!$this->isSecretBinary) {
++            $secret = sodium_base642bin($secret, SODIUM_BASE64_VARIANT_ORIGINAL_NO_PADDING);
++        }
++        $encrypted = sodium_crypto_auth($message, $secret);
++        if ($this->isMessageBinary) {
++            return $encrypted;
++        }
++        return base64_encode($encrypted);
++    }
++
++    /**
++     * Verify the authenticity of a message using provided signature.
++     *
++     * @param string $message The message to verify.
++     * @param string $secret The secret key used for authenticity.
++     * @param string $signature The signature to verify against.
++     * @return bool Returns true if the message is authentic, false otherwise.
++     * @throws SodiumException
++     */
++    public function verify(string $message, #[\SensitiveParameter] string $secret, string $signature): bool
++    {
++        if (!$this->isMessageBinary) {
++            $signature = base64_decode($signature, true);
++        }
++        if (!$this->isSecretBinary) {
++            $secret = sodium_base642bin($secret, SODIUM_BASE64_VARIANT_ORIGINAL_NO_PADDING);
++        }
++        if (sodium_crypto_auth_verify($signature, $message, $secret)) {
++            return true;
++        }
++        return false;
++    }
++
++    /**
++     * Generate a cryptographic authentication key.
++     *
++     * @return string The generated authentication key.
++     * @throws SodiumException
++     */
++    public function generateSecret(): string
++    {
++        $secret = sodium_crypto_auth_keygen();
++        return $this->isSecretBinary ? $secret : sodium_bin2base64($secret, SODIUM_BASE64_VARIANT_ORIGINAL_NO_PADDING);
++    }
++}
+diff --git a/src/Sodium/SodiumCryptoBox.php b/src/Sodium/SodiumCryptoBox.php
+new file mode 100644
+index 0000000..bfef01e
+--- /dev/null
++++ b/src/Sodium/SodiumCryptoBox.php
+@@ -0,0 +1,138 @@
++<?php
++
++namespace Infocyph\Epicrypt\Sodium;
++
++use Exception;
++use Infocyph\Epicrypt\Exceptions\SodiumCryptoException;
++use SodiumException;
++
++final readonly class CryptoBox
++{
++    /**
++     * @param bool $isMessageBinary (optional) Message in binary format?
++     * @param bool $isSecretBinary Secrets(Third party public key, Own private key, Shared secret) are binary?
++     */
++    public function __construct(
++        private bool $isMessageBinary = false,
++        private bool $isSecretBinary = false
++    ) {
++    }
++
++    /**
++     * Encrypt the message
++     *
++     * @param string $message Message for encryption
++     * @param string $thirdPartyPublicKey Third party public key
++     * @param string $ownPrivateKey Own private key
++     * @param string $sharedSecret Shared secret (only used once per message)
++     * @return string Encrypted message
++     * @throws SodiumException
++     */
++    public function encrypt(
++        #[\SensitiveParameter] string $message,
++        #[\SensitiveParameter] string $thirdPartyPublicKey,
++        #[\SensitiveParameter] string $ownPrivateKey,
++        string $sharedSecret
++    ): string {
++        if (!$this->isSecretBinary) {
++            $thirdPartyPublicKey = sodium_base642bin($thirdPartyPublicKey, SODIUM_BASE64_VARIANT_ORIGINAL_NO_PADDING);
++            $ownPrivateKey = sodium_base642bin($ownPrivateKey, SODIUM_BASE64_VARIANT_ORIGINAL_NO_PADDING);
++            $sharedSecret = sodium_base642bin($sharedSecret, SODIUM_BASE64_VARIANT_ORIGINAL_NO_PADDING);
++        }
++
++        $encrypted = sodium_crypto_box(
++            $message,
++            $sharedSecret,
++            sodium_crypto_box_keypair_from_secretkey_and_publickey(
++                $ownPrivateKey,
++                $thirdPartyPublicKey
++            )
++        );
++
++        if ($this->isMessageBinary) {
++            return $encrypted;
++        }
++
++        return base64_encode($encrypted);
++    }
++
++    /**
++     * Decrypt the message
++     *
++     * @param string $encryptedMessage Encrypted message
++     * @param string $thirdPartyPublicKey Third party public key
++     * @param string $ownPrivateKey Own private key
++     * @param string $sharedSecret Shared secret
++     * @return false|string Decrypted message
++     * @throws SodiumException
++     */
++    public function decrypt(
++        string $encryptedMessage,
++        #[\SensitiveParameter] string $thirdPartyPublicKey,
++        #[\SensitiveParameter] string $ownPrivateKey,
++        string $sharedSecret
++    ): bool|string {
++        if (!$this->isMessageBinary) {
++            $encryptedMessage = base64_decode($encryptedMessage, true);
++        }
++        if (!$this->isSecretBinary) {
++            $thirdPartyPublicKey = sodium_base642bin($thirdPartyPublicKey, SODIUM_BASE64_VARIANT_ORIGINAL_NO_PADDING);
++            $ownPrivateKey = sodium_base642bin($ownPrivateKey, SODIUM_BASE64_VARIANT_ORIGINAL_NO_PADDING);
++            $sharedSecret = sodium_base642bin($sharedSecret, SODIUM_BASE64_VARIANT_ORIGINAL_NO_PADDING);
++        }
++
++        return sodium_crypto_box_open(
++            $encryptedMessage,
++            $sharedSecret,
++            sodium_crypto_box_keypair_from_secretkey_and_publickey(
++                $ownPrivateKey,
++                $thirdPartyPublicKey
++            )
++        );
++    }
++
++    /**
++     * Generates a secret key pair for the Sodium Crypto Box algorithm.
++     *
++     * @param string|null $seed (optional) Seed for deterministic key generation. If provided, it must be 32 bytes long.
++     * @return array An array containing the private key, public key and shared key.
++     * @throws SodiumCryptoException|SodiumException|Exception
++     */
++    public function generateSecretPair(string $seed = null): array
++    {
++        if (!is_null($seed)) {
++            if (($length = strlen($seed)) !== 32) {
++                throw new SodiumCryptoException("Invalid Seed size (Expected: 32B, Found: {$length}B)!");
++            }
++            $keypair = sodium_crypto_box_seed_keypair($seed);
++        } else {
++            $keypair = sodium_crypto_box_keypair();
++        }
++
++        $keys = [
++            'private' => sodium_crypto_box_secretkey($keypair),
++            'public' => sodium_crypto_box_publickey($keypair)
++        ];
++
++        if ($this->isSecretBinary) {
++            return $keys;
++        }
++
++        return [
++            'private' => sodium_bin2base64($keys['private'], SODIUM_BASE64_VARIANT_ORIGINAL_NO_PADDING),
++            'public' => sodium_bin2base64($keys['public'], SODIUM_BASE64_VARIANT_ORIGINAL_NO_PADDING)
++        ];
++    }
++
++    /**
++     * Generates a shared secret
++     *
++     * @return string The generated shared secret.
++     * @throws SodiumException|Exception
++     */
++    public function generateSharedSecret(): string
++    {
++        $secret = random_bytes(SODIUM_CRYPTO_BOX_NONCEBYTES);
++        return $this->isSecretBinary ? $secret : sodium_bin2base64($secret, SODIUM_BASE64_VARIANT_ORIGINAL_NO_PADDING);
++    }
++}
+diff --git a/src/Sodium/SodiumCryptoSeal.php b/src/Sodium/SodiumCryptoSeal.php
+new file mode 100644
+index 0000000..8fb2c9f
+--- /dev/null
++++ b/src/Sodium/SodiumCryptoSeal.php
+@@ -0,0 +1,98 @@
++<?php
++
++namespace Infocyph\Epicrypt\Sodium;
++
++use Infocyph\Epicrypt\Exceptions\SodiumCryptoException;
++use SodiumException;
++
++final readonly class CryptoSeal
++{
++
++    /**
++     * Set predefined property
++     *
++     * @param bool $isMessageBinary Is transportable resource binary?
++     */
++    public function __construct(
++        private bool $isMessageBinary = false,
++        private bool $isSecretBinary = false
++    ) {
++    }
++
++    /**
++     * Encrypt the message (using recipient public key)
++     *
++     * @param string $message Message for encryption
++     * @param string $publicKey Public key
++     * @return string Encrypted message
++     * @throws SodiumException
++     */
++    public function encrypt(#[\SensitiveParameter] string $message, string $publicKey): string
++    {
++        if (!$this->isSecretBinary) {
++            $publicKey = sodium_base642bin($publicKey, SODIUM_BASE64_VARIANT_ORIGINAL_NO_PADDING);
++        }
++
++        $encrypted = sodium_crypto_box_seal($message, $publicKey);
++
++        if ($this->isMessageBinary) {
++            return $encrypted;
++        }
++
++        return base64_encode($encrypted);
++    }
++
++    /**
++     * Decrypt the message (using recipient keypair)
++     *
++     * @param string $encrypted Encrypted message
++     * @param string $keypair The keypair
++     * @return false|string Decrypted message
++     * @throws SodiumException
++     */
++    public function decrypt(string $encrypted, #[\SensitiveParameter] string $keypair): bool|string
++    {
++        if (!$this->isSecretBinary) {
++            $keypair = sodium_base642bin($keypair, SODIUM_BASE64_VARIANT_ORIGINAL_NO_PADDING);
++        }
++
++        if (!$this->isMessageBinary) {
++            $encrypted = base64_decode($encrypted, true);
++        }
++
++        return sodium_crypto_box_seal_open($encrypted, $keypair);
++    }
++
++    /**
++     * Generates a secret key pair for the Sodium Crypto Box algorithm.
++     *
++     * @param string|null $seed (optional) Seed for deterministic key generation. If provided, it must be 32 bytes long.
++     * @return array An array containing the keypair and public key.
++     * @throws SodiumCryptoException|SodiumException
++     */
++    public function generateSecretPair(string $seed = null): array
++    {
++        if (!is_null($seed)) {
++            if (($length = strlen($seed)) !== 32) {
++                throw new SodiumCryptoException("Invalid Seed size (Expected: 32B, Found: {$length}B)!");
++            }
++            $keypair = sodium_crypto_box_seed_keypair($seed);
++        } else {
++            $keypair = sodium_crypto_box_keypair();
++        }
++
++        $keys = [
++            'keypair' => $keypair,
++            'public' => sodium_crypto_box_publickey($keypair)
++        ];
++
++        if ($this->isSecretBinary) {
++            return $keys;
++        }
++
++        return [
++            'keypair' => sodium_bin2base64($keys['keypair'], SODIUM_BASE64_VARIANT_ORIGINAL_NO_PADDING),
++            'public' => sodium_bin2base64($keys['public'], SODIUM_BASE64_VARIANT_ORIGINAL_NO_PADDING)
++        ];
++    }
++}
+diff --git a/src/Sodium/SodiumSecretBox.php b/src/Sodium/SodiumSecretBox.php
+new file mode 100644
+index 0000000..3e728bb
+--- /dev/null
++++ b/src/Sodium/SodiumSecretBox.php
+@@ -0,0 +1,91 @@
++<?php
++
++namespace Infocyph\Epicrypt\Sodium;
++
++use Exception;
++use SodiumException;
++
++final readonly class SecretBox
++{
++    /**
++     * Constructor for the class.
++     *
++     * @param bool $isMessageBinary (optional) Whether the message is in binary format. Default is false.
++     * @param bool $isSecretBinary (optional) Whether the secret is in binary format. Default is false.
++     */
++    public function __construct(
++        private bool $isMessageBinary = false,
++        private bool $isSecretBinary = false
++    ) {
++    }
++
++    /**
++     * Encrypts the given message using the specified secret and nonce.
++     *
++     * @param string $message The message to be encrypted.
++     * @param string $secret The secret key used for encryption.
++     * @param string $nonce The nonce used for encryption (must be unique per message).
++     * @return string The encrypted message in binary format if $isMessageBinary is true, otherwise in base64 format.
++     * @throws SodiumException
++     */
++    public function encrypt(
++        #[\SensitiveParameter] string $message,
++        #[\SensitiveParameter] string $secret,
++        string $nonce
++    ): string {
++        if (!$this->isSecretBinary) {
++            $secret = sodium_base642bin($secret, SODIUM_BASE64_VARIANT_ORIGINAL_NO_PADDING);
++            $nonce = sodium_base642bin($nonce, SODIUM_BASE64_VARIANT_ORIGINAL_NO_PADDING);
++        }
++        $encrypted = sodium_crypto_secretbox($message, $nonce, $secret);
++        if ($this->isMessageBinary) {
++            return $encrypted;
++        }
++        return base64_encode($encrypted);
++    }
++
++    /**
++     * Decrypts an encrypted message using the specified secret and nonce.
++     *
++     * @param string $encryptedMessage The encrypted message to be decrypted.
++     * @param string $secret The secret key used for decryption.
++     * @param string $nonce The nonce used for decryption (must be the same as the one used for encryption).
++     * @return string|bool The decrypted message in binary format if $isMessageBinary is true, otherwise in base64 format. Returns false if decryption fails.
++     * @throws SodiumException
++     */
++    public function decrypt(string $encryptedMessage, #[\SensitiveParameter] string $secret, string $nonce): string|bool
++    {
++        if (!$this->isSecretBinary) {
++            $secret = sodium_base642bin($secret, SODIUM_BASE64_VARIANT_ORIGINAL_NO_PADDING);
++            $nonce = sodium_base642bin($nonce, SODIUM_BASE64_VARIANT_ORIGINAL_NO_PADDING);
++        }
++        if (!$this->isMessageBinary) {
++            $encryptedMessage = base64_decode($encryptedMessage);
++        }
++        return sodium_crypto_secretbox_open($encryptedMessage, $nonce, $secret);
++    }
++
++    /**
++     * Generates a random nonce.
++     *
++     * @return string The generated nonce.
++     * @throws SodiumException|Exception
++     */
++    public function generateNonce(): string
++    {
++        $secret = random_bytes(SODIUM_CRYPTO_SECRETBOX_NONCEBYTES);
++        return $this->isSecretBinary ? $secret : sodium_bin2base64($secret, SODIUM_BASE64_VARIANT_ORIGINAL_NO_PADDING);
++    }
++
++    /**
++     * Generates a secret key.
++     *
++     * @return string The generated secret key.
++     * @throws SodiumException
++     */
++    public function generateSecret(): string
++    {
++        $secret = sodium_crypto_secretbox_keygen();
++        return $this->isSecretBinary ? $secret : sodium_bin2base64($secret, SODIUM_BASE64_VARIANT_ORIGINAL_NO_PADDING);
++    }
++}
+diff --git a/src/Sodium/SodiumSecretStream.php b/src/Sodium/SodiumSecretStream.php
+new file mode 100644
+index 0000000..f67f3dc
+--- /dev/null
++++ b/src/Sodium/SodiumSecretStream.php
+@@ -0,0 +1,64 @@
++<?php
++
++namespace Infocyph\Epicrypt\Sodium;
++
++
++use Infocyph\Epicrypt\Exceptions\FileAccessException;
++use Infocyph\Epicrypt\Misc\ReadFile;
++use SodiumException;
++
++
++/**
++ * SecretStream class: Full process incomplete. ToDo: Need to adjust the functions.
++ */
++class SecretStream
++{
++    public function encryptFile(string $inputPath, string $outputPath, string $key, string $additionalData = '')
++    {
++        if (!file_exists($inputPath) || !is_readable($inputPath)) {
++            throw new FileAccessException('Invalid input file!');
++        }
++        [$state, $header] = sodium_crypto_secretstream_xchacha20poly1305_init_push($key);
++        if (!file_exists($outputPath)) {
++            touch($outputPath) || throw new FileAccessException('Unable to create output file!');
++        }
++        $handle = fopen($outputPath, "wb") ?: throw new FileAccessException('Unable to write to output file!');
++        flock($handle, LOCK_EX) || throw new FileAccessException('Could not acquire lock on ' . $outputPath);
++        fwrite($handle, $header);
++        $fileObject = new ReadFile($inputPath, 'rb');
++        $writeChunkSize = [];
++        foreach ($fileObject->binary(8175) as $chunk) {
++            $writeChunkSize[] = fwrite(
++                $handle,
++                sodium_crypto_secretstream_xchacha20poly1305_push($state, $chunk, $additionalData)
++            );
++        }
++        flock($handle, LOCK_UN);
++        fclose($handle);
++        sodium_memzero($state);
++        return $writeChunkSize;
++    }
++
++    public function decryptFile(string $inputPath, string $outputPath, string $key, string $additionalData = '')
++    {
++        if (!file_exists($inputPath) || !is_readable($inputPath)) {
++            throw new FileAccessException('Invalid input file!');
++        }
++        if (!file_exists($outputPath)) {
++            touch($outputPath) || throw new FileAccessException('Unable to create output file!');
++        }
++        $fileObject = new ReadFile($inputPath, 'rb');
++        $header = $fileObject->set('fread', 24);
++        $state = sodium_crypto_secretstream_xchacha20poly1305_init_pull($header, $key);
++        $handle = fopen($outputPath, "wb") ?: throw new FileAccessException('Unable to write to output file!');
++        flock($handle, LOCK_EX) || throw new FileAccessException('Could not acquire lock on ' . $outputPath);
++        $writeChunkSize = [];
++        foreach ($fileObject->binary(8192) as $chunk) {
++            [$data, $tag] = sodium_crypto_secretstream_xchacha20poly1305_pull($state, $chunk, $additionalData);
++            $writeChunkSize[] = fwrite($handle, $data);
++        }
++        flock($handle, LOCK_UN);
++        fclose($handle);
++        sodium_memzero($state);
++    }
++}
+diff --git a/src/Symmetric/Sodium/SodiumAead.php b/src/Symmetric/Sodium/SodiumAead.php
+deleted file mode 100644
+index 27cf24e..0000000
+--- a/src/Symmetric/Sodium/SodiumAead.php
++++ /dev/null
+@@ -1,120 +0,0 @@
+-<?php
+-
+-namespace AbmmHasan\SafeGuard\Symmetric\Sodium;
+-
+-use Exception;
+-use SodiumException;
+-
+-class SodiumAead
+-{
+-    private array $availableAlgorithms = [
+-        'aes256gcm' => 12,
+-        'chacha20poly1305' => 8,
+-        'chacha20poly1305_ietf' => 12,
+-        'xchacha20poly1305_ietf' => 24
+-    ];
+-
+-    private string $keygen;
+-    private string $encrypt;
+-    private string $decrypt;
+-
+-    /**
+-     * Provide required data for aead operation
+-     *
+-     * @param string $additionalData Additional, authenticated data
+-     * @param string $algorithm Algorithm
+-     * @param bool $isBinary get result as binary?
+-     */
+-    public function __construct(
+-        private readonly string $additionalData,
+-        private readonly string $algorithm = 'xchacha20poly1305_ietf',
+-        private readonly bool $isBinary = true
+-    ) {
+-        $this->keygen = "sodium_crypto_aead_{$this->algorithm}_keygen";
+-        $this->encrypt = "sodium_crypto_aead_{$this->algorithm}_encrypt";
+-        $this->decrypt = "sodium_crypto_aead_{$this->algorithm}_decrypt";
+-    }
+-
+-    /**
+-     * Encrypt data
+-     *
+-     * @param string $message The message to encrypt
+-     * @param string $key The key to encrypt with
+-     * @param string $nonce A number that must be only used once, per message
+-     * @return mixed
+-     * @throws SodiumException|Exception
+-     */
+-    public function encrypt(string $message, string $key, string $nonce): mixed
+-    {
+-        $this->checkSupport();
+-
+-        $encrypted = call_user_func_array(
+-            $this->encrypt,
+-            [$message, $this->additionalData, $nonce, $key]
+-        );
+-
+-        if ($this->isBinary) {
+-            return $encrypted;
+-        }
+-
+-        return sodium_bin2base64($encrypted, SODIUM_BASE64_VARIANT_ORIGINAL_NO_PADDING);
+-    }
+-
+-    /**
+-     * Decrypt the encrypted data
+-     *
+-     * @param string $encrypted The encrypted message
+-     * @param string $key The key to decrypt with
+-     * @param string $nonce The nounce used during encryption
+-     * @return mixed
+-     * @throws SodiumException
+-     * @throws Exception
+-     */
+-    public function decrypt(string $encrypted, string $key, string $nonce): mixed
+-    {
+-        $this->checkSupport();
+-
+-        if (!$this->isBinary) {
+-            $encrypted = sodium_base642bin($encrypted, SODIUM_BASE64_VARIANT_ORIGINAL_NO_PADDING);
+-        }
+-
+-        return call_user_func_array(
+-            $this->decrypt,
+-            [$encrypted, $this->additionalData, $nonce, $key]
+-        );
+-    }
+-
+-    /**
+-     * Retrieves the key and nonce for the encryption algorithm.
+-     *
+-     * @return array Returns an array containing the key and nonce.
+-     * @throws Exception
+-     */
+-    public function getKey(): array
+-    {
+-        $this->checkSupport();
+-        return [
+-            'key' => call_user_func($this->keygen),
+-            'nonce' => random_bytes($this->availableAlgorithms[$this->algorithm]),
+-        ];
+-    }
+-
+-    /**
+-     * Checks if the specified algorithm is supported.
+-     *
+-     * @return void
+-     * @throws Exception if the algorithm is not supported
+-     */
+-    private function checkSupport(): void
+-    {
+-        if (!isset($this->availableAlgorithms[$this->algorithm])) {
+-            throw new Exception(
+-                "Invalid algorithm! Available: " . implode(', ', array_keys($this->availableAlgorithms))
+-            );
+-        }
+-
+-        if ($this->algorithm === 'aes256gcm' && !sodium_crypto_aead_aes256gcm_is_available()) {
+-            throw new Exception('Hardware accelerated AES not available!');
+-        }
+-    }
+-}
+diff --git a/src/Symmetric/Sodium/SodiumAuth.php b/src/Symmetric/Sodium/SodiumAuth.php
+deleted file mode 100644
+index 9278539..0000000
+--- a/src/Symmetric/Sodium/SodiumAuth.php
++++ /dev/null
+@@ -1,56 +0,0 @@
+-<?php
+-
+-namespace AbmmHasan\SafeGuard\Symmetric\Sodium;
+-
+-use SodiumException;
+-
+-class SodiumAuth
+-{
+-
+-    public function __construct(
+-        private string $secret,
+-        private bool $isBinary = true
+-    ) {
+-    }
+-
+-    /**
+-     * @param $message
+-     * @return string
+-     * @throws SodiumException
+-     */
+-    public function sign($message): string
+-    {
+-        $encrypted = sodium_crypto_auth($message, $this->secret);
+-        if ($this->isBinary) {
+-            return $encrypted;
+-        }
+-        return sodium_bin2base64($encrypted, SODIUM_BASE64_VARIANT_ORIGINAL_NO_PADDING);
+-    }
+-
+-    /**
+-     * @param $message
+-     * @param $signature
+-     * @return bool
+-     * @throws SodiumException
+-     */
+-    public function verify($message, $signature): bool
+-    {
+-        if (!$this->isBinary) {
+-            $message = sodium_base642bin($message, SODIUM_BASE64_VARIANT_ORIGINAL_NO_PADDING);
+-        }
+-        if (sodium_crypto_auth_verify($signature, $message, $this->secret)) {
+-            return true;
+-        }
+-        return false;
+-    }
+-
+-    /**
+-     * Generate a key for use with sodium_crypto_auth.
+-     *
+-     * @return string The generated key.
+-     */
+-    public static function getKey(): string
+-    {
+-        return sodium_crypto_auth_keygen();
+-    }
+-}
+diff --git a/src/Symmetric/Sodium/SodiumSecretBox.php b/src/Symmetric/Sodium/SodiumSecretBox.php
+deleted file mode 100644
+index 2cc047b..0000000
+--- a/src/Symmetric/Sodium/SodiumSecretBox.php
++++ /dev/null
+@@ -1,58 +0,0 @@
+-<?php
+-
+-namespace AbmmHasan\SafeGuard\Symmetric\Sodium;
+-
+-use Exception;
+-use SodiumException;
+-
+-class SodiumSecretBox
+-{
+-
+-    public function __construct(
+-        private string $key,
+-        private string $nonce,
+-        private bool $isBinary = true
+-    ) {
+-    }
+-
+-    /**
+-     * @param string $message
+-     * @return string
+-     * @throws SodiumException
+-     */
+-    public function encrypt(string $message): string
+-    {
+-        $encrypted = sodium_crypto_secretbox($message, $this->nonce, $this->key);
+-        if ($this->isBinary) {
+-            return $encrypted;
+-        }
+-        return sodium_bin2base64($encrypted, SODIUM_BASE64_VARIANT_ORIGINAL_NO_PADDING);
+-    }
+-
+-    /**
+-     * @param string $encryptedMessage
+-     * @return string|bool
+-     * @throws SodiumException
+-     */
+-    public function decrypt(string $encryptedMessage): string|bool
+-    {
+-        if (!$this->isBinary) {
+-            $encryptedMessage = sodium_base642bin($encryptedMessage, SODIUM_BASE64_VARIANT_ORIGINAL_NO_PADDING);
+-        }
+-        return sodium_crypto_secretbox_open($encryptedMessage, $this->nonce, $this->key);
+-    }
+-
+-    /**
+-     * Sodium Secret Box keygen (Symmetric)
+-     *
+-     * @return object Key resource
+-     * @throws Exception
+-     */
+-    public static function secretBox(): object
+-    {
+-        return (object)[
+-            'key' => sodium_crypto_secretbox_keygen(),
+-            'nonce' => random_bytes(SODIUM_CRYPTO_SECRETBOX_NONCEBYTES)
+-        ];
+-    }
+-}
+diff --git a/src/Symmetric/Sodium/SodiumSecretStream.php b/src/Symmetric/Sodium/SodiumSecretStream.php
+deleted file mode 100644
+index 9be4c60..0000000
+--- a/src/Symmetric/Sodium/SodiumSecretStream.php
++++ /dev/null
+@@ -1,61 +0,0 @@
+-<?php
+-
+-namespace AbmmHasan\SafeGuard\Symmetric\Sodium;
+-
+-use AbmmHasan\SafeGuard\Misc\ReadFile;
+-use SodiumException;
+-
+-class SodiumSecretStream
+-{
+-    /**
+-     * @param string $key
+-     * @throws SodiumException
+-     */
+-    public function __construct(
+-        private string $key,
+-    ) {
+-        // ToDo: Still incomplete. WIP!
+-    }
+-
+-    public function encryptFile(string $inputPath, string $outputPath, int $blockSize = 1024)
+-    {
+-        if (!file_exists($inputPath) || !is_readable($inputPath)) {
+-            throw new Exception("Invalid file path!");
+-        }
+-        [$state, $header] = sodium_crypto_secretstream_xchacha20poly1305_init_push($this->key);
+-        if (file_put_contents($outputPath, $header) === false) {
+-            throw new Exception('Invalid output file path!');
+-        }
+-        $fileObject = new ReadFile($inputPath, 'rb');
+-        foreach ($fileObject->binary($blockSize) as $index => $chunk) {
+-            $writeChunkSize[] = file_put_contents(
+-                $outputPath,
+-                sodium_crypto_secretstream_xchacha20poly1305_push($state, $chunk),
+-                FILE_APPEND | LOCK_EX
+-            );
+-        }
+-        sodium_memzero($state);
+-        return $writeChunkSize;
+-    }
+-
+-    public function decryptFile(string $inputPath, string $outputPath, int $blockSize = 1024)
+-    {
+-        if (!file_exists($inputPath) || !is_readable($inputPath)) {
+-            throw new Exception("Invalid file path!");
+-        }
+-        if (file_put_contents($outputPath, '') === false) {
+-            throw new Exception('Invalid output file path!');
+-        }
+-        $fileObject = new ReadFile($inputPath, 'rb');
+-        $header = $fileObject->set('fread', 24);
+-        $state = sodium_crypto_secretstream_xchacha20poly1305_init_pull($header, $this->key);
+-        foreach ($fileObject->binary($blockSize) as $index => $chunk) {
+-            $writeChunkSize[] = file_put_contents(
+-                $outputPath,
+-                [$data, $tag] = sodium_crypto_secretstream_xchacha20poly1305_pull($state, $chunk),
+-                FILE_APPEND | LOCK_EX
+-            );
+-        }
+-        sodium_memzero($state);
+-    }
+-}
+\ No newline at end of file
+diff --git a/tests/ArchTest.php b/tests/ArchTest.php
+new file mode 100644
+index 0000000..609b6b6
+--- /dev/null
++++ b/tests/ArchTest.php
+@@ -0,0 +1,9 @@
++<?php
++
++test('No debugging statements', function () {
++    expect(['dd', 'dump', 'ray', 'die', 'd', 'eval', 'sleep', 'print_r', 'var_dump'])->each->not()->toBeUsed();
++});
++
++test('No echo statements', function () {
++    expect(['echo', 'print'])->each->not()->toBeUsed();
++});
+diff --git a/tests/Feature/ArchTest.php b/tests/Feature/ArchTest.php
+deleted file mode 100644
+index 6b14f47..0000000
+--- a/tests/Feature/ArchTest.php
++++ /dev/null
+@@ -1,5 +0,0 @@
+-<?php
+-
+-test('No debugging statements', function () {
+-    expect(['dd', 'dump', 'ray', 'die', 'd', 'eval', 'sleep'])->each->not()->toBeUsed();
+-});
+\ No newline at end of file
+diff --git a/tests/Feature/OpenSSLStringTest.php b/tests/Feature/OpenSSLStringTest.php
+deleted file mode 100644
+index c9139b5..0000000
+--- a/tests/Feature/OpenSSLStringTest.php
++++ /dev/null
+@@ -1,19 +0,0 @@
+-<?php
+-
+-use AbmmHasan\SafeGuard\Generate\Random;
+-use AbmmHasan\SafeGuard\Symmetric\OpenSSL\StringCrypt;
+-
+-$crypt = new StringCrypt('secret', '1234567890');
+-$string = Random::string();
+-
+-test('Default settings', function () use ($crypt, $string) {
+-    $encrypted = $crypt->encrypt($string);
+-    $decrypted = $crypt->decrypt($encrypted);
+-    expect($decrypted)->toBe($string);
+-});
+-
+-//test('Default settings', function () use ($crypt, $string) {
+-//    $encrypted = $crypt->encrypt($string);
+-//    $decrypted = $crypt->decrypt($encrypted);
+-//    expect($decrypted)->toBe($string);
+-//});
+diff --git a/tests/Pest.php b/tests/Pest.php
+deleted file mode 100644
+index 5949c61..0000000
+--- a/tests/Pest.php
++++ /dev/null
+@@ -1,45 +0,0 @@
+-<?php
+-
+-/*
+-|--------------------------------------------------------------------------
+-| Test Case
+-|--------------------------------------------------------------------------
+-|
+-| The closure you provide to your test functions is always bound to a specific PHPUnit test
+-| case class. By default, that class is "PHPUnit\Framework\TestCase". Of course, you may
+-| need to change it using the "uses()" function to bind a different classes or traits.
+-|
+-*/
+-
+-// uses(Tests\TestCase::class)->in('Feature');
+-
+-/*
+-|--------------------------------------------------------------------------
+-| Expectations
+-|--------------------------------------------------------------------------
+-|
+-| When you're writing tests, you often need to check that values meet certain conditions. The
+-| "expect()" function gives you access to a set of "expectations" methods that you can use
+-| to assert different things. Of course, you may extend the Expectation API at any time.
+-|
+-*/
+-
+-expect()->extend('toBeOne', function () {
+-    return $this->toBe(1);
+-});
+-
+-/*
+-|--------------------------------------------------------------------------
+-| Functions
+-|--------------------------------------------------------------------------
+-|
+-| While Pest is very powerful out-of-the-box, you may have some testing code specific to your
+-| project that you don't want to repeat in every file. Here you can also expose helpers as
+-| global functions to help you to reduce the number of lines of code in your test files.
+-|
+-*/
+-
+-function something()
+-{
+-    // ..
+-}
+diff --git a/tests/TestCase.php b/tests/TestCase.php
+deleted file mode 100644
+index cfb05b6..0000000
+--- a/tests/TestCase.php
++++ /dev/null
+@@ -1,10 +0,0 @@
+-<?php
+-
+-namespace Tests;
+-
+-use PHPUnit\Framework\TestCase as BaseTestCase;
+-
+-abstract class TestCase extends BaseTestCase
+-{
+-    //
+-}
+diff --git a/tests/Unit/ExampleTest.php b/tests/Unit/ExampleTest.php
+deleted file mode 100644
+index 61cd84c..0000000
+--- a/tests/Unit/ExampleTest.php
++++ /dev/null
+@@ -1,5 +0,0 @@
+-<?php
+-
+-test('example', function () {
+-    expect(true)->toBeTrue();
+-});

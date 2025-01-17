@@ -10,9 +10,8 @@ class StringHash
         private string $algorithm,
         private string $secret = '',
         private bool $isBinary = false,
-        private array $options = []
-    ) {
-    }
+        private array $options = [],
+    ) {}
 
     /**
      * @param string $data
@@ -27,8 +26,8 @@ class StringHash
             'blake2b' => $this->generateHashByAlias('sodium_crypto_generichash', $data, $this->secret, $hashLength),
             default => match (true) {
                 empty($this->secret) => hash($this->algorithm, $data, $this->isBinary, $this->options),
-                default => hash_hmac($this->algorithm, $data, $this->secret, $this->isBinary)
-            }
+                default => hash_hmac($this->algorithm, $data, $this->secret, $this->isBinary),
+            },
         };
     }
 

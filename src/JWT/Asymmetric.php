@@ -1,8 +1,6 @@
 <?php
 
-
 namespace AbmmHasan\SafeGuard\JWT;
-
 
 use AbmmHasan\SafeGuard\Asymmetric\Signature;
 use AbmmHasan\SafeGuard\Misc\MBStringConverter;
@@ -20,14 +18,14 @@ class Asymmetric
         'RS512' => OPENSSL_ALGO_SHA512,
         'ES256' => OPENSSL_ALGO_SHA256,
         'ES384' => OPENSSL_ALGO_SHA384,
-//        'ES512' => OPENSSL_ALGO_SHA512,
+        //        'ES512' => OPENSSL_ALGO_SHA512,
     ];
     private array $algorithmA2T = [];
 
     private array $keyLength = [
         'ES256' => 64,
         'ES384' => 96,
-        'ES512' => 132
+        'ES512' => 132,
     ];
 
     /**
@@ -85,7 +83,7 @@ class Asymmetric
 
         if ((new Signature(true, $this->algorithm))
             ->verify("$parts[0].$parts[1]", $this->secret, $signature)) {
-            if ($this->verifyRegister((array)$payload)) {
+            if ($this->verifyRegister((array) $payload)) {
                 return $payload;
             }
             throw new Exception("Token verification failed!");

@@ -1,8 +1,6 @@
 <?php
 
-
 namespace AbmmHasan\SafeGuard\Symmetric\OpenSSL;
-
 
 use Exception;
 use SodiumException;

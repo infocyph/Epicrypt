@@ -1,4 +1,6 @@
-/vendor/
+vendor
 .idea
 composer.lock
-/example/
+git-story_media
+test.php
+*~

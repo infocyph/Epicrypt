@@ -1,8 +1,6 @@
 <?php
 
-
 namespace AbmmHasan\SafeGuard\Generate;
-
 
 use Exception;
 
@@ -27,11 +25,13 @@ final class Random
             }
             return $prefix .
                 substr(
-                    str_replace(['+', '/', '\\'],
+                    str_replace(
+                        ['+', '/', '\\'],
                         '',
-                        sodium_bin2base64(random_bytes($length), SODIUM_BASE64_VARIANT_ORIGINAL_NO_PADDING)),
+                        sodium_bin2base64(random_bytes($length), SODIUM_BASE64_VARIANT_ORIGINAL_NO_PADDING),
+                    ),
                     0,
-                    $length
+                    $length,
                 )
                 . $postfix;
         } catch (Exception $e) {
@@ -50,7 +50,7 @@ final class Random
     {
         return random_int(
             intval('1' . str_repeat('0', $length - 1)),
-            intval(str_repeat('9', $length))
+            intval(str_repeat('9', $length)),
         );
     }
 

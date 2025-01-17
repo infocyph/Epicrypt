@@ -1,8 +1,6 @@
 <?php
 
-
 namespace AbmmHasan\SafeGuard\Symmetric\OpenSSL;
-
 
 use AbmmHasan\SafeGuard\Misc\ReadFile;
 use Exception;

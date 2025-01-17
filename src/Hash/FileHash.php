@@ -10,9 +10,8 @@ class FileHash
     public function __construct(
         private string $algorithm,
         private int $blockSize = 1024,
-        private int $hashLength = SODIUM_CRYPTO_GENERICHASH_BYTES
-    ) {
-    }
+        private int $hashLength = SODIUM_CRYPTO_GENERICHASH_BYTES,
+    ) {}
 
     /**
      * Generate hash for a given file
@@ -31,8 +30,8 @@ class FileHash
             'blake2b' => sodium_bin2hex($this->chunkedGenericHash($filePath, $secret)),
             default => match (true) {
                 empty($secret) => hash_file($this->algorithm, $filePath),
-                default => hash_hmac_file($this->algorithm, $filePath, $secret)
-            }
+                default => hash_hmac_file($this->algorithm, $filePath, $secret),
+            },
         };
     }
 

@@ -1,8 +1,6 @@
 <?php
 
-
 namespace AbmmHasan\SafeGuard\Asymmetric\OpenSSL;
-
 
 use Exception;
 use OpenSSLAsymmetricKey;
@@ -21,15 +19,15 @@ class DiffieHellman
     public function __construct(
         string $prime,
         string $generator,
-        string $privateKey
+        string $privateKey,
     ) {
         $this->resource = openssl_pkey_new([
             'dh' => [
                 'p' => $prime,
                 'g' => $generator,
-                'priv_key' => $privateKey
+                'priv_key' => $privateKey,
             ],
-            'private_key_type' => OPENSSL_KEYTYPE_DH
+            'private_key_type' => OPENSSL_KEYTYPE_DH,
         ]);
     }
 
@@ -56,7 +54,7 @@ class DiffieHellman
     {
         if ($encoded) {
             $publicKey = openssl_pkey_get_details(
-                openssl_pkey_get_public($publicKey)
+                openssl_pkey_get_public($publicKey),
             )['dh']['pub_key'];
         }
         return openssl_dh_compute_key($publicKey, $this->resource);
@@ -78,8 +76,8 @@ class DiffieHellman
         return openssl_pkey_get_details(
             openssl_pkey_new([
                 'private_key_bits' => $privateKeyBitSize,
-                'private_key_type' => OPENSSL_KEYTYPE_DH
-            ])
+                'private_key_type' => OPENSSL_KEYTYPE_DH,
+            ]),
         )['dh']['p'];
     }
 }

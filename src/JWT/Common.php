@@ -1,8 +1,6 @@
 <?php
 
-
 namespace AbmmHasan\SafeGuard\JWT;
-
 
 use ArrayAccess;
 use Exception;
@@ -35,7 +33,7 @@ trait Common
         } else {
             throw new Exception(
                 "Invalid algorithm! Can by either of '" .
-                implode(", ", $this->algorithmA2T + $this->algorithmT2A) . "'!"
+                implode(", ", $this->algorithmA2T + $this->algorithmT2A) . "'!",
             );
         }
     }
@@ -95,11 +93,11 @@ trait Common
         if (count($this->payload) !== 7) {
             throw new Exception('Please, register predefined payload values first!');
         }
-        $this->payload += (array)$payload;
+        $this->payload += (array) $payload;
 
         $preparedHeader = [
             'alg' => $this->algorithmTitle,
-            'typ' => 'JWT'
+            'typ' => 'JWT',
         ];
 
         if (!is_null($keyId)) {
@@ -107,8 +105,8 @@ trait Common
         }
 
         return [
-            $this->base64UrlEncode($this->jsonEncode($preparedHeader + (array)$header)),
-            $this->base64UrlEncode($this->jsonEncode($this->payload))
+            $this->base64UrlEncode($this->jsonEncode($preparedHeader + (array) $header)),
+            $this->base64UrlEncode($this->jsonEncode($this->payload)),
         ];
     }
 
@@ -252,8 +250,8 @@ trait Common
                 JSON_ERROR_STATE_MISMATCH => 'Invalid or malformed JSON',
                 JSON_ERROR_CTRL_CHAR => 'Unexpected control character found',
                 JSON_ERROR_SYNTAX => 'Syntax error, malformed JSON',
-                JSON_ERROR_UTF8 => 'Malformed UTF-8 characters'
-            ][$error] ?? "Unknown JSON error ($error)!"
+                JSON_ERROR_UTF8 => 'Malformed UTF-8 characters',
+            ][$error] ?? "Unknown JSON error ($error)!",
         );
     }
 }

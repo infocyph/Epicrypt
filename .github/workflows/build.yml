@@ -1,24 +1,26 @@
-name: "build"
+name: "Security & Standards"
 
 on:
+  schedule:
+    - cron: '0 0 * * 0'
   push:
-    branches: [ 'main' ]
-  pull_request:
     branches: [ '*' ]
+  pull_request:
+    branches: [ "main", "master", "develop" ]
 
 jobs:
   run:
     runs-on: ${{ matrix.operating-system }}
     strategy:
       matrix:
-        operating-system: [ ubuntu-latest, macos-latest, windows-latest ]
-        php-versions: [ '8.1', '8.2' ]
+        operating-system: [ ubuntu-latest ]
+        php-versions: [ '8.2', '8.3' ]
         dependency-version: [ prefer-lowest, prefer-stable ]
 
     name: PHP ${{ matrix.php-versions }} - ${{ matrix.operating-system }} - ${{ matrix.dependency-version }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
@@ -36,11 +38,8 @@ jobs:
       - name: Install dependencies
         run: composer install --no-interaction --prefer-dist --optimize-autoloader
 
-      - name: Auditing packages
+      - name: Package Audit
         run: composer audit
 
       - name: Test
-        run: ./vendor/bin/pest
-#
-#      - name: Rector(Dry) Tests
-#        run: php vendor/bin/rector process --dry-run --config=rector.php
+        run: composer tests

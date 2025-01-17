@@ -1,8 +1,6 @@
 <?php
 
-
 namespace AbmmHasan\SafeGuard\Symmetric\OpenSSL;
-
 
 use Exception;
 
@@ -34,7 +32,7 @@ trait SSLCommon
     public function __construct(
         private string $secret,
         private string $salt,
-        private string $iv = ''
+        private string $iv = '',
     ) {
         if (!empty($iv)) {
             $this->isIVPredefined = true;
@@ -152,7 +150,7 @@ trait SSLCommon
             $this->salt,
             $this->setInfo('keyLength', $this->keyLength),
             $this->setInfo('keyIterationCount', $this->keyIterationCount),
-            $this->setInfo('keyAlgo', $this->keyAlgo)
+            $this->setInfo('keyAlgo', $this->keyAlgo),
         );
     }
 
@@ -191,18 +189,18 @@ trait SSLCommon
             OPENSSL_RAW_DATA,
             $this->iv,
             $generatedTag,
-            $this->aad
+            $this->aad,
         );
         if ($generatedTag) {
             $this->info['tag'][] = sodium_bin2base64($generatedTag, SODIUM_BASE64_VARIANT_ORIGINAL_NO_PADDING);
         }
         if ($this->setInfo('enableSignature', $this->enableSignature) === true) {
             $cText = hash_hmac(
-                    $this->setInfo('hmacAlgo', $this->hmacAlgo),
-                    $cText,
-                    $encryptionKey,
-                    true
-                ) . $cText;
+                $this->setInfo('hmacAlgo', $this->hmacAlgo),
+                $cText,
+                $encryptionKey,
+                true,
+            ) . $cText;
         }
         if ($this->isIVPredefined === false) {
             $cText = $this->iv . $cText;
@@ -231,7 +229,7 @@ trait SSLCommon
             $hash = substr(
                 $input,
                 $definedIV ? $ivLen : 0,
-                $this->sigLen
+                $this->sigLen,
             );
         }
         $cText = substr($input, $cTextOffset);
@@ -248,7 +246,7 @@ trait SSLCommon
             OPENSSL_RAW_DATA,
             $this->iv,
             sodium_base642bin($this->tag, SODIUM_BASE64_VARIANT_ORIGINAL_NO_PADDING),
-            $this->aad
+            $this->aad,
         );
     }
 }

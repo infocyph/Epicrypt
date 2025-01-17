@@ -1,8 +1,6 @@
 <?php
 
-
 namespace AbmmHasan\SafeGuard\Asymmetric\OpenSSL;
-
 
 use Exception;
 
@@ -13,7 +11,7 @@ final class OpenSSLKeygen
         'private_key_type' => OPENSSL_KEYTYPE_RSA,
         'encrypt_key' => true,
         'encrypt_key_cipher' => OPENSSL_CIPHER_AES_256_CBC,
-        'curve_name' => 'prime256v1'
+        'curve_name' => 'prime256v1',
     ];
 
     private array $keyOption = [
@@ -22,7 +20,7 @@ final class OpenSSLKeygen
         'private_key_type' => OPENSSL_KEYTYPE_RSA,
         'encrypt_key' => true,
         'encrypt_key_cipher' => OPENSSL_CIPHER_AES_256_CBC,
-        'curve_name' => 'prime256v1'
+        'curve_name' => 'prime256v1',
     ];
 
     private array $pKeyInfo;
@@ -48,7 +46,7 @@ final class OpenSSLKeygen
         string $organization,
         string $unit,
         string $name,
-        string $email
+        string $email,
     ) {
         $this->settings = [
             "countryName" => $country,
@@ -57,7 +55,7 @@ final class OpenSSLKeygen
             "organizationName" => $organization,
             "organizationalUnitName" => $unit,
             "commonName" => $name,
-            "emailAddress" => $email
+            "emailAddress" => $email,
         ];
     }
 
@@ -145,9 +143,9 @@ final class OpenSSLKeygen
                 'private' => $this->certificate['private'],
                 'public' => $this->certificate['public'],
                 'csr' => $this->certificate['csr'],
-                'certificate' => $this->certificate['certificate'] ?? false
+                'certificate' => $this->certificate['certificate'] ?? false,
             ],
-            'details' => $this->pKeyInfo[$this->certificate['type']]
+            'details' => $this->pKeyInfo[$this->certificate['type']],
         ];
     }
 
@@ -183,7 +181,7 @@ final class OpenSSLKeygen
         file_put_contents(
             $path . $name . '.details.php',
             '<?php return ' . var_export($this->get(), true) . ';' . PHP_EOL,
-            LOCK_EX
+            LOCK_EX,
         );
         return true;
     }
@@ -290,9 +288,9 @@ final class OpenSSLKeygen
                 $certificate,
                 $this->resource['keyPair'],
                 $validFor,
-                $this->csrOption
+                $this->csrOption,
             ),
-            $this->certificate['certificate']
+            $this->certificate['certificate'],
         );
     }
 }

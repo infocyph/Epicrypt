@@ -1,8 +1,6 @@
 <?php
 
-
 namespace AbmmHasan\SafeGuard\Asymmetric;
-
 
 use AbmmHasan\SafeGuard\Asymmetric\OpenSSL\Common;
 use Exception;
@@ -22,9 +20,8 @@ class Signature
      */
     public function __construct(
         private bool $isBinary = true,
-        private int|string $signatureAlgo = OPENSSL_ALGO_SHA512
-    ) {
-    }
+        private int|string $signatureAlgo = OPENSSL_ALGO_SHA512,
+    ) {}
 
     /**
      * Sign data using Private key
@@ -38,7 +35,7 @@ class Signature
     public function sign(
         string $data,
         OpenSSLAsymmetricKey|array|string|OpenSSLCertificate $key,
-        string $passphrase = null
+        string $passphrase = null,
     ): string {
         if (empty($data)) {
             throw new Exception('Invalid input data!');
@@ -46,7 +43,7 @@ class Signature
         $key = $this->prepareInput($key);
 
         if ($this->signatureAlgo === 'sodium_detached') {
-            $signature = sodium_crypto_sign_detached($data, $key);
+            $signature = sodium_crypto_sign_detached($data, $key);//sodium_crypto_pwhash
         } else {
             $signature = $this->openSSLSign($key, $data, $passphrase);
         }
@@ -70,7 +67,7 @@ class Signature
     public function verify(
         string $data,
         OpenSSLAsymmetricKey|array|string|OpenSSLCertificate $key,
-        string $signature
+        string $signature,
     ): bool {
         if (!$this->isBinary) {
             $signature = sodium_base642bin($signature, SODIUM_BASE64_VARIANT_ORIGINAL_NO_PADDING);
@@ -104,7 +101,7 @@ class Signature
             $data,
             $signature,
             $key,
-            $this->signatureAlgo
+            $this->signatureAlgo,
         );
         if (-1 === $result || false === $result) {
             throw new Exception('Signature verification failed; ' . $this->getSSLError());
@@ -126,11 +123,11 @@ class Signature
         $key = openssl_pkey_get_private($key, $passphrase);
         $this->check($key);
         if (false === openssl_sign(
-                $data,
-                $signature,
-                $key,
-                $this->signatureAlgo
-            )) {
+            $data,
+            $signature,
+            $key,
+            $this->signatureAlgo,
+        )) {
             throw new Exception('Unable to generate signature; ' . $this->getSSLError());
         }
         return $signature;

@@ -1,5 +1,5 @@
 {
-  "name": "abmmhasan/safeguard",
+  "name": "infocyph/epicrypt",
   "description": "A Collection of useful PHP security functions.",
   "type": "library",
   "license": "MIT",
@@ -14,33 +14,61 @@
       "src/functions.php"
     ],
     "psr-4": {
-      "AbmmHasan\\SafeGuard\\": "src/"
+      "Infocyph\\Epicrypt\\": "src/"
     }
   },
   "autoload-dev": {
     "psr-4": {
-      "AbmmHasan\\SafeGuard\\Tests\\": "tests/"
+      "Infocyph\\Epicrypt\\Tests\\": "tests/"
     }
   },
-  "minimum-stability": "dev",
-  "prefer-stable": true,
   "require": {
     "php": ">=8.2",
-    "ext-json": "*",
-    "ext-openssl": "*",
-    "ext-mbstring": "*",
     "ext-ctype": "*",
-    "ext-sodium": "*"
+    "ext-json": "*",
+    "ext-mbstring": "*",
+    "ext-openssl": "*",
+    "ext-simplexml": "*",
+    "ext-sodium": "*",
+    "infocyph/pathwise": "^1.0"
   },
   "require-dev": {
-    "pestphp/pest": "^2.24",
-    "symfony/var-dumper": "^6.3",
-    "rector/rector": "^0.18"
+    "captainhook/captainhook": "^5.23",
+    "laravel/pint": "^1.18",
+    "pestphp/pest": "^3.5",
+    "rector/rector": "^1.2",
+    "symfony/var-dumper": "^7.1"
   },
+  "minimum-stability": "stable",
+  "prefer-stable": true,
   "config": {
+    "sort-packages": true,
     "optimize-autoloader": true,
     "allow-plugins": {
       "pestphp/pest-plugin": true
     }
+  },
+  "scripts": {
+    "test:code": "pest --parallel --processes=10",
+    "test:refactor": "rector process --dry-run",
+    "test:lint": "pint --test",
+    "test:hook": [
+      "captainhook hook:post-checkout",
+      "captainhook hook:pre-commit",
+      "captainhook hook:post-commit",
+      "captainhook hook:post-merge",
+      "captainhook hook:post-rewrite",
+      "captainhook hook:pre-push"
+    ],
+    "tests": [
+      "@test:code",
+      "@test:lint",
+      "@test:refactor"
+    ],
+    "git:hook": "captainhook install --only-enabled -nf",
+    "test": "pest",
+    "refactor": "rector process",
+    "lint": "pint",
+    "post-autoload-dump": "@git:hook"
   }
 }

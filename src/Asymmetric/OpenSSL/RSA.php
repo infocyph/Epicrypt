@@ -1,8 +1,6 @@
 <?php
 
-
 namespace AbmmHasan\SafeGuard\Asymmetric\OpenSSL;
-
 
 use Exception;
 use OpenSSLAsymmetricKey;
@@ -20,9 +18,8 @@ class RSA
      */
     public function __construct(
         private bool $isBinary = true,
-        private int $padding = OPENSSL_PKCS1_OAEP_PADDING
-    ) {
-    }
+        private int $padding = OPENSSL_PKCS1_OAEP_PADDING,
+    ) {}
 
     /**
      * Encrypt data using RSA (public key)
@@ -41,11 +38,11 @@ class RSA
         $key = openssl_pkey_get_public($key);
         $this->check($key, true);
         if (false === openssl_public_encrypt(
-                $data,
-                $encrypted,
-                $key,
-                $this->padding
-            )) {
+            $data,
+            $encrypted,
+            $key,
+            $this->padding,
+        )) {
             throw new Exception('Encryption failed; ' . $this->getSSLError());
         }
 
@@ -67,7 +64,7 @@ class RSA
     public function decrypt(
         string $data,
         OpenSSLAsymmetricKey|array|string|OpenSSLCertificate $key,
-        string $passphrase = null
+        string $passphrase = null,
     ): string {
         if (!$this->isBinary) {
             $data = sodium_base642bin($data, SODIUM_BASE64_VARIANT_ORIGINAL_NO_PADDING);
@@ -79,11 +76,11 @@ class RSA
         $key = openssl_pkey_get_private($key, $passphrase);
         $this->check($key, true);
         if (false === openssl_private_decrypt(
-                $data,
-                $decrypted,
-                $key,
-                $this->padding
-            )) {
+            $data,
+            $decrypted,
+            $key,
+            $this->padding,
+        )) {
             throw new Exception('Decryption failed; ' . $this->getSSLError());
         }
         return $decrypted;

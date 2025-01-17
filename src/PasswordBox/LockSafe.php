@@ -2,7 +2,4 @@
 
 namespace AbmmHasan\SafeGuard\PasswordBox;
 
-class LockSafe
-{
-
-}
+class LockSafe {}

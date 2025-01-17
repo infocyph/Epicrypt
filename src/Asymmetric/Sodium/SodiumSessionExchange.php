@@ -7,9 +7,8 @@ use SodiumException;
 class SodiumSessionExchange
 {
     public function __construct(
-        private string $keypair
-    ) {
-    }
+        private string $keypair,
+    ) {}
 
     /**
      * @param $serverPublicKey

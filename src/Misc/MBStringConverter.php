@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace AbmmHasan\SafeGuard\Misc;
+namespace Infocyph\Epicrypt\Misc;
 
 use Exception;
 
@@ -45,7 +45,7 @@ final class MBStringConverter
             $this->asn1Seq
             . $lengthPrefix . dechex($totalLength)
             . $this->asn1Int . dechex($lengthR) . $pointR
-            . $this->asn1Int . dechex($lengthS) . $pointS
+            . $this->asn1Int . dechex($lengthS) . $pointS,
         );
         if (!is_string($bin)) {
             throw new Exception('Data parsing failed!');
@@ -88,7 +88,7 @@ final class MBStringConverter
 
     private function octetLength(string $data): int
     {
-        return (int)(mb_strlen($data, '8bit') / $this->byteSize);
+        return (int) (mb_strlen($data, '8bit') / $this->byteSize);
     }
 
     private function preparePositiveInteger(string $data): string
@@ -122,7 +122,7 @@ final class MBStringConverter
             throw new Exception('Invalid data. Should contain an integer.');
         }
 
-        $length = (int)hexdec($this->readAsn1Content($message, $position, $this->byteSize));
+        $length = (int) hexdec($this->readAsn1Content($message, $position, $this->byteSize));
 
         return $this->readAsn1Content($message, $position, $length * $this->byteSize);
     }

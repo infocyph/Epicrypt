@@ -1,8 +1,6 @@
 <?php
 
-
 namespace AbmmHasan\SafeGuard\JWT;
-
 
 use ArrayAccess;
 use Exception;
@@ -15,12 +13,12 @@ class Symmetric
     private array $algorithmT2A = [
         'HS256' => 'SHA256',
         'HS384' => 'SHA384',
-        'HS512' => 'SHA512'
+        'HS512' => 'SHA512',
     ];
     private array $algorithmA2T = [
         'SHA256' => 'HS256',
         'SHA384' => 'HS384',
-        'SHA512' => 'HS512'
+        'SHA512' => 'HS512',
     ];
 
     /**
@@ -51,7 +49,7 @@ class Symmetric
 
         return $header . "." . $payload . "." .
             $this->base64UrlEncode(
-                hash_hmac($this->algorithm, $header . "." . $payload, $this->secret, true)
+                hash_hmac($this->algorithm, $header . "." . $payload, $this->secret, true),
             );
     }
 
@@ -68,9 +66,9 @@ class Symmetric
 
         if (hash_equals(
             $signature,
-            hash_hmac($this->algorithmT2A[$header->alg], "$parts[0].$parts[1]", $this->secret, true)
+            hash_hmac($this->algorithmT2A[$header->alg], "$parts[0].$parts[1]", $this->secret, true),
         )) {
-            if ($this->verifyRegister((array)$payload)) {
+            if ($this->verifyRegister((array) $payload)) {
                 return $payload;
             }
             throw new Exception("Token verification failed!");

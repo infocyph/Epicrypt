@@ -1,0 +1,10 @@
+{
+  "preset": "per",
+  "exclude": [
+    "tests"
+  ],
+  "notPath": [
+    "rector.php",
+    "test.php"
+  ]
+}
