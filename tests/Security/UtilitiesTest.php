@@ -1,23 +1,20 @@
 <?php
 
-use Infocyph\Epicrypt\Security\ActionToken\ActionTokenIssuer;
-use Infocyph\Epicrypt\Security\ActionToken\ActionTokenVerifier;
-use Infocyph\Epicrypt\Security\Csrf\CsrfTokenManager;
-use Infocyph\Epicrypt\Security\KeyRotation\KeyRotationHelper;
-use Infocyph\Epicrypt\Security\PasswordReset\PasswordResetTokenIssuer;
-use Infocyph\Epicrypt\Security\PasswordReset\PasswordResetTokenVerifier;
-use Infocyph\Epicrypt\Security\SignedUrl\SignedUrlGenerator;
-use Infocyph\Epicrypt\Security\SignedUrl\SignedUrlVerifier;
-use Infocyph\Epicrypt\Security\Support\SignedPayloadCodec;
+use Infocyph\Epicrypt\Security\ActionToken;
+use Infocyph\Epicrypt\Security\CsrfTokenManager;
+use Infocyph\Epicrypt\Security\EmailVerificationToken;
+use Infocyph\Epicrypt\Security\KeyRotationHelper;
+use Infocyph\Epicrypt\Security\PasswordResetToken;
+use Infocyph\Epicrypt\Security\RememberToken;
+use Infocyph\Epicrypt\Security\SignedUrl;
+use Infocyph\Epicrypt\Security\SignedPayloadCodec;
 
 it('signs and verifies urls', function () {
-    $generator = new SignedUrlGenerator('url-secret');
-    $verifier = new SignedUrlVerifier('url-secret');
+    $signedUrl = new SignedUrl('url-secret');
+    $signed = $signedUrl->generate('https://example.com/download', ['file' => 'report'], time() + 300);
 
-    $signed = $generator->generate('https://example.com/download', ['file' => 'report'], time() + 300);
-
-    expect($verifier->verify($signed))->toBeTrue();
-    expect($verifier->verify($signed . 'tamper'))->toBeFalse();
+    expect($signedUrl->verify($signed))->toBeTrue();
+    expect($signedUrl->verify($signed . 'tamper'))->toBeFalse();
 });
 
 it('issues and verifies csrf tokens', function () {
@@ -33,17 +30,21 @@ it('issues and verifies csrf tokens', function () {
 it('issues purpose-bound reset and action tokens', function () {
     $codec = new SignedPayloadCodec('token-secret');
 
-    $resetIssuer = new PasswordResetTokenIssuer($codec, 600);
-    $resetVerifier = new PasswordResetTokenVerifier($codec);
+    $passwordResetToken = new PasswordResetToken($codec, 600);
+    $resetToken = $passwordResetToken->issue('user-1');
+    expect($passwordResetToken->verify($resetToken, 'user-1'))->toBeTrue();
 
-    $resetToken = $resetIssuer->issue('user-1');
-    expect($resetVerifier->verify($resetToken, 'user-1'))->toBeTrue();
+    $actionToken = new ActionToken($codec, 600);
+    $actionTokenValue = $actionToken->issue('user-1', 'delete-account');
+    expect($actionToken->verify($actionTokenValue, 'user-1', 'delete-account'))->toBeTrue();
 
-    $actionIssuer = new ActionTokenIssuer($codec, 600);
-    $actionVerifier = new ActionTokenVerifier($codec);
+    $emailVerification = new EmailVerificationToken($codec, 600);
+    $emailToken = $emailVerification->issue('user-1', 'user@example.com');
+    expect($emailVerification->verify($emailToken, 'user@example.com'))->toBeTrue();
 
-    $actionToken = $actionIssuer->issue('user-1', 'delete-account');
-    expect($actionVerifier->verify($actionToken, 'user-1', 'delete-account'))->toBeTrue();
+    $rememberToken = new RememberToken($codec, 600);
+    $rememberTokenValue = $rememberToken->issue('user-1', 'device-1');
+    expect($rememberToken->verify($rememberTokenValue, 'user-1', 'device-1'))->toBeTrue();
 });
 
 it('verifies signatures across rotated key sets', function () {

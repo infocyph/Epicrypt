@@ -2,7 +2,7 @@
 
 namespace Infocyph\Epicrypt\Integrity\Support;
 
-use Infocyph\Epicrypt\Integrity\String\StringHasher;
+use Infocyph\Epicrypt\Integrity\StringHasher;
 
 final readonly class ContentFingerprinter
 {

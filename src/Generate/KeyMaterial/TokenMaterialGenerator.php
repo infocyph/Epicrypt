@@ -2,7 +2,7 @@
 
 namespace Infocyph\Epicrypt\Generate\KeyMaterial;
 
-use Infocyph\Epicrypt\Generate\Random\RandomBytesGenerator;
+use Infocyph\Epicrypt\Generate\RandomBytesGenerator;
 
 final readonly class TokenMaterialGenerator
 {

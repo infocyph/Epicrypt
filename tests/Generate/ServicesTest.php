@@ -2,9 +2,9 @@
 
 use Infocyph\Epicrypt\Generate\KeyMaterial\KeyMaterialGenerator;
 use Infocyph\Epicrypt\Generate\KeyMaterial\TokenMaterialGenerator;
-use Infocyph\Epicrypt\Generate\Nonce\NonceGenerator;
-use Infocyph\Epicrypt\Generate\Random\RandomBytesGenerator;
-use Infocyph\Epicrypt\Generate\Salt\SaltGenerator;
+use Infocyph\Epicrypt\Generate\NonceGenerator;
+use Infocyph\Epicrypt\Generate\RandomBytesGenerator;
+use Infocyph\Epicrypt\Generate\SaltGenerator;
 
 it('generates secure random values for all generators', function () {
     $random = new RandomBytesGenerator();

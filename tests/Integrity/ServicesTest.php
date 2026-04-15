@@ -1,7 +1,7 @@
 <?php
 
-use Infocyph\Epicrypt\Integrity\File\FileHasher;
-use Infocyph\Epicrypt\Integrity\String\StringHasher;
+use Infocyph\Epicrypt\Integrity\FileHasher;
+use Infocyph\Epicrypt\Integrity\StringHasher;
 use Infocyph\Epicrypt\Integrity\Support\ContentFingerprinter;
 
 it('hashes and verifies strings and files', function () {

@@ -1,22 +1,18 @@
 <?php
 
-use Infocyph\Epicrypt\Crypto\Aead\Decryptor as AeadDecryptor;
-use Infocyph\Epicrypt\Crypto\Aead\Encryptor as AeadEncryptor;
-use Infocyph\Epicrypt\Crypto\Auth\MacGenerator;
-use Infocyph\Epicrypt\Crypto\Auth\MacVerifier;
-use Infocyph\Epicrypt\Crypto\Signature\Signer;
-use Infocyph\Epicrypt\Crypto\Signature\Verifier;
+use Infocyph\Epicrypt\Crypto\AeadCipher;
+use Infocyph\Epicrypt\Crypto\Mac;
+use Infocyph\Epicrypt\Crypto\Signature;
 use Infocyph\Epicrypt\Crypto\Support\KeyPair;
 use Infocyph\Epicrypt\Generate\KeyMaterial\KeyMaterialGenerator;
 
 it('encrypts and decrypts with AEAD services', function () {
     $key = (new KeyMaterialGenerator())->generate(SODIUM_CRYPTO_AEAD_XCHACHA20POLY1305_IETF_KEYBYTES);
 
-    $encryptor = new AeadEncryptor();
-    $decryptor = new AeadDecryptor();
+    $cipher = new AeadCipher();
 
-    $ciphertext = $encryptor->encrypt('epicrypt-aead', $key, ['aad' => 'meta']);
-    $plaintext = $decryptor->decrypt($ciphertext, $key, ['aad' => 'meta']);
+    $ciphertext = $cipher->encrypt('epicrypt-aead', $key, ['aad' => 'meta']);
+    $plaintext = $cipher->decrypt($ciphertext, $key, ['aad' => 'meta']);
 
     expect($plaintext)->toBe('epicrypt-aead');
 });
@@ -24,22 +20,18 @@ it('encrypts and decrypts with AEAD services', function () {
 it('signs and verifies detached signatures', function () {
     $keys = KeyPair::sodiumSign();
 
-    $signer = new Signer();
-    $verifier = new Verifier();
+    $signatureService = new Signature();
+    $signature = $signatureService->sign('epicrypt-signature', $keys['private']);
 
-    $signature = $signer->sign('epicrypt-signature', $keys['private']);
-
-    expect($verifier->verify('epicrypt-signature', $signature, $keys['public']))->toBeTrue();
-    expect($verifier->verify('tampered', $signature, $keys['public']))->toBeFalse();
+    expect($signatureService->verify('epicrypt-signature', $signature, $keys['public']))->toBeTrue();
+    expect($signatureService->verify('tampered', $signature, $keys['public']))->toBeFalse();
 });
 
 it('generates and verifies mac tags', function () {
-    $generator = new MacGenerator();
-    $verifier = new MacVerifier();
+    $macService = new Mac();
+    $key = $macService->generateKey();
+    $mac = $macService->generate('epicrypt-mac', $key);
 
-    $key = $generator->generateKey();
-    $mac = $generator->generate('epicrypt-mac', $key);
-
-    expect($verifier->verify('epicrypt-mac', $mac, $key))->toBeTrue();
-    expect($verifier->verify('wrong', $mac, $key))->toBeFalse();
+    expect($macService->verify('epicrypt-mac', $mac, $key))->toBeTrue();
+    expect($macService->verify('wrong', $mac, $key))->toBeFalse();
 });

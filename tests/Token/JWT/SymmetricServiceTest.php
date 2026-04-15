@@ -1,8 +1,6 @@
 <?php
 
-use Infocyph\Epicrypt\Token\JWT\Symmetric\JwtDecoder;
-use Infocyph\Epicrypt\Token\JWT\Symmetric\JwtEncoder;
-use Infocyph\Epicrypt\Token\JWT\Symmetric\JwtVerifier;
+use Infocyph\Epicrypt\Token\JWT\SymmetricJwt;
 use Infocyph\Epicrypt\Token\JWT\Validation\RegisteredClaims;
 
 it('encodes and decodes with Token/JWT symmetric services', function () {
@@ -17,14 +15,11 @@ it('encodes and decodes with Token/JWT symmetric services', function () {
         'scope' => 'admin',
     ];
 
-    $encoder = new JwtEncoder('HS512');
-    $token = $encoder->encode($claims, 'super-secret-key');
-
-    $decoder = new JwtDecoder(
-        new RegisteredClaims('issuer-service', 'audience-service', 'subject-service', 'token-service'),
+    $token = (new SymmetricJwt('HS512'))->encode($claims, 'super-secret-key');
+    $decoded = (new SymmetricJwt(
         'HS512',
-    );
-    $decoded = $decoder->decode($token, 'super-secret-key');
+        new RegisteredClaims('issuer-service', 'audience-service', 'subject-service', 'token-service'),
+    ))->decode($token, 'super-secret-key');
 
     expect($decoded)->toBeObject();
     expect($decoded->scope)->toBe('admin');
@@ -41,14 +36,12 @@ it('verifies tokens with Token/JWT symmetric verifier service', function () {
         'exp' => $now + 600,
     ];
 
-    $encoder = new JwtEncoder('HS512');
-    $token = $encoder->encode($claims, 'super-secret-key');
-
-    $verifier = new JwtVerifier(
-        new RegisteredClaims('issuer-service', 'audience-service', 'subject-service', 'token-service'),
+    $token = (new SymmetricJwt('HS512'))->encode($claims, 'super-secret-key');
+    $jwt = new SymmetricJwt(
         'HS512',
+        new RegisteredClaims('issuer-service', 'audience-service', 'subject-service', 'token-service'),
     );
 
-    expect($verifier->verify($token, 'super-secret-key'))->toBeTrue();
-    expect($verifier->verify($token, 'wrong-secret'))->toBeFalse();
+    expect($jwt->verify($token, 'super-secret-key'))->toBeTrue();
+    expect($jwt->verify($token, 'wrong-secret'))->toBeFalse();
 });

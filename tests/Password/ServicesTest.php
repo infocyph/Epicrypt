@@ -1,7 +1,7 @@
 <?php
 
 use Infocyph\Epicrypt\Password\Generator\PasswordGenerator;
-use Infocyph\Epicrypt\Password\Hashing\PasswordHasher;
+use Infocyph\Epicrypt\Password\PasswordHasher;
 use Infocyph\Epicrypt\Password\Secret\MasterSecretGenerator;
 use Infocyph\Epicrypt\Password\Secret\WrappedSecretManager;
 

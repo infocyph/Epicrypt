@@ -1,8 +1,6 @@
 <?php
 
-use Infocyph\Epicrypt\Token\JWT\Asymmetric\JwtDecoder;
-use Infocyph\Epicrypt\Token\JWT\Asymmetric\JwtEncoder;
-use Infocyph\Epicrypt\Token\JWT\Asymmetric\JwtVerifier;
+use Infocyph\Epicrypt\Token\JWT\AsymmetricJwt;
 use Infocyph\Epicrypt\Token\JWT\Validation\RegisteredClaims;
 
 beforeEach(function () {
@@ -34,15 +32,12 @@ it('encodes and decodes with Token/JWT asymmetric services', function () {
         'scope' => 'api:write',
     ];
 
-    $encoder = new JwtEncoder(null, 'RS512');
-    $token = $encoder->encode($claims, $this->privateKey);
-
-    $decoder = new JwtDecoder(
-        new RegisteredClaims('issuer-service', 'audience-service', 'subject-service', 'token-service'),
+    $token = (new AsymmetricJwt(null, 'RS512'))->encode($claims, $this->privateKey);
+    $decoded = (new AsymmetricJwt(
         null,
         'RS512',
-    );
-    $decoded = $decoder->decode($token, $this->publicKey);
+        new RegisteredClaims('issuer-service', 'audience-service', 'subject-service', 'token-service'),
+    ))->decode($token, $this->publicKey);
 
     expect($decoded)->toBeObject();
     expect($decoded->scope)->toBe('api:write');
@@ -59,16 +54,14 @@ it('verifies tokens with Token/JWT asymmetric verifier service', function () {
         'exp' => $now + 600,
     ];
 
-    $encoder = new JwtEncoder(null, 'RS512');
-    $token = $encoder->encode($claims, $this->privateKey);
-
-    $verifier = new JwtVerifier(
-        new RegisteredClaims('issuer-service', 'audience-service', 'subject-service', 'token-service'),
+    $token = (new AsymmetricJwt(null, 'RS512'))->encode($claims, $this->privateKey);
+    $jwt = new AsymmetricJwt(
         null,
         'RS512',
+        new RegisteredClaims('issuer-service', 'audience-service', 'subject-service', 'token-service'),
     );
 
-    expect($verifier->verify($token, $this->publicKey))->toBeTrue();
+    expect($jwt->verify($token, $this->publicKey))->toBeTrue();
 
     $wrongKeyResource = openssl_pkey_new([
         'private_key_type' => OPENSSL_KEYTYPE_RSA,
@@ -78,5 +71,5 @@ it('verifies tokens with Token/JWT asymmetric verifier service', function () {
     $wrongKeyDetails = openssl_pkey_get_details($wrongKeyResource);
 
     expect($wrongKeyDetails)->toBeArray();
-    expect($verifier->verify($token, $wrongKeyDetails['key']))->toBeFalse();
+    expect($jwt->verify($token, $wrongKeyDetails['key']))->toBeFalse();
 });
