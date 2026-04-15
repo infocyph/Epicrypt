@@ -1,0 +1,13 @@
+<?php
+
+namespace Infocyph\Epicrypt\Integrity\Support;
+
+use Infocyph\Epicrypt\Internal\SecureCompare;
+
+final class TimingSafeComparator
+{
+    public function equals(string $known, string $given): bool
+    {
+        return SecureCompare::equals($known, $given);
+    }
+}
