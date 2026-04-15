@@ -21,56 +21,6 @@ final readonly class SodiumSign
     ) {}
 
     /**
-     * Signs a message using the Sodium Sign algorithm and returns the signature.
-     *
-     * @param string $message The message to sign.
-     * @param string $privateKey The private key used for signing.
-     * @return string The signed message.
-     * @throws SodiumException
-     */
-    public function detachedSign(
-        string $message,
-        #[\SensitiveParameter] string $privateKey,
-    ): string {
-        if (!$this->isSecretBinary) {
-            $privateKey = $this->base642binSodium($privateKey);
-        }
-
-        $signature = sodium_crypto_sign_detached($message, $privateKey);
-
-        if ($this->isMessageBinary) {
-            return $signature;
-        }
-        return $this->bin2base64($signature);
-    }
-
-    /**
-     * Verifies a detached signature using the Sodium Sign algorithm.
-     *
-     * @param string $message The message to verify.
-     * @param string $signature The signature to verify with.
-     * @param string $publicKey The public key for verification.
-     * @return bool Returns true if the signature is valid, false otherwise.
-     * @throws SodiumException
-     * @throws SodiumCryptoException
-     */
-    public function verifyDetachedSign(
-        string $message,
-        string $signature,
-        #[\SensitiveParameter]
-        string $publicKey,
-    ): bool {
-        if (!$this->isSecretBinary) {
-            $publicKey = $this->base642binSodium($publicKey);
-            $signature = $this->base642binSodium($signature);
-        }
-        if (!$this->isMessageBinary) {
-            $message = $this->base642bin($message, true);
-        }
-        return sodium_crypto_sign_verify_detached($signature, $message, $publicKey);
-    }
-
-    /**
      * Sign a message using the Sodium Sign algorithm.
      *
      * @param string $message The message to sign.
@@ -96,25 +46,28 @@ final readonly class SodiumSign
     }
 
     /**
-     * Verifies an attached signature using the Sodium Sign algorithm.
+     * Signs a message using the Sodium Sign algorithm and returns the signature.
      *
-     * @param string $signedMessage The signed message to verify.
-     * @param string $publicKey The public key for verification.
-     * @return false|string Returns message if the signature is valid, false otherwise.
+     * @param string $message The message to sign.
+     * @param string $privateKey The private key used for signing.
+     * @return string The signed message.
      * @throws SodiumException
-     * @throws SodiumCryptoException
      */
-    public function verifyAttachedSign(string $signedMessage, #[\SensitiveParameter] string $publicKey): false|string
-    {
-        if (!$this->isMessageBinary) {
-            $signedMessage = $this->base642bin($signedMessage);
-        }
-
+    public function detachedSign(
+        string $message,
+        #[\SensitiveParameter]
+        string $privateKey,
+    ): string {
         if (!$this->isSecretBinary) {
-            $publicKey = $this->base642binSodium($publicKey);
+            $privateKey = $this->base642binSodium($privateKey);
         }
 
-        return sodium_crypto_sign_open($signedMessage, $publicKey);
+        $signature = sodium_crypto_sign_detached($message, $privateKey);
+
+        if ($this->isMessageBinary) {
+            return $signature;
+        }
+        return $this->bin2base64($signature);
     }
 
     /**
@@ -124,7 +77,7 @@ final readonly class SodiumSign
      * @return array An array containing the private key and public key.
      * @throws SodiumCryptoException|SodiumException
      */
-    public function generateSecretPair(string $seed = null): array
+    public function generateSecretPair(?string $seed = null): array
     {
         if (!is_null($seed)) {
             if (($length = strlen($seed)) !== SODIUM_CRYPTO_SIGN_SEEDBYTES) {
@@ -150,5 +103,53 @@ final readonly class SodiumSign
             'private' => $this->bin2base64Sodium($keys['private']),
             'public' => $this->bin2base64Sodium($keys['public']),
         ];
+    }
+
+    /**
+     * Verifies an attached signature using the Sodium Sign algorithm.
+     *
+     * @param string $signedMessage The signed message to verify.
+     * @param string $publicKey The public key for verification.
+     * @return false|string Returns message if the signature is valid, false otherwise.
+     * @throws SodiumException
+     * @throws SodiumCryptoException
+     */
+    public function verifyAttachedSign(string $signedMessage, #[\SensitiveParameter] string $publicKey): false|string
+    {
+        if (!$this->isMessageBinary) {
+            $signedMessage = $this->base642bin($signedMessage);
+        }
+
+        if (!$this->isSecretBinary) {
+            $publicKey = $this->base642binSodium($publicKey);
+        }
+
+        return sodium_crypto_sign_open($signedMessage, $publicKey);
+    }
+
+    /**
+     * Verifies a detached signature using the Sodium Sign algorithm.
+     *
+     * @param string $message The message to verify.
+     * @param string $signature The signature to verify with.
+     * @param string $publicKey The public key for verification.
+     * @return bool Returns true if the signature is valid, false otherwise.
+     * @throws SodiumException
+     * @throws SodiumCryptoException
+     */
+    public function verifyDetachedSign(
+        string $message,
+        string $signature,
+        #[\SensitiveParameter]
+        string $publicKey,
+    ): bool {
+        if (!$this->isSecretBinary) {
+            $publicKey = $this->base642binSodium($publicKey);
+            $signature = $this->base642binSodium($signature);
+        }
+        if (!$this->isMessageBinary) {
+            $message = $this->base642bin($message);
+        }
+        return sodium_crypto_sign_verify_detached($signature, $message, $publicKey);
     }
 }

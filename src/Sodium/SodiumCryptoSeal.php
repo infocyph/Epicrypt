@@ -21,25 +21,6 @@ final readonly class SodiumCryptoSeal
     ) {}
 
     /**
-     * Encrypt the message (using recipient public key)
-     *
-     * @param string $message Message for encryption
-     * @param string $publicKey Public key
-     * @return string Encrypted message
-     * @throws SodiumException
-     */
-    public function encrypt(#[\SensitiveParameter] string $message, string $publicKey): string
-    {
-        if (!$this->isSecretBinary) {
-            $publicKey = $this->base642binSodium($publicKey);
-        }
-
-        $encrypted = sodium_crypto_box_seal($message, $publicKey);
-
-        return $this->isMessageBinary ? $encrypted : $this->bin2base64($encrypted);
-    }
-
-    /**
      * Decrypt the message (using recipient keypair)
      *
      * @param string $encrypted Encrypted message
@@ -61,13 +42,32 @@ final readonly class SodiumCryptoSeal
     }
 
     /**
+     * Encrypt the message (using recipient public key)
+     *
+     * @param string $message Message for encryption
+     * @param string $publicKey Public key
+     * @return string Encrypted message
+     * @throws SodiumException
+     */
+    public function encrypt(#[\SensitiveParameter] string $message, string $publicKey): string
+    {
+        if (!$this->isSecretBinary) {
+            $publicKey = $this->base642binSodium($publicKey);
+        }
+
+        $encrypted = sodium_crypto_box_seal($message, $publicKey);
+
+        return $this->isMessageBinary ? $encrypted : $this->bin2base64($encrypted);
+    }
+
+    /**
      * Generates a secret key pair for the Sodium Crypto Box algorithm.
      *
      * @param string|null $seed (optional) Seed for deterministic key generation. If provided, it must be 32 bytes long.
      * @return array An array containing the keypair and public key.
      * @throws SodiumCryptoException|SodiumException
      */
-    public function generateSecretPair(string $seed = null): array
+    public function generateSecretPair(?string $seed = null): array
     {
         if (!is_null($seed)) {
             if (($length = strlen($seed)) !== 32) {

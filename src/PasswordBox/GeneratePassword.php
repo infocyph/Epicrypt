@@ -1,6 +1,6 @@
 <?php
 
-namespace AbmmHasan\SafeGuard\PasswordBox;
+namespace Infocyph\Epicrypt\PasswordBox;
 
 use Exception;
 
@@ -45,38 +45,8 @@ final class GeneratePassword
     ];
 
     /**
-     * Generate a random secure password
-     *
-     * @param int $length
-     * @param bool $includeAmbiguous
-     * @return string
-     * @throws Exception
-     */
-    public static function strong(int $length = 9, bool $includeAmbiguous = true): string
-    {
-        if ($length < 8) {
-            throw new Exception('Password length should be at-least 8');
-        }
-        $set = ['u', 'l', 'd', 's', 'a'];
-        if (!$includeAmbiguous) {
-            unset($set[4]);
-        }
-        do {
-            $password = self::random($length, $set);
-        } while (
-            !preg_match('/[a-z]+/', $password) ||
-            !preg_match('/[A-Z]+/', $password) ||
-            !preg_match("/\d/", $password) ||
-            !preg_match("/\W+/", $password)
-        );
-        return $password;
-    }
-
-    /**
      * Convert a given string to a secure password for easy memorizing
      *
-     * @param string $string
-     * @return string
      * @throws Exception
      */
     public static function fromString(string $string): string
@@ -87,8 +57,8 @@ final class GeneratePassword
             $index = array_search($letter, self::$switch['m']);
             $set = array_rand(self::$switch);
             $selected = self::$switch[$set][$index];
-            if (ctype_alpha($selected) && random_int(0, 1) === 1) {
-                $selected = strtoupper($selected);
+            if (ctype_alpha((string) $selected) && random_int(0, 1) === 1) {
+                $selected = strtoupper((string) $selected);
             }
             $converted[] = $selected;
         }
@@ -98,9 +68,6 @@ final class GeneratePassword
     /**
      * Generate a random password of a given length and defined Set
      *
-     * @param int $length
-     * @param array $type
-     * @return string
      * @throws Exception
      */
     public static function random(int $length = 9, array $type = ['u', 'l', 'd', 's', 'a']): string
@@ -120,5 +87,30 @@ final class GeneratePassword
             $password[] = $sets[array_rand($sets)];
         }
         return implode('', $password);
+    }
+
+    /**
+     * Generate a random secure password
+     *
+     * @throws Exception
+     */
+    public static function strong(int $length = 9, bool $includeAmbiguous = true): string
+    {
+        if ($length < 8) {
+            throw new Exception('Password length should be at-least 8');
+        }
+        $set = ['u', 'l', 'd', 's', 'a'];
+        if (!$includeAmbiguous) {
+            unset($set[4]);
+        }
+        do {
+            $password = self::random($length, $set);
+        } while (
+            !preg_match('/[a-z]+/', $password)
+            || !preg_match('/[A-Z]+/', $password)
+            || !preg_match("/\d/", $password)
+            || !preg_match("/\W+/", $password)
+        );
+        return $password;
     }
 }

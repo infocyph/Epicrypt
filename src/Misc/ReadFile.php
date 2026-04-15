@@ -28,13 +28,12 @@ use SplFileObject;
  */
 final class ReadFile implements Countable, Iterator, SeekableIterator
 {
-    private SplFileObject $file;
-
     private int $count = 0;
 
-    private int $position = 0;
-
     private ?Generator $currentIterator = null;
+    private SplFileObject $file;
+
+    private int $position = 0;
 
     /**
      * Constructor.
@@ -74,22 +73,16 @@ final class ReadFile implements Countable, Iterator, SeekableIterator
     }
 
     /**
-     * Initializes the SplFileObject instance for the specified file.
+     * Returns the total number of items processed by the iterator.
      *
-     * Checks if the file is accessible and readable, and creates an SplFileObject
-     * for it if not already initialized. Resets the position counters upon initialization.
+     * This method provides the current count of items that have been processed
+     * or iterated over in the file.
      *
-     * @throws FileAccessException If the file cannot be accessed or read.
+     * @return int The number of items processed.
      */
-    private function initiate(): void
+    public function count(): int
     {
-        if (! isset($this->file)) {
-            if (! is_file($this->filename) || ! is_readable($this->filename)) {
-                throw new FileAccessException("Cannot access file at path: $this->filename");
-            }
-            $this->file = new SplFileObject($this->filename, $this->mode);
-            $this->resetPosition();
-        }
+        return $this->count;
     }
 
     /**
@@ -128,6 +121,15 @@ final class ReadFile implements Countable, Iterator, SeekableIterator
     }
 
     /**
+     * Resets the iterator to the beginning of the file.
+     */
+    public function reset(): void
+    {
+        $this->file->rewind();
+        $this->resetPosition();
+    }
+
+    /**
      * Resets the iterator to the beginning of the file, rewinding the current iterator.
      */
     public function rewind(): void
@@ -136,16 +138,6 @@ final class ReadFile implements Countable, Iterator, SeekableIterator
         if ($this->currentIterator) {
             $this->currentIterator->rewind();
         }
-    }
-
-    /**
-     * Returns whether the current iterator position is valid.
-     *
-     * @return bool True if the current position is valid, false if it is not.
-     */
-    public function valid(): bool
-    {
-        return $this->currentIterator && $this->currentIterator->valid();
     }
 
     /**
@@ -167,36 +159,30 @@ final class ReadFile implements Countable, Iterator, SeekableIterator
     }
 
     /**
-     * Returns the total number of items processed by the iterator.
+     * Returns whether the current iterator position is valid.
      *
-     * This method provides the current count of items that have been processed
-     * or iterated over in the file.
-     *
-     * @return int The number of items processed.
+     * @return bool True if the current position is valid, false if it is not.
      */
-    public function count(): int
+    public function valid(): bool
     {
-        return $this->count;
+        return $this->currentIterator && $this->currentIterator->valid();
     }
 
     /**
-     * Resets the iterator to the beginning of the file.
-     */
-    public function reset(): void
-    {
-        $this->file->rewind();
-        $this->resetPosition();
-    }
-
-    /**
-     * Resets the internal counters to zero.
+     * Binary data iterator.
      *
-     * This method is used by the `reset` method to reset the internal counters to zero.
+     * Iterates over the file, reading and yielding binary data in specified byte chunks.
+     *
+     * @param  int  $bytes  The number of bytes to read in each iteration. Default is 1024.
+     * @return Generator<int, string> A generator yielding binary strings of the specified size.
      */
-    private function resetPosition(): void
+    private function binaryIterator(int $bytes = 1024): Generator
     {
-        $this->count = 0;
-        $this->position = 0;
+        while (! $this->file->eof()) {
+            yield $this->file->fread($bytes);
+            $this->position++;
+            $this->count++;
+        }
     }
 
     /**
@@ -210,22 +196,6 @@ final class ReadFile implements Countable, Iterator, SeekableIterator
     {
         while (! $this->file->eof()) {
             yield $this->file->fgetc();
-            $this->position++;
-            $this->count++;
-        }
-    }
-
-    /**
-     * Line iterator.
-     *
-     * Iterates over the file line by line, yielding each line.
-     *
-     * @return Generator<int, string> A generator yielding lines from the file.
-     */
-    private function lineIterator(): Generator
-    {
-        while (! $this->file->eof()) {
-            yield $this->file->fgets();
             $this->position++;
             $this->count++;
         }
@@ -247,63 +217,6 @@ final class ReadFile implements Countable, Iterator, SeekableIterator
             $csvLine = $this->file->fgetcsv($separator, $enclosure, $escape);
             if ($csvLine !== false) {
                 yield $csvLine;
-                $this->position++;
-                $this->count++;
-            }
-        }
-    }
-
-    /**
-     * Binary data iterator.
-     *
-     * Iterates over the file, reading and yielding binary data in specified byte chunks.
-     *
-     * @param  int  $bytes  The number of bytes to read in each iteration. Default is 1024.
-     * @return Generator<int, string> A generator yielding binary strings of the specified size.
-     */
-    private function binaryIterator(int $bytes = 1024): Generator
-    {
-        while (! $this->file->eof()) {
-            yield $this->file->fread($bytes);
-            $this->position++;
-            $this->count++;
-        }
-    }
-
-    /**
-     * JSON line-by-line iterator.
-     *
-     * Iterates over each line in the file, decoding it as JSON and yielding the resulting object.
-     *
-     * @return Generator<int, array<string, mixed>, mixed, void> JSON objects from each line.
-     */
-    private function jsonIterator(): Generator
-    {
-        while (! $this->file->eof()) {
-            $line = trim($this->file->fgets());
-            if ($line) {
-                yield json_decode($line, true);
-                $this->position++;
-                $this->count++;
-            }
-        }
-    }
-
-    /**
-     * Regex iterator for pattern matching.
-     *
-     * Iterates over each line in the file, matching it against the provided regex pattern.
-     * Yields matches found in each line.
-     *
-     * @param  string  $pattern  The regex pattern to match against each line.
-     * @return Generator<int, array<int, string>> A generator yielding arrays of matches per line.
-     */
-    private function regexIterator(string $pattern): Generator
-    {
-        while (! $this->file->eof()) {
-            $line = $this->file->fgets();
-            if (preg_match($pattern, $line, $matches)) {
-                yield $matches;
                 $this->position++;
                 $this->count++;
             }
@@ -335,26 +248,104 @@ final class ReadFile implements Countable, Iterator, SeekableIterator
     }
 
     /**
-     * XML iterator for element-by-element parsing.
+     * Initializes the SplFileObject instance for the specified file.
      *
-     * @param  string  $element  The XML element to iterate over.
-     * @return Generator<SimpleXMLElement> A generator of SimpleXMLElement objects.
+     * Checks if the file is accessible and readable, and creates an SplFileObject
+     * for it if not already initialized. Resets the position counters upon initialization.
      *
-     * @throws Exception
+     * @throws FileAccessException If the file cannot be accessed or read.
      */
-    private function xmlIterator(string $element): Generator
+    private function initiate(): void
     {
-        $currentElement = '';
+        if (! isset($this->file)) {
+            if (! is_file($this->filename) || ! is_readable($this->filename)) {
+                throw new FileAccessException("Cannot access file at path: $this->filename");
+            }
+            $this->file = new SplFileObject($this->filename, $this->mode);
+            $this->resetPosition();
+        }
+    }
+
+    /**
+     * JSON array iterator, yielding each element of the array.
+     *
+     * @return Generator<int, mixed>
+     */
+    private function jsonArrayIterator(): Generator
+    {
+        $jsonArray = json_decode($this->file->fread($this->file->getSize()), true);
+        foreach ($jsonArray as $element) {
+            yield $element;
+            $this->position++;
+            $this->count++;
+        }
+    }
+
+    /**
+     * JSON line-by-line iterator.
+     *
+     * Iterates over each line in the file, decoding it as JSON and yielding the resulting object.
+     *
+     * @return Generator<int, array<string, mixed>, mixed, void> JSON objects from each line.
+     */
+    private function jsonIterator(): Generator
+    {
         while (! $this->file->eof()) {
-            $line = $this->file->fgets();
-            $currentElement .= $line;
-            if (stripos($line, "</$element>") !== false) {
-                yield new SimpleXMLElement($currentElement);
-                $currentElement = '';
+            $line = trim($this->file->fgets());
+            if ($line) {
+                yield json_decode($line, true);
                 $this->position++;
                 $this->count++;
             }
         }
+    }
+
+    /**
+     * Line iterator.
+     *
+     * Iterates over the file line by line, yielding each line.
+     *
+     * @return Generator<int, string> A generator yielding lines from the file.
+     */
+    private function lineIterator(): Generator
+    {
+        while (! $this->file->eof()) {
+            yield $this->file->fgets();
+            $this->position++;
+            $this->count++;
+        }
+    }
+
+    /**
+     * Regex iterator for pattern matching.
+     *
+     * Iterates over each line in the file, matching it against the provided regex pattern.
+     * Yields matches found in each line.
+     *
+     * @param  string  $pattern  The regex pattern to match against each line.
+     * @return Generator<int, array<int, string>> A generator yielding arrays of matches per line.
+     */
+    private function regexIterator(string $pattern): Generator
+    {
+        while (! $this->file->eof()) {
+            $line = $this->file->fgets();
+            if (preg_match($pattern, $line, $matches)) {
+                yield $matches;
+                $this->position++;
+                $this->count++;
+            }
+        }
+    }
+
+    /**
+     * Resets the internal counters to zero.
+     *
+     * This method is used by the `reset` method to reset the internal counters to zero.
+     */
+    private function resetPosition(): void
+    {
+        $this->count = 0;
+        $this->position = 0;
     }
 
     /**
@@ -377,17 +368,25 @@ final class ReadFile implements Countable, Iterator, SeekableIterator
     }
 
     /**
-     * JSON array iterator, yielding each element of the array.
+     * XML iterator for element-by-element parsing.
      *
-     * @return Generator<int, mixed>
+     * @param  string  $element  The XML element to iterate over.
+     * @return Generator<SimpleXMLElement> A generator of SimpleXMLElement objects.
+     *
+     * @throws Exception
      */
-    private function jsonArrayIterator(): Generator
+    private function xmlIterator(string $element): Generator
     {
-        $jsonArray = json_decode($this->file->fread($this->file->getSize()), true);
-        foreach ($jsonArray as $element) {
-            yield $element;
-            $this->position++;
-            $this->count++;
+        $currentElement = '';
+        while (! $this->file->eof()) {
+            $line = $this->file->fgets();
+            $currentElement .= $line;
+            if (stripos($line, "</$element>") !== false) {
+                yield new SimpleXMLElement($currentElement);
+                $currentElement = '';
+                $this->position++;
+                $this->count++;
+            }
         }
     }
 }

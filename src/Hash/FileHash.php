@@ -1,23 +1,21 @@
 <?php
 
-namespace AbmmHasan\SafeGuard\Hash;
+namespace Infocyph\Epicrypt\Hash;
 
-use AbmmHasan\SafeGuard\Misc\ReadFile;
 use Exception;
+use Infocyph\Epicrypt\Misc\ReadFile;
 
 class FileHash
 {
     public function __construct(
-        private string $algorithm,
-        private int $blockSize = 1024,
-        private int $hashLength = SODIUM_CRYPTO_GENERICHASH_BYTES,
+        private readonly string $algorithm,
+        private readonly int $blockSize = 1024,
+        private readonly int $hashLength = SODIUM_CRYPTO_GENERICHASH_BYTES,
     ) {}
 
     /**
      * Generate hash for a given file
      *
-     * @param string $filePath
-     * @param string $secret
      * @return false|string
      * @throws Exception
      */
@@ -38,9 +36,6 @@ class FileHash
     /**
      * Generate hash in chunk
      *
-     * @param string $filePath
-     * @param string $secret
-     * @return string
      * @throws Exception
      */
     private function chunkedGenericHash(string $filePath, string $secret): string
@@ -48,7 +43,7 @@ class FileHash
         $fileObject = new ReadFile($filePath, 'rb');
         $context = sodium_crypto_generichash_init($secret, $this->hashLength);
         foreach ($fileObject->binary($this->blockSize) as $chunk) {
-            sodium_crypto_generichash_update($context, $chunk);
+            sodium_crypto_generichash_update($context, (string) $chunk);
         }
         return sodium_crypto_generichash_final($context, $this->hashLength);
     }

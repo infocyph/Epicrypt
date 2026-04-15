@@ -40,6 +40,20 @@ final readonly class SodiumAuth
     }
 
     /**
+     * Generate a cryptographic authentication key.
+     *
+     * @return string The generated authentication key.
+     *
+     * @throws SodiumException
+     */
+    public function generateSecret(): string
+    {
+        $secret = sodium_crypto_auth_keygen();
+
+        return $this->isSecretBinary ? $secret : $this->bin2base64Sodium($secret);
+    }
+
+    /**
      * Verify the authenticity of a message using provided signature.
      *
      * @param string $message The message to verify.
@@ -64,19 +78,5 @@ final readonly class SodiumAuth
         }
 
         return sodium_crypto_auth_verify($signature, $message, $secret);
-    }
-
-    /**
-     * Generate a cryptographic authentication key.
-     *
-     * @return string The generated authentication key.
-     *
-     * @throws SodiumException
-     */
-    public function generateSecret(): string
-    {
-        $secret = sodium_crypto_auth_keygen();
-
-        return $this->isSecretBinary ? $secret : $this->bin2base64Sodium($secret);
     }
 }

@@ -3,18 +3,12 @@
 declare(strict_types=1);
 
 use Rector\Config\RectorConfig;
-use Rector\Php80\Rector\FunctionLike\MixedTypeRector;
-use Rector\Php81\Rector\Property\ReadOnlyPropertyRector;
+use Rector\ValueObject\PhpVersion;
 
-return static function (RectorConfig $rectorConfig): void {
-    $rectorConfig->paths([
-        __DIR__ . '/src'
-    ]);
-    $rectorConfig->sets([
-        constant("Rector\Set\ValueObject\LevelSetList::UP_TO_PHP_82")
-    ]);
-    $rectorConfig->skip([
-        ReadOnlyPropertyRector::class,
-        MixedTypeRector::class
-    ]);
-};
+return RectorConfig::configure()
+    ->withPaths([__DIR__ . '/src'])
+    ->withPreparedSets(deadCode: true)
+    ->withPhpVersion(
+        constant(PhpVersion::class . '::PHP_' . PHP_MAJOR_VERSION . PHP_MINOR_VERSION),
+    )
+    ->withPhpSets();

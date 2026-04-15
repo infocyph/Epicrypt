@@ -1,5 +1,5 @@
 <?php
 
-namespace AbmmHasan\SafeGuard\PasswordBox;
+namespace Infocyph\Epicrypt\PasswordBox;
 
 class LockSafe {}

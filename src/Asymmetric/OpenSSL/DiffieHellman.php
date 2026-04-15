@@ -1,13 +1,13 @@
 <?php
 
-namespace AbmmHasan\SafeGuard\Asymmetric\OpenSSL;
+namespace Infocyph\Epicrypt\Asymmetric\OpenSSL;
 
 use Exception;
 use OpenSSLAsymmetricKey;
 
 class DiffieHellman
 {
-    private false|OpenSSLAsymmetricKey $resource;
+    private readonly false|OpenSSLAsymmetricKey $resource;
 
     /**
      * Set the prime, generator & private key
@@ -32,15 +32,22 @@ class DiffieHellman
     }
 
     /**
-     * Get user public key
+     * Generate a prime number
      *
-     * @param bool $encoded Get encoded resource?
-     * @return string public key
+     * @throws Exception
      */
-    public function getPublicKey(bool $encoded = true): mixed
+    public static function getPrime(int $privateKeyBitSize = 2048): string
     {
-        $keyResource = openssl_pkey_get_details($this->resource);
-        return $encoded ? $keyResource['key'] : $keyResource['dh']['pub_key'];
+        if ($privateKeyBitSize < 384) {
+            throw new Exception('Invalid private key bit size! Should be at-least 384.');
+        }
+
+        return openssl_pkey_get_details(
+            openssl_pkey_new([
+                'private_key_bits' => $privateKeyBitSize,
+                'private_key_type' => OPENSSL_KEYTYPE_DH,
+            ]),
+        )['dh']['p'];
     }
 
     /**
@@ -61,23 +68,14 @@ class DiffieHellman
     }
 
     /**
-     * Generate a prime number
+     * Get user public key
      *
-     * @param int $privateKeyBitSize
-     * @return string
-     * @throws Exception
+     * @param bool $encoded Get encoded resource?
+     * @return string public key
      */
-    public static function getPrime(int $privateKeyBitSize = 2048): string
+    public function getPublicKey(bool $encoded = true): mixed
     {
-        if ($privateKeyBitSize < 384) {
-            throw new Exception('Invalid private key bit size! Should be at-least 384.');
-        }
-
-        return openssl_pkey_get_details(
-            openssl_pkey_new([
-                'private_key_bits' => $privateKeyBitSize,
-                'private_key_type' => OPENSSL_KEYTYPE_DH,
-            ]),
-        )['dh']['p'];
+        $keyResource = openssl_pkey_get_details($this->resource);
+        return $encoded ? $keyResource['key'] : $keyResource['dh']['pub_key'];
     }
 }

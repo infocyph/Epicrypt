@@ -20,43 +20,6 @@ final readonly class SodiumCryptoBox
     ) {}
 
     /**
-     * Encrypt the message
-     *
-     * @param string $message Message for encryption
-     * @param string $thirdPartyPublicKey Third party public key
-     * @param string $ownPrivateKey Own private key
-     * @param string $sharedSecret Shared secret (only used once per message)
-     * @return string Encrypted message
-     * @throws SodiumException
-     */
-    public function encrypt(
-        #[\SensitiveParameter]
-        string $message,
-        #[\SensitiveParameter]
-        string $thirdPartyPublicKey,
-        #[\SensitiveParameter]
-        string $ownPrivateKey,
-        string $sharedSecret,
-    ): string {
-        if (!$this->isSecretBinary) {
-            $thirdPartyPublicKey = $this->base642binSodium($thirdPartyPublicKey);
-            $ownPrivateKey = $this->base642binSodium($ownPrivateKey);
-            $sharedSecret = $this->base642binSodium($sharedSecret);
-        }
-
-        $encrypted = sodium_crypto_box(
-            $message,
-            $sharedSecret,
-            sodium_crypto_box_keypair_from_secretkey_and_publickey(
-                $ownPrivateKey,
-                $thirdPartyPublicKey,
-            ),
-        );
-
-        return $this->isMessageBinary ? $encrypted : $this->bin2base64($encrypted);
-    }
-
-    /**
      * Decrypt the message
      *
      * @param string $encryptedMessage Encrypted message
@@ -94,13 +57,50 @@ final readonly class SodiumCryptoBox
     }
 
     /**
+     * Encrypt the message
+     *
+     * @param string $message Message for encryption
+     * @param string $thirdPartyPublicKey Third party public key
+     * @param string $ownPrivateKey Own private key
+     * @param string $sharedSecret Shared secret (only used once per message)
+     * @return string Encrypted message
+     * @throws SodiumException
+     */
+    public function encrypt(
+        #[\SensitiveParameter]
+        string $message,
+        #[\SensitiveParameter]
+        string $thirdPartyPublicKey,
+        #[\SensitiveParameter]
+        string $ownPrivateKey,
+        string $sharedSecret,
+    ): string {
+        if (!$this->isSecretBinary) {
+            $thirdPartyPublicKey = $this->base642binSodium($thirdPartyPublicKey);
+            $ownPrivateKey = $this->base642binSodium($ownPrivateKey);
+            $sharedSecret = $this->base642binSodium($sharedSecret);
+        }
+
+        $encrypted = sodium_crypto_box(
+            $message,
+            $sharedSecret,
+            sodium_crypto_box_keypair_from_secretkey_and_publickey(
+                $ownPrivateKey,
+                $thirdPartyPublicKey,
+            ),
+        );
+
+        return $this->isMessageBinary ? $encrypted : $this->bin2base64($encrypted);
+    }
+
+    /**
      * Generates a secret key pair for the Sodium Crypto Box algorithm.
      *
      * @param string|null $seed (optional) Seed for deterministic key generation. If provided, it must be 32 bytes long.
      * @return array An array containing the private key, public key and shared key.
      * @throws SodiumCryptoException|SodiumException|Exception
      */
-    public function generateSecretPair(string $seed = null): array
+    public function generateSecretPair(?string $seed = null): array
     {
         if (!is_null($seed)) {
             if (($length = strlen($seed)) !== 32) {

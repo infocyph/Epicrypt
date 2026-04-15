@@ -1,15 +1,12 @@
 <?php
 
-use AbmmHasan\SafeGuard\Generate\Random;
-use AbmmHasan\SafeGuard\PasswordBox\GeneratePassword;
+use Infocyph\Epicrypt\Generate\Random;
+use Infocyph\Epicrypt\PasswordBox\GeneratePassword;
 
 if (!function_exists('generatePassword')) {
     /**
      * Generate password
      *
-     * @param int $length
-     * @param bool $strong
-     * @return string
      * @throws Exception
      */
     function generatePassword(int $length = 9, bool $strong = true): string
@@ -25,8 +22,6 @@ if (!function_exists('passwordFromString')) {
     /**
      * Generate random password from given string
      *
-     * @param string $string
-     * @return string
      * @throws Exception
      */
     function passwordFromString(string $string): string
@@ -38,11 +33,6 @@ if (!function_exists('passwordFromString')) {
 if (!function_exists('randomString')) {
     /**
      * Generate secure random string
-     *
-     * @param int $length
-     * @param string $prefix
-     * @param string $postfix
-     * @return string
      */
     function randomString(int $length = 32, string $prefix = '', string $postfix = ''): string
     {
@@ -54,8 +44,6 @@ if (!function_exists('randomNumber')) {
     /**
      * Generate secure random number
      *
-     * @param int $length
-     * @return int
      * @throws Exception
      */
     function randomNumber(int $length = 6): int
@@ -68,7 +56,6 @@ if (!function_exists('randomBool')) {
     /**
      * Generate secure random boolean value
      *
-     * @return bool
      * @throws Exception
      */
     function randomBool(): bool

@@ -1,26 +1,25 @@
 <?php
 
-namespace AbmmHasan\SafeGuard\Symmetric\OpenSSL;
+namespace Infocyph\Epicrypt\Symmetric\OpenSSL;
 
 use Exception;
 
 trait SSLCommon
 {
-    private int $keyIterationCount = 10000;
-    private int $keyLength = 50;
-    private string $keyAlgo = 'SHA3-512';
-    private bool $isIVPredefined = false;
+    private string $aad = '';
 
     private bool $enableSignature = true;
-    private string $hmacAlgo = 'SHA3-512';
-    private int $sigLen = 64;
 
     private string $encryptionMethod = 'aes-256-ctr';
-
-    private string $aad = '';
-    private string $tag = '';
+    private string $hmacAlgo = 'SHA3-512';
 
     private array $info;
+    private bool $isIVPredefined = false;
+    private string $keyAlgo = 'SHA3-512';
+    private int $keyIterationCount = 10000;
+    private int $keyLength = 50;
+    private int $sigLen = 64;
+    private string $tag = '';
 
     /**
      * Constructor: Set Secret & Salt (& optionally IV string) for encryption/decryption
@@ -40,6 +39,32 @@ trait SSLCommon
     }
 
     /**
+     * Disable Signature
+     */
+    public function disableSignature()
+    {
+        $this->enableSignature = false;
+    }
+
+    /**
+     * Get the method details
+     */
+    public function getInfo($key = null): mixed
+    {
+        return is_null($key) ? $this->info : ($this->info[$key] ?? null);
+    }
+
+    /**
+     * Return set IV
+     *
+     * Can be called after IV is set (if automatic generation then after encryption)
+     */
+    public function getIV(): string
+    {
+        return $this->iv;
+    }
+
+    /**
      * Set Additional Authentication Data for GCM/CCM mode
      *
      * @param string $aad Additional Auth Info for both Encrypt/Decrypt
@@ -50,52 +75,7 @@ trait SSLCommon
     }
 
     /**
-     * Get the method details
-     *
-     * @param null $key
-     * @return mixed
-     */
-    public function getInfo($key = null): mixed
-    {
-        return is_null($key) ? $this->info : ($this->info[$key] ?? null);
-    }
-
-    /**
-     * Set info
-     *
-     * @param $key
-     * @param $value
-     * @return mixed
-     */
-    private function setInfo($key, $value): mixed
-    {
-        return $this->info[$key] = $value;
-    }
-
-    /**
-     * Disable Signature
-     */
-    public function disableSignature()
-    {
-        $this->enableSignature = false;
-    }
-
-    /**
-     * Return set IV
-     *
-     * Can be called after IV is set (if automatic generation then after encryption)
-     *
-     * @return string
-     */
-    public function getIV(): string
-    {
-        return $this->iv;
-    }
-
-    /**
      * Set encryption method
-     *
-     * @param string $method
      */
     public function setEncryptionMethod(string $method = 'aes-256-ctr')
     {
@@ -104,10 +84,6 @@ trait SSLCommon
 
     /**
      * Set Encryption key property
-     *
-     * @param string $algorithm
-     * @param int $length
-     * @param int $iterationCount
      */
     public function setKeyProperty(string $algorithm = 'SHA3-512', int $length = 50, int $iterationCount = 10000)
     {
@@ -118,40 +94,11 @@ trait SSLCommon
 
     /**
      * Set property for signature key, used for signing/verifying encryption
-     *
-     * @param string $algorithm
-     * @param int $length
      */
     public function setSignatureProperty(string $algorithm = 'SHA3-512', int $length = 64)
     {
         $this->hmacAlgo = $algorithm;
         $this->sigLen = $length;
-    }
-
-    /**
-     * Disable Signature in case of GCM/CCM mode
-     */
-    private function disableSignatureForGcmCcm()
-    {
-        if (stripos($this->encryptionMethod, '-gcm') || stripos($this->encryptionMethod, '-ccm')) {
-            $this->disableSignature();
-        }
-    }
-
-    /**
-     * Generate encryption key
-     *
-     * @return false|string
-     */
-    private function getKey(): bool|string
-    {
-        return openssl_pbkdf2(
-            $this->secret,
-            $this->salt,
-            $this->setInfo('keyLength', $this->keyLength),
-            $this->setInfo('keyIterationCount', $this->keyIterationCount),
-            $this->setInfo('keyAlgo', $this->keyAlgo),
-        );
     }
 
     /**
@@ -169,6 +116,58 @@ trait SSLCommon
             throw new Exception("IV length mismatch (Expected: {$length}B, Found: {$found}B)");
         }
         $this->setInfo('predefinedIV', $this->isIVPredefined);
+    }
+
+    /**
+     * Decrypt cypher content
+     *
+     * @param string $input raw format
+     * @return false|string
+     * @throws \SodiumException
+     */
+    private function decryptionProcess(string $input): bool|string
+    {
+        $ivLen = openssl_cipher_iv_length($this->encryptionMethod);
+        $cTextOffset = 0;
+        $encryptionKey = $this->getKey();
+        if ($definedIV = ($this->setInfo('predefinedIV', $this->isIVPredefined) === false)) {
+            $this->iv = substr($input, 0, $ivLen);
+            $cTextOffset += $ivLen;
+        }
+        if ($this->setInfo('enableSignature', $this->enableSignature) === true) {
+            $cTextOffset += $this->sigLen;
+            $hash = substr(
+                $input,
+                $definedIV ? $ivLen : 0,
+                $this->sigLen,
+            );
+        }
+        $cText = substr($input, $cTextOffset);
+
+        if ($this->enableSignature === true && !empty($hash)
+            && !hash_equals($hash, hash_hmac($this->setInfo('hmacAlgo', $this->hmacAlgo), $cText, (string) $encryptionKey, true))) {
+            return false;
+        }
+
+        return openssl_decrypt(
+            $cText,
+            $this->setInfo('encryptionMethod', $this->encryptionMethod),
+            $encryptionKey,
+            OPENSSL_RAW_DATA,
+            $this->iv,
+            sodium_base642bin($this->tag, SODIUM_BASE64_VARIANT_ORIGINAL_NO_PADDING),
+            $this->aad,
+        );
+    }
+
+    /**
+     * Disable Signature in case of GCM/CCM mode
+     */
+    private function disableSignatureForGcmCcm()
+    {
+        if (stripos($this->encryptionMethod, '-gcm') || stripos($this->encryptionMethod, '-ccm')) {
+            $this->disableSignature();
+        }
     }
 
     /**
@@ -198,7 +197,7 @@ trait SSLCommon
             $cText = hash_hmac(
                 $this->setInfo('hmacAlgo', $this->hmacAlgo),
                 $cText,
-                $encryptionKey,
+                (string) $encryptionKey,
                 true,
             ) . $cText;
         }
@@ -209,44 +208,29 @@ trait SSLCommon
     }
 
     /**
-     * Decrypt cypher content
+     * Generate encryption key
      *
-     * @param string $input raw format
      * @return false|string
-     * @throws \SodiumException
      */
-    private function decryptionProcess(string $input): bool|string
+    private function getKey(): bool|string
     {
-        $ivLen = openssl_cipher_iv_length($this->encryptionMethod);
-        $cTextOffset = 0;
-        $encryptionKey = $this->getKey();
-        if ($definedIV = ($this->setInfo('predefinedIV', $this->isIVPredefined) === false)) {
-            $this->iv = substr($input, 0, $ivLen);
-            $cTextOffset += $ivLen;
-        }
-        if ($this->setInfo('enableSignature', $this->enableSignature) === true) {
-            $cTextOffset += $this->sigLen;
-            $hash = substr(
-                $input,
-                $definedIV ? $ivLen : 0,
-                $this->sigLen,
-            );
-        }
-        $cText = substr($input, $cTextOffset);
-
-        if ($this->enableSignature === true && !empty($hash) &&
-            !hash_equals($hash, hash_hmac($this->setInfo('hmacAlgo', $this->hmacAlgo), $cText, $encryptionKey, true))) {
-            return false;
-        }
-
-        return openssl_decrypt(
-            $cText,
-            $this->setInfo('encryptionMethod', $this->encryptionMethod),
-            $encryptionKey,
-            OPENSSL_RAW_DATA,
-            $this->iv,
-            sodium_base642bin($this->tag, SODIUM_BASE64_VARIANT_ORIGINAL_NO_PADDING),
-            $this->aad,
+        return openssl_pbkdf2(
+            $this->secret,
+            $this->salt,
+            $this->setInfo('keyLength', $this->keyLength),
+            $this->setInfo('keyIterationCount', $this->keyIterationCount),
+            $this->setInfo('keyAlgo', $this->keyAlgo),
         );
+    }
+
+    /**
+     * Set info
+     *
+     * @param $key
+     * @param $value
+     */
+    private function setInfo($key, $value): mixed
+    {
+        return $this->info[$key] = $value;
     }
 }

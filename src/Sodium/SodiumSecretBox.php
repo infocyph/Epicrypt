@@ -21,6 +21,28 @@ final readonly class SodiumSecretBox
     ) {}
 
     /**
+     * Decrypts an encrypted message using the specified secret and nonce.
+     *
+     * @param string $encryptedMessage The encrypted message to be decrypted.
+     * @param string $secret The secret key used for decryption.
+     * @param string $nonce The nonce used for decryption (must be the same as the one used for encryption).
+     * @return string|bool The decrypted message in binary format if $isMessageBinary is true, otherwise in base64 format. Returns false if decryption fails.
+     * @throws SodiumException
+     * @throws SodiumCryptoException
+     */
+    public function decrypt(string $encryptedMessage, #[\SensitiveParameter] string $secret, string $nonce): string|bool
+    {
+        if (!$this->isSecretBinary) {
+            $secret = $this->base642binSodium($secret);
+            $nonce = $this->base642binSodium($nonce);
+        }
+        if (!$this->isMessageBinary) {
+            $encryptedMessage = $this->base642bin($encryptedMessage);
+        }
+        return sodium_crypto_secretbox_open($encryptedMessage, $nonce, $secret);
+    }
+
+    /**
      * Encrypts the given message using the specified secret and nonce.
      *
      * @param string $message The message to be encrypted.
@@ -45,28 +67,6 @@ final readonly class SodiumSecretBox
             return $encrypted;
         }
         return $this->bin2base64($encrypted);
-    }
-
-    /**
-     * Decrypts an encrypted message using the specified secret and nonce.
-     *
-     * @param string $encryptedMessage The encrypted message to be decrypted.
-     * @param string $secret The secret key used for decryption.
-     * @param string $nonce The nonce used for decryption (must be the same as the one used for encryption).
-     * @return string|bool The decrypted message in binary format if $isMessageBinary is true, otherwise in base64 format. Returns false if decryption fails.
-     * @throws SodiumException
-     * @throws SodiumCryptoException
-     */
-    public function decrypt(string $encryptedMessage, #[\SensitiveParameter] string $secret, string $nonce): string|bool
-    {
-        if (!$this->isSecretBinary) {
-            $secret = $this->base642binSodium($secret);
-            $nonce = $this->base642binSodium($nonce);
-        }
-        if (!$this->isMessageBinary) {
-            $encryptedMessage = $this->base642bin($encryptedMessage);
-        }
-        return sodium_crypto_secretbox_open($encryptedMessage, $nonce, $secret);
     }
 
     /**

@@ -1,10 +1,5 @@
 <?php
 
-namespace AbmmHasan\SafeGuard\PasswordBox;
+namespace Infocyph\Epicrypt\PasswordBox;
 
-class MasterGenerator
-{
-    public function __construct(private string $masterPassword) {}
-
-
-}
+class MasterGenerator {}

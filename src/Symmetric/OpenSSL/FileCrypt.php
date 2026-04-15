@@ -1,9 +1,9 @@
 <?php
 
-namespace AbmmHasan\SafeGuard\Symmetric\OpenSSL;
+namespace Infocyph\Epicrypt\Symmetric\OpenSSL;
 
-use AbmmHasan\SafeGuard\Misc\ReadFile;
 use Exception;
+use Infocyph\Epicrypt\Misc\ReadFile;
 
 class FileCrypt
 {
@@ -14,23 +14,34 @@ class FileCrypt
     private array $tags = [];
 
     /**
-     * Set output file path
+     * Decrypt file content
      *
-     * @param string $pathToFile
+     * @param string $input Input file location (realpath compatible)
+     * @param int $blockSize Set read block size (retrieved write block size during encryption)
+     * @throws Exception
      */
-    public function setOutFile(string $pathToFile)
+    public function decrypt(string $input, int $blockSize): string
     {
-        $this->outFilePath = $pathToFile;
-    }
-
-    /**
-     * Set Tag(s) for GCM/CCM mode
-     *
-     * @param array $tags
-     */
-    public function setTags(array $tags)
-    {
-        $this->tags = $tags;
+        $this->setInfo('process', 'decryption');
+        $this->setInfo('type', 'file');
+        $this->blockSize = $blockSize;
+        $input = realpath($input);
+        if (!file_exists($input) || !is_readable($input)) {
+            throw new Exception("Invalid input file path ($input)!");
+        }
+        $inputLocDetails = pathinfo($input);
+        if (empty($this->outFilePath)) {
+            $this->outFilePath = $inputLocDetails['dirname'] . DIRECTORY_SEPARATOR
+                . $inputLocDetails['filename'] . '.decompressed';
+        } else {
+            $outFile = pathinfo($this->outFilePath);
+            $this->outFilePath = ($outFile['dirname'] ?? $inputLocDetails['dirname'])
+                . DIRECTORY_SEPARATOR . ($outFile['filename'] ?? $inputLocDetails['filename'])
+                . '.' . ($outFile['extension'] ?? 'decompressed');
+        }
+        $this->setInfo('inFile', $input);
+        $this->setInfo('outFile', $this->outFilePath);
+        return $this->process($input, 'decryptionProcess');
     }
 
     /**
@@ -52,13 +63,13 @@ class FileCrypt
         }
         $inputLocDetails = pathinfo($input);
         if (empty($this->outFilePath)) {
-            $this->outFilePath = $inputLocDetails['dirname'] . DIRECTORY_SEPARATOR .
-                $inputLocDetails['filename'] . '.bin';
+            $this->outFilePath = $inputLocDetails['dirname'] . DIRECTORY_SEPARATOR
+                . $inputLocDetails['filename'] . '.bin';
         } else {
             $outFile = pathinfo($this->outFilePath);
-            $this->outFilePath = ($outFile['dirname'] ?? $inputLocDetails['dirname']) .
-                DIRECTORY_SEPARATOR . ($outFile['filename'] ?? $inputLocDetails['filename']) .
-                '.' . ($outFile['extension'] ?? 'bin');
+            $this->outFilePath = ($outFile['dirname'] ?? $inputLocDetails['dirname'])
+                . DIRECTORY_SEPARATOR . ($outFile['filename'] ?? $inputLocDetails['filename'])
+                . '.' . ($outFile['extension'] ?? 'bin');
         }
         $this->setInfo('inFile', $input);
         $this->setInfo('outFile', $this->outFilePath);
@@ -66,35 +77,19 @@ class FileCrypt
     }
 
     /**
-     * Decrypt file content
-     *
-     * @param string $input Input file location (realpath compatible)
-     * @param int $blockSize Set read block size (retrieved write block size during encryption)
-     * @return string
-     * @throws Exception
+     * Set output file path
      */
-    public function decrypt(string $input, int $blockSize): string
+    public function setOutFile(string $pathToFile)
     {
-        $this->setInfo('process', 'decryption');
-        $this->setInfo('type', 'file');
-        $this->blockSize = $blockSize;
-        $input = realpath($input);
-        if (!file_exists($input) || !is_readable($input)) {
-            throw new Exception("Invalid input file path ($input)!");
-        }
-        $inputLocDetails = pathinfo($input);
-        if (empty($this->outFilePath)) {
-            $this->outFilePath = $inputLocDetails['dirname'] . DIRECTORY_SEPARATOR .
-                $inputLocDetails['filename'] . '.decompressed';
-        } else {
-            $outFile = pathinfo($this->outFilePath);
-            $this->outFilePath = ($outFile['dirname'] ?? $inputLocDetails['dirname']) .
-                DIRECTORY_SEPARATOR . ($outFile['filename'] ?? $inputLocDetails['filename']) .
-                '.' . ($outFile['extension'] ?? 'decompressed');
-        }
-        $this->setInfo('inFile', $input);
-        $this->setInfo('outFile', $this->outFilePath);
-        return $this->process($input, 'decryptionProcess');
+        $this->outFilePath = $pathToFile;
+    }
+
+    /**
+     * Set Tag(s) for GCM/CCM mode
+     */
+    public function setTags(array $tags)
+    {
+        $this->tags = $tags;
     }
 
     /**
@@ -102,7 +97,6 @@ class FileCrypt
      *
      * @param $input
      * @param $type
-     * @return float|int
      * @throws Exception
      */
     private function process($input, $type): float|int

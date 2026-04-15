@@ -1,20 +1,19 @@
 <?php
 
-namespace AbmmHasan\SafeGuard\Hash;
+namespace Infocyph\Epicrypt\Hash;
 
 use SodiumException;
 
 class StringHash
 {
     public function __construct(
-        private string $algorithm,
-        private string $secret = '',
-        private bool $isBinary = false,
-        private array $options = [],
+        private readonly string $algorithm,
+        private readonly string $secret = '',
+        private readonly bool $isBinary = false,
+        private readonly array $options = [],
     ) {}
 
     /**
-     * @param string $data
      * @param int $hashLength **only available for BLAKE2B Hash
      * @return false|string
      * @throws SodiumException
@@ -32,9 +31,17 @@ class StringHash
     }
 
     /**
+     * @param int $hashLength **only available for BLAKE2B Hash
+     * @throws SodiumException
+     */
+    public function verify(string $data, string $hash, int $hashLength = SODIUM_CRYPTO_GENERICHASH_BYTES): bool
+    {
+        return hash_equals($hash, $this->generate($data, $hashLength));
+    }
+
+    /**
      * @param $function
      * @param ...$params
-     * @return mixed
      * @throws SodiumException
      */
     private function generateHashByAlias($function, ...$params): mixed
@@ -43,18 +50,6 @@ class StringHash
         if ($this->isBinary) {
             return $hash;
         }
-        return sodium_bin2hex($hash);
-    }
-
-    /**
-     * @param string $data
-     * @param string $hash
-     * @param int $hashLength **only available for BLAKE2B Hash
-     * @return bool
-     * @throws SodiumException
-     */
-    public function verify(string $data, string $hash, int $hashLength = SODIUM_CRYPTO_GENERICHASH_BYTES): bool
-    {
-        return hash_equals($hash, $this->generate($data, $hashLength));
+        return sodium_bin2hex((string) $hash);
     }
 }

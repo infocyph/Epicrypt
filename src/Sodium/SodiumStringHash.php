@@ -32,13 +32,13 @@ final readonly class SodiumStringHash
      * @return string The generated hash.
      * @throws SodiumCryptoException|SodiumException
      */
-    public function generate(#[\SensitiveParameter] string $data, #[\SensitiveParameter] string $secret = null): string
+    public function generate(#[\SensitiveParameter] string $data, #[\SensitiveParameter] ?string $secret = null): string
     {
         if (!empty($secret) && !$this->isSecretBinary) {
             $secret = $this->base642binSodium($secret);
         }
         $hash = match ($this->algorithm) {
-            'sip' => sodium_crypto_shorthash($data, $secret),
+            'sip' => sodium_crypto_shorthash($data, (string) $secret),
             'blake2b' => sodium_crypto_generichash($data, $secret ?: '', $this->hashLength),
             default => throw new SodiumCryptoException("Unsupported hash algorithm, Available: sip, blake2b"),
         };
@@ -76,7 +76,7 @@ final readonly class SodiumStringHash
         #[\SensitiveParameter]
         string $data,
         #[\SensitiveParameter]
-        string $secret = null,
+        ?string $secret = null,
     ): bool {
         return hash_equals($hash, $this->generate($data, $secret));
     }

@@ -1,13 +1,13 @@
 <?php
 
-namespace AbmmHasan\SafeGuard\Asymmetric\Sodium;
+namespace Infocyph\Epicrypt\Asymmetric\Sodium;
 
 use SodiumException;
 
 class SodiumSessionExchange
 {
     public function __construct(
-        private string $keypair,
+        private readonly string $keypair,
     ) {}
 
     /**

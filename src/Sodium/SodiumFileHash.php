@@ -45,7 +45,7 @@ final class SodiumFileHash
     {
         if (! isset($this->algoFunctionMap[$this->algorithm])) {
             throw new SodiumCryptoException(
-                'Invalid algorithm! Available: '.implode(', ', array_keys($this->algoFunctionMap)),
+                'Invalid algorithm! Available: ' . implode(', ', array_keys($this->algoFunctionMap)),
             );
         }
         if (! file_exists($filePath) || ! is_readable($filePath)) {
@@ -56,7 +56,26 @@ final class SodiumFileHash
         }
         $hash = $this->{$this->algoFunctionMap[$this->algorithm]}($filePath, $secret);
 
-        return $this->isHashBinary ? $hash : bin2hex($hash);
+        return $this->isHashBinary ? $hash : bin2hex((string) $hash);
+    }
+
+    /**
+     * Retrieves the secret key for the specified hash algorithm.
+     *
+     * @return string The secret key for the hash algorithm.
+     *
+     * @throws SodiumCryptoException|SodiumException
+     */
+    public function generateSecret(): string
+    {
+        $secret = match ($this->algorithm) {
+            'blake2b' => sodium_crypto_generichash_keygen(),
+            default => throw new SodiumCryptoException(
+                'Invalid algorithm! Available: ' . implode(', ', array_keys($this->algoFunctionMap)),
+            ),
+        };
+
+        return $this->isSecretBinary ? $secret : $this->bin2base64Sodium($secret);
     }
 
     /**
@@ -79,25 +98,6 @@ final class SodiumFileHash
     }
 
     /**
-     * Retrieves the secret key for the specified hash algorithm.
-     *
-     * @return string The secret key for the hash algorithm.
-     *
-     * @throws SodiumCryptoException|SodiumException
-     */
-    public function generateSecret(): string
-    {
-        $secret = match ($this->algorithm) {
-            'blake2b' => sodium_crypto_generichash_keygen(),
-            default => throw new SodiumCryptoException(
-                'Invalid algorithm! Available: '.implode(', ', array_keys($this->algoFunctionMap)),
-            ),
-        };
-
-        return $this->isSecretBinary ? $secret : $this->bin2base64Sodium($secret);
-    }
-
-    /**
      * Calculates the chunked generic hash of a given file using the provided secret.
      *
      * @param  string  $filePath  The path to the file to be hashed.
@@ -111,7 +111,7 @@ final class SodiumFileHash
         $fileObject = new ReadFile($filePath, 'rb');
         $context = sodium_crypto_generichash_init($secret, $this->hashLength);
         foreach ($fileObject->binary($this->blockSize) as $chunk) {
-            sodium_crypto_generichash_update($context, $chunk);
+            sodium_crypto_generichash_update($context, (string) $chunk);
         }
 
         return sodium_crypto_generichash_final($context, $this->hashLength);

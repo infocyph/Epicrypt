@@ -1,30 +1,13 @@
 <?php
 
-namespace AbmmHasan\SafeGuard\Asymmetric\OpenSSL;
+namespace Infocyph\Epicrypt\Asymmetric\OpenSSL;
 
 use Exception;
 
 trait Common
 {
     /**
-     * @param $resource
-     * @return mixed
-     * @throws Exception
-     */
-    private function prepareInput($resource): mixed
-    {
-        if (is_file($resource)) {
-            if (!is_readable($resource)) {
-                throw new Exception("Unreadable file $resource!");
-            }
-            return file_get_contents($resource);
-        }
-        return $resource;
-    }
-
-    /**
      * @param $result
-     * @param bool $isRSA
      * @throws Exception
      */
     private function check($result, bool $isRSA = false)
@@ -46,5 +29,21 @@ trait Common
         if (($e = openssl_error_string()) !== false) {
             return $e;
         }
+
+        return 'Unknown OpenSSL error';
+    }
+    /**
+     * @param $resource
+     * @throws Exception
+     */
+    private function prepareInput($resource): mixed
+    {
+        if (is_file($resource)) {
+            if (!is_readable($resource)) {
+                throw new Exception("Unreadable file $resource!");
+            }
+            return file_get_contents($resource);
+        }
+        return $resource;
     }
 }
