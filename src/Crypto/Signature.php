@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Infocyph\Epicrypt\Crypto;
 
 use Infocyph\Epicrypt\Crypto\Contract\SignatureInterface;
@@ -14,7 +16,7 @@ final class Signature implements SignatureInterface
      */
     public function sign(string $message, mixed $key, array $context = []): string
     {
-        if (! is_string($key) || $key === '') {
+        if (!is_string($key) || $key === '') {
             throw new InvalidKeyException('Private key must be a non-empty string.');
         }
 
@@ -24,9 +26,6 @@ final class Signature implements SignatureInterface
         }
 
         $signature = sodium_crypto_sign_detached($message, $privateKey);
-        if (! is_string($signature)) {
-            throw new SignatureException('Failed to sign message.');
-        }
 
         return Base64Url::encode($signature);
     }
@@ -36,7 +35,7 @@ final class Signature implements SignatureInterface
      */
     public function verify(string $message, string $signature, mixed $key, array $context = []): bool
     {
-        if (! is_string($key) || $key === '') {
+        if (!is_string($key) || $key === '') {
             throw new InvalidKeyException('Public key must be a non-empty string.');
         }
 
@@ -45,6 +44,11 @@ final class Signature implements SignatureInterface
             throw new InvalidKeyException('Public key has invalid length.');
         }
 
-        return sodium_crypto_sign_verify_detached(Base64Url::decode($signature), $message, $publicKey);
+        $decodedSignature = Base64Url::decode($signature);
+        if ($decodedSignature === '') {
+            throw new SignatureException('Signature must decode to non-empty bytes.');
+        }
+
+        return sodium_crypto_sign_verify_detached($decodedSignature, $message, $publicKey);
     }
 }

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Infocyph\Epicrypt\Token\Payload;
 
 use Infocyph\Epicrypt\Exception\Token\TokenException;
@@ -17,7 +19,7 @@ final readonly class SignedPayload implements PayloadTokenInterface
      */
     public function decode(string $token, mixed $key): array
     {
-        if (! is_string($key) || $key === '') {
+        if (!is_string($key) || $key === '') {
             throw new TokenException('Signed payload key must be a non-empty string.');
         }
 
@@ -30,7 +32,7 @@ final readonly class SignedPayload implements PayloadTokenInterface
      */
     public function encode(array $claims, mixed $key, array $headers = []): string
     {
-        if (! is_string($key) || $key === '') {
+        if (!is_string($key) || $key === '') {
             throw new TokenException('Signed payload key must be a non-empty string.');
         }
 

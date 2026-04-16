@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Infocyph\Epicrypt\Internal;
 
 use Exception;
@@ -42,7 +44,7 @@ final class EcdsaSignatureConverter
         $pointS = $this->retrievePositiveInteger($this->readAsn1Integer($message, $position));
 
         $bin = hex2bin(str_pad($pointR, $length, '0', STR_PAD_LEFT) . str_pad($pointS, $length, '0', STR_PAD_LEFT));
-        if (! is_string($bin)) {
+        if (!is_string($bin)) {
             throw new Exception('Unable to parse the data.');
         }
 
@@ -77,7 +79,7 @@ final class EcdsaSignatureConverter
             . $this->asn1Int . dechex($lengthS) . $pointS,
         );
 
-        if (! is_string($bin)) {
+        if (!is_string($bin)) {
             throw new Exception('Data parsing failed.');
         }
 

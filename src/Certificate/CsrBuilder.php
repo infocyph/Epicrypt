@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Infocyph\Epicrypt\Certificate;
 
 use Infocyph\Epicrypt\Certificate\Contract\CsrBuilderInterface;
@@ -16,7 +18,7 @@ final readonly class CsrBuilder implements CsrBuilderInterface
     }
 
     /**
-     * @param  array<string, string>  $distinguishedName
+     * @param array<string, string> $distinguishedName
      */
     public function build(array $distinguishedName, string $privateKey, ?string $passphrase = null): string
     {

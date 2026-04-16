@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Infocyph\Epicrypt\Token\Jwt\Support;
 
 use Infocyph\Epicrypt\Exception\Token\InvalidTokenException;

@@ -1,7 +1,10 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Infocyph\Epicrypt\Security;
 
+use Infocyph\Epicrypt\Exception\ConfigurationException;
 use Infocyph\Epicrypt\Internal\Base64Url;
 use Infocyph\Epicrypt\Internal\Enum\SignedUrlVersion;
 use Infocyph\Epicrypt\Internal\SecureCompare;
@@ -24,6 +27,9 @@ final readonly class SignedUrl implements SignedUrlGeneratorInterface, SignedUrl
     public function generate(string $url, array $parameters = [], ?int $expiresAt = null): string
     {
         $parts = parse_url($url);
+        if (!is_array($parts)) {
+            throw new ConfigurationException('Invalid URL provided for signing.');
+        }
 
         $existing = [];
         if (isset($parts['query'])) {
@@ -49,7 +55,7 @@ final readonly class SignedUrl implements SignedUrlGeneratorInterface, SignedUrl
     public function verify(string $signedUrl): bool
     {
         $parts = parse_url($signedUrl);
-        if (! is_array($parts)) {
+        if (!is_array($parts)) {
             return false;
         }
 
@@ -57,12 +63,12 @@ final readonly class SignedUrl implements SignedUrlGeneratorInterface, SignedUrl
         parse_str((string) ($parts['query'] ?? ''), $query);
 
         $givenSignature = $query[$this->signatureParam] ?? null;
-        if (! is_string($givenSignature) || $givenSignature === '') {
+        if (!is_string($givenSignature) || $givenSignature === '') {
             return false;
         }
 
         if (isset($query[$this->versionParam])) {
-            if (! is_numeric($query[$this->versionParam]) || (int) $query[$this->versionParam] !== SignedUrlVersion::V1->value) {
+            if (!is_numeric($query[$this->versionParam]) || (int) $query[$this->versionParam] !== SignedUrlVersion::V1->value) {
                 return false;
             }
         }
@@ -81,15 +87,17 @@ final readonly class SignedUrl implements SignedUrlGeneratorInterface, SignedUrl
     }
 
     /**
-     * @param array<string, mixed> $parts
+     * @param array{scheme?: mixed, host?: mixed, port?: mixed, path?: mixed} $parts
      */
     private function buildBasePath(array $parts): string
     {
-        $scheme = ($parts['scheme'] ?? 'https') . '://';
-        $host = (string) ($parts['host'] ?? '');
-        $port = isset($parts['port']) ? ':' . $parts['port'] : '';
-        $path = (string) ($parts['path'] ?? '/');
+        $scheme = isset($parts['scheme']) && is_string($parts['scheme']) && $parts['scheme'] !== ''
+            ? $parts['scheme']
+            : 'https';
+        $host = isset($parts['host']) && is_string($parts['host']) ? $parts['host'] : '';
+        $port = isset($parts['port']) && is_int($parts['port']) ? ':' . $parts['port'] : '';
+        $path = isset($parts['path']) && is_string($parts['path']) && $parts['path'] !== '' ? $parts['path'] : '/';
 
-        return $scheme . $host . $port . $path;
+        return $scheme . '://' . $host . $port . $path;
     }
 }

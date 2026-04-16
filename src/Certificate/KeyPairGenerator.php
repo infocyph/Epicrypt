@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Infocyph\Epicrypt\Certificate;
 
 use Infocyph\Epicrypt\Certificate\Contract\KeyPairGeneratorInterface;
@@ -21,7 +23,7 @@ final readonly class KeyPairGenerator implements KeyPairGeneratorInterface
         OpenSslRsaBits $bits = OpenSslRsaBits::BITS_2048,
         ?OpenSslCurveName $curveName = null,
     ): self {
-        if (! $type->isOpenSsl()) {
+        if (!$type->isOpenSsl()) {
             return match ($type) {
                 KeyPairType::SODIUM_BOX => self::sodium(),
                 KeyPairType::SODIUM_SIGN => self::sodiumSign(),

@@ -1,10 +1,11 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Infocyph\Epicrypt\Crypto;
 
 use Infocyph\Epicrypt\Crypto\Contract\CipherInterface;
 use Infocyph\Epicrypt\Exception\Crypto\DecryptionException;
-use Infocyph\Epicrypt\Exception\Crypto\EncryptionException;
 use Infocyph\Epicrypt\Exception\Crypto\InvalidKeyException;
 use Infocyph\Epicrypt\Internal\Base64Url;
 use Infocyph\Epicrypt\Internal\Enum\EncryptedPayloadVersion;
@@ -17,7 +18,7 @@ final class PublicKeyBoxCipher implements CipherInterface
      */
     public function decrypt(string $ciphertext, mixed $key, array $context = []): string
     {
-        if (! is_array($key)) {
+        if (!is_array($key)) {
             throw new InvalidKeyException('Key must include sender_public and recipient_private entries.');
         }
 
@@ -36,18 +37,19 @@ final class PublicKeyBoxCipher implements CipherInterface
             sodium_crypto_box_keypair_from_secretkey_and_publickey($recipientPrivate, $senderPublic),
         );
 
-        if (! is_string($plaintext)) {
+        if (!is_string($plaintext)) {
             throw new DecryptionException('Public key-box decryption failed.');
         }
 
         return $plaintext;
     }
+
     /**
      * @param array<string, mixed> $context
      */
     public function encrypt(string $plaintext, mixed $key, array $context = []): string
     {
-        if (! is_array($key)) {
+        if (!is_array($key)) {
             throw new InvalidKeyException('Key must include recipient_public and sender_private entries.');
         }
 
@@ -61,10 +63,6 @@ final class PublicKeyBoxCipher implements CipherInterface
             sodium_crypto_box_keypair_from_secretkey_and_publickey($senderPrivate, $recipientPublic),
         );
 
-        if (! is_string($ciphertext)) {
-            throw new EncryptionException('Public key-box encryption failed.');
-        }
-
         return VersionedPayload::encode(
             EncryptedPayloadVersion::V1->value,
             Base64Url::encode($nonce),
@@ -77,12 +75,12 @@ final class PublicKeyBoxCipher implements CipherInterface
      */
     private function decodeKey(mixed $value, string $name, array $context): string
     {
-        if (! is_string($value) || $value === '') {
+        if (!is_string($value) || $value === '') {
             throw new InvalidKeyException(sprintf('%s must be a non-empty string.', $name));
         }
 
         $decoded = (bool) ($context['key_is_binary'] ?? false) ? $value : Base64Url::decode($value);
-        if (strlen($decoded) !== SODIUM_CRYPTO_BOX_SECRETKEYBYTES && strlen($decoded) !== SODIUM_CRYPTO_BOX_PUBLICKEYBYTES) {
+        if (strlen($decoded) !== SODIUM_CRYPTO_BOX_PUBLICKEYBYTES) {
             throw new InvalidKeyException(sprintf('%s has invalid key length.', $name));
         }
 

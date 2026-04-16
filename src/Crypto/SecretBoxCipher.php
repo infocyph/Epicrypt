@@ -1,10 +1,11 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Infocyph\Epicrypt\Crypto;
 
 use Infocyph\Epicrypt\Crypto\Contract\CipherInterface;
 use Infocyph\Epicrypt\Exception\Crypto\DecryptionException;
-use Infocyph\Epicrypt\Exception\Crypto\EncryptionException;
 use Infocyph\Epicrypt\Exception\Crypto\InvalidKeyException;
 use Infocyph\Epicrypt\Internal\Base64Url;
 use Infocyph\Epicrypt\Internal\Enum\EncryptedPayloadVersion;
@@ -31,12 +32,13 @@ final class SecretBoxCipher implements CipherInterface
             $decodedKey,
         );
 
-        if (! is_string($plaintext)) {
+        if (!is_string($plaintext)) {
             throw new DecryptionException('Secret-box decryption failed.');
         }
 
         return $plaintext;
     }
+
     /**
      * @param array<string, mixed> $context
      */
@@ -46,9 +48,6 @@ final class SecretBoxCipher implements CipherInterface
         $nonce = random_bytes(SODIUM_CRYPTO_SECRETBOX_NONCEBYTES);
 
         $ciphertext = sodium_crypto_secretbox($plaintext, $nonce, $decodedKey);
-        if (! is_string($ciphertext)) {
-            throw new EncryptionException('Secret-box encryption failed.');
-        }
 
         return VersionedPayload::encode(
             EncryptedPayloadVersion::V1->value,
@@ -62,7 +61,7 @@ final class SecretBoxCipher implements CipherInterface
      */
     private function decodeKey(mixed $key, array $context, string $operation): string
     {
-        if (! is_string($key) || $key === '') {
+        if (!is_string($key) || $key === '') {
             throw new InvalidKeyException(sprintf('%s key must be a non-empty string.', $operation));
         }
 

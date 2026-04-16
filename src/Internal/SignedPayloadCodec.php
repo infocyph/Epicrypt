@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Infocyph\Epicrypt\Internal;
 
 use Infocyph\Epicrypt\Exception\Token\ExpiredTokenException;
@@ -62,12 +64,12 @@ final readonly class SignedPayloadCodec
         [$encodedHeader, $encodedPayload, $givenSignature] = $parts;
         $computedSignature = $this->sign($encodedHeader . '.' . $encodedPayload);
 
-        if (! SecureCompare::equals($computedSignature, $givenSignature)) {
+        if (!SecureCompare::equals($computedSignature, $givenSignature)) {
             throw new InvalidTokenException('Invalid signed payload signature.');
         }
 
         $header = Json::decodeToArray(Base64Url::decode($encodedHeader));
-        if (isset($header['v']) && (! is_numeric($header['v']) || (int) $header['v'] !== SignedPayloadVersion::V1->value)) {
+        if (isset($header['v']) && (!is_numeric($header['v']) || (int) $header['v'] !== SignedPayloadVersion::V1->value)) {
             throw new InvalidTokenException('Unsupported signed payload version.');
         }
 

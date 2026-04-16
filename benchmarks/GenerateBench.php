@@ -19,6 +19,7 @@ final class GenerateBench
     private KeyMaterialGenerator $keyMaterial;
 
     private NonceGenerator $nonce;
+
     private RandomBytesGenerator $random;
 
     private SaltGenerator $salt;

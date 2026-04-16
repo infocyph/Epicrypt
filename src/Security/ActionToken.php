@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Infocyph\Epicrypt\Security;
 
 use Infocyph\Epicrypt\Exception\Token\TokenException;
@@ -41,11 +43,11 @@ final readonly class ActionToken
                 return false;
             }
 
-            if ($subject !== null && (! isset($claims['sub']) || ! is_string($claims['sub']) || ! hash_equals($claims['sub'], $subject))) {
+            if ($subject !== null && (!isset($claims['sub']) || !is_string($claims['sub']) || !hash_equals($claims['sub'], $subject))) {
                 return false;
             }
 
-            if ($action !== null && (! isset($claims['action']) || ! is_string($claims['action']) || ! hash_equals($claims['action'], $action))) {
+            if ($action !== null && (!isset($claims['action']) || !is_string($claims['action']) || !hash_equals($claims['action'], $action))) {
                 return false;
             }
 

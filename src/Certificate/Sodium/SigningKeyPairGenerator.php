@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Infocyph\Epicrypt\Certificate\Sodium;
 
 use Infocyph\Epicrypt\Certificate\Contract\KeyPairGeneratorInterface;
@@ -12,11 +14,13 @@ final class SigningKeyPairGenerator implements KeyPairGeneratorInterface
      */
     public function generate(?string $passphrase = null, bool $asBase64Url = false): array
     {
+        unset($passphrase);
+
         $keypair = sodium_crypto_sign_keypair();
         $private = sodium_crypto_sign_secretkey($keypair);
         $public = sodium_crypto_sign_publickey($keypair);
 
-        if (! $asBase64Url) {
+        if (!$asBase64Url) {
             return ['private' => $private, 'public' => $public];
         }
 

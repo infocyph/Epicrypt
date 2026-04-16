@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Infocyph\Epicrypt\Security;
 
 use Infocyph\Epicrypt\Exception\Token\KeyResolutionException;
@@ -14,7 +16,7 @@ final class KeyRotationHelper
      */
     public function resolve(string $kid, array $keySet): string
     {
-        if (! isset($keySet[$kid]) || $keySet[$kid] === '') {
+        if (!isset($keySet[$kid]) || $keySet[$kid] === '') {
             throw new KeyResolutionException('Unknown key identifier: ' . $kid);
         }
 

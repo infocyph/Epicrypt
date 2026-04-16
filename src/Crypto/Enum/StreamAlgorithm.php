@@ -7,8 +7,12 @@ namespace Infocyph\Epicrypt\Crypto\Enum;
 enum StreamAlgorithm: string
 {
     case XCHACHA20 = 'xchacha20';
+
     case XCHACHA20POLY1305 = 'xchacha20poly1305';
 
+    /**
+     * @return int<1, max>
+     */
     public function prefixLength(): int
     {
         return match ($this) {

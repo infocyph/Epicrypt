@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Infocyph\Epicrypt\Certificate\OpenSSL;
 
 use Infocyph\Epicrypt\Certificate\Contract\CertificateBuilderInterface;
@@ -20,17 +22,19 @@ final readonly class CertificateBuilder implements CertificateBuilderInterface
         $privateResource = Pem::requirePrivateKeyResource($privateKey, $passphrase);
 
         $csr = openssl_csr_new($distinguishedName, $privateResource, ['digest_alg' => $this->digestAlgorithm]);
-        if ($csr === false) {
+        if (!$csr instanceof \OpenSSLCertificateSigningRequest) {
             throw new ConfigurationException('CSR generation failed for certificate signing.');
         }
 
-        $certificate = openssl_csr_sign($csr, null, $privateResource, $days, ['digest_alg' => $this->digestAlgorithm]);
+        $signingPrivateKey = $passphrase === null ? $privateKey : [$privateKey, $passphrase];
+
+        $certificate = openssl_csr_sign($csr, null, $signingPrivateKey, $days, ['digest_alg' => $this->digestAlgorithm]);
         if ($certificate === false) {
             throw new ConfigurationException('Certificate signing failed.');
         }
 
         $exported = openssl_x509_export($certificate, $certificatePem);
-        if (! $exported || ! is_string($certificatePem) || $certificatePem === '') {
+        if (!$exported || !is_string($certificatePem) || $certificatePem === '') {
             throw new ConfigurationException('Certificate export failed.');
         }
 

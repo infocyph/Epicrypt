@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Infocyph\Epicrypt\Integrity\Support;
 
 use Infocyph\Epicrypt\Internal\SecureCompare;

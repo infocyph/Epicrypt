@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Infocyph\Epicrypt\Token\Jwt\Validation;
 
 use Infocyph\Epicrypt\Exception\Token\ExpiredTokenException;
@@ -13,7 +15,7 @@ final readonly class ExpirationValidator
 
     public function validate(mixed $notBefore, mixed $expiresAt): void
     {
-        if (! is_numeric($notBefore) || ! is_numeric($expiresAt)) {
+        if (!is_numeric($notBefore) || !is_numeric($expiresAt)) {
             throw new InvalidClaimException('Claims "nbf" and "exp" must be numeric timestamps.');
         }
 

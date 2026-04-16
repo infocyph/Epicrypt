@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Infocyph\Epicrypt\Token\Jwt\Validation;
 
 use Infocyph\Epicrypt\Exception\Token\InvalidClaimException;
@@ -18,7 +20,7 @@ final class AudienceValidator
             throw new InvalidClaimException('Invalid audience claim.');
         }
 
-        if (! is_string($audience) || $audience === '' || ! hash_equals($expectedAudience, $audience)) {
+        if (!is_string($audience) || $audience === '' || !hash_equals($expectedAudience, $audience)) {
             throw new InvalidClaimException('Invalid audience claim.');
         }
     }

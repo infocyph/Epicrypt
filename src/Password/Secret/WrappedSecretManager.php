@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Infocyph\Epicrypt\Password\Secret;
 
 use Infocyph\Epicrypt\Exception\Password\SecretProtectionException;
@@ -30,6 +32,7 @@ final class WrappedSecretManager
 
         return $plaintext;
     }
+
     public function wrap(string $secret, string $masterSecret, bool $masterSecretIsBinary = false): string
     {
         $key = $masterSecretIsBinary ? $masterSecret : Base64Url::decode($masterSecret);

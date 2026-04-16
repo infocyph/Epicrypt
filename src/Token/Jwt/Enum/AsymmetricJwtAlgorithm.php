@@ -9,10 +9,15 @@ use Infocyph\Epicrypt\Exception\Token\UnsupportedAlgorithmException;
 enum AsymmetricJwtAlgorithm: string
 {
     case ES256 = 'ES256';
+
     case ES384 = 'ES384';
+
     case ES512 = 'ES512';
+
     case RS256 = 'RS256';
+
     case RS384 = 'RS384';
+
     case RS512 = 'RS512';
 
     public static function fromHeader(string $algorithm): self

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Infocyph\Epicrypt\Token\Jwt;
 
 use ArrayAccess;
@@ -25,14 +27,9 @@ final readonly class SymmetricJwt implements JwtTokenInterface
 
     public function __construct(private SymmetricJwtAlgorithm $algorithm = SymmetricJwtAlgorithm::HS512, private ?RegisteredClaims $expectedClaims = null) {}
 
-    /**
-     * @param string|array<string, mixed>|ArrayAccess<string, mixed> $key
-     */
     public function decode(string $token, mixed $key): object
     {
-        if (! is_string($key) && ! is_array($key) && ! ($key instanceof ArrayAccess)) {
-            throw new TokenException('Key must be a string or key-set.');
-        }
+        $key = $this->requireSupportedKeyType($key);
 
         if ($this->expectedClaims === null) {
             throw new TokenException('Expected claims are required for JWT decoding.');
@@ -41,7 +38,7 @@ final readonly class SymmetricJwt implements JwtTokenInterface
         try {
             [$encodedHeader, $encodedPayload, $signature, $header, $payload] = JwtToken::parse($token);
 
-            if (! isset($header['alg']) || ! is_string($header['alg'])) {
+            if (!isset($header['alg']) || !is_string($header['alg'])) {
                 throw new UnsupportedAlgorithmException('Invalid or unsupported algorithm.');
             }
 
@@ -58,7 +55,7 @@ final readonly class SymmetricJwt implements JwtTokenInterface
                 true,
             );
 
-            if (! hash_equals($expected, $signature)) {
+            if (!hash_equals($expected, $signature)) {
                 throw new InvalidTokenException('Signature verification failed.');
             }
 
@@ -74,14 +71,11 @@ final readonly class SymmetricJwt implements JwtTokenInterface
 
     /**
      * @param array<string, mixed> $claims
-     * @param string|array<string, mixed>|ArrayAccess<string, mixed> $key
      * @param array<string, mixed> $headers
      */
     public function encode(array $claims, mixed $key, array $headers = []): string
     {
-        if (! is_string($key) && ! is_array($key) && ! ($key instanceof ArrayAccess)) {
-            throw new TokenException('Key must be a string or key-set.');
-        }
+        $key = $this->requireSupportedKeyType($key);
 
         $registeredClaims = RegisteredClaims::fromArray($claims);
         [$notBefore, $expiresAt] = $this->extractTemporalClaims($claims);
@@ -111,7 +105,11 @@ final readonly class SymmetricJwt implements JwtTokenInterface
             ];
 
             if ($keyId !== null) {
-                $header['kid'] = (string) $keyId;
+                if (!is_string($keyId) || $keyId === '') {
+                    throw new InvalidClaimException('Claim "kid" must be a non-empty string when provided.');
+                }
+
+                $header['kid'] = $keyId;
             }
 
             [$encodedHeader, $encodedPayload] = JwtToken::encodeSegments(
@@ -151,11 +149,11 @@ final readonly class SymmetricJwt implements JwtTokenInterface
      */
     private function extractTemporalClaims(array $claims): array
     {
-        if (! isset($claims['nbf'], $claims['exp'])) {
+        if (!isset($claims['nbf'], $claims['exp'])) {
             throw new InvalidClaimException('Required claims "nbf" and "exp" are missing.');
         }
 
-        if (! is_numeric($claims['nbf']) || ! is_numeric($claims['exp'])) {
+        if (!is_numeric($claims['nbf']) || !is_numeric($claims['exp'])) {
             throw new InvalidClaimException('Claims "nbf" and "exp" must be numeric timestamps.');
         }
 
@@ -173,5 +171,35 @@ final readonly class SymmetricJwt implements JwtTokenInterface
     private function removeReservedClaims(array $claims): array
     {
         return array_diff_key($claims, array_flip(self::RESERVED_CLAIMS));
+    }
+
+    /**
+     * @return string|array<string, mixed>|ArrayAccess<string, mixed>
+     */
+    private function requireSupportedKeyType(mixed $key): string|array|ArrayAccess
+    {
+        if (is_string($key)) {
+            return $key;
+        }
+
+        if ($key instanceof ArrayAccess) {
+            return $key;
+        }
+
+        if (is_array($key)) {
+            $normalized = [];
+
+            foreach ($key as $keyId => $value) {
+                if (!is_string($keyId)) {
+                    throw new TokenException('Key-set array must use string key identifiers.');
+                }
+
+                $normalized[$keyId] = $value;
+            }
+
+            return $normalized;
+        }
+
+        throw new TokenException('Key must be a string or key-set.');
     }
 }

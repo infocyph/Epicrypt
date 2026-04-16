@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Infocyph\Epicrypt\DataProtection;
 
 use Infocyph\Epicrypt\Crypto\Contract\DecryptorInterface;

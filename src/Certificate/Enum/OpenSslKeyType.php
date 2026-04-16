@@ -7,6 +7,7 @@ namespace Infocyph\Epicrypt\Certificate\Enum;
 enum OpenSslKeyType: int
 {
     case EC = OPENSSL_KEYTYPE_EC;
+
     case RSA = OPENSSL_KEYTYPE_RSA;
 
     public static function fromKeyPairType(KeyPairType $type): self

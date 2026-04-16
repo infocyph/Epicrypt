@@ -7,7 +7,9 @@ namespace Infocyph\Epicrypt\Password\Enum;
 enum PasswordHashAlgorithm: string
 {
     case ARGON2I = 'argon2i';
+
     case ARGON2ID = 'argon2id';
+
     case BCRYPT = 'bcrypt';
 
     public function toPasswordAlgorithm(): string

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Infocyph\Epicrypt\Token\Jwt;
 
 use ArrayAccess;
@@ -26,14 +28,9 @@ final readonly class AsymmetricJwt implements JwtTokenInterface
 
     public function __construct(private ?string $passphrase = null, private AsymmetricJwtAlgorithm $algorithm = AsymmetricJwtAlgorithm::RS512, private ?RegisteredClaims $expectedClaims = null) {}
 
-    /**
-     * @param string|array<string, mixed>|ArrayAccess<string, mixed> $key
-     */
     public function decode(string $token, mixed $key): object
     {
-        if (! is_string($key) && ! is_array($key) && ! ($key instanceof ArrayAccess)) {
-            throw new TokenException('Key must be a string or key-set.');
-        }
+        $key = $this->requireSupportedKeyType($key);
 
         if ($this->expectedClaims === null) {
             throw new TokenException('Expected claims are required for JWT decoding.');
@@ -42,7 +39,7 @@ final readonly class AsymmetricJwt implements JwtTokenInterface
         try {
             [$encodedHeader, $encodedPayload, $signature, $header, $payload] = JwtToken::parse($token);
 
-            if (! isset($header['alg']) || ! is_string($header['alg'])) {
+            if (!isset($header['alg']) || !is_string($header['alg'])) {
                 throw new UnsupportedAlgorithmException('Invalid or unsupported algorithm.');
             }
 
@@ -86,14 +83,11 @@ final readonly class AsymmetricJwt implements JwtTokenInterface
 
     /**
      * @param array<string, mixed> $claims
-     * @param string|array<string, mixed>|ArrayAccess<string, mixed> $key
      * @param array<string, mixed> $headers
      */
     public function encode(array $claims, mixed $key, array $headers = []): string
     {
-        if (! is_string($key) && ! is_array($key) && ! ($key instanceof ArrayAccess)) {
-            throw new TokenException('Key must be a string or key-set.');
-        }
+        $key = $this->requireSupportedKeyType($key);
 
         $registeredClaims = RegisteredClaims::fromArray($claims);
         [$notBefore, $expiresAt] = $this->extractTemporalClaims($claims);
@@ -101,7 +95,6 @@ final readonly class AsymmetricJwt implements JwtTokenInterface
 
         try {
             $algorithm = $this->algorithm;
-            $algorithm->opensslAlgorithm();
 
             $privateKey = KeyResolver::resolve($key, $keyId);
             $payload = [
@@ -123,7 +116,11 @@ final readonly class AsymmetricJwt implements JwtTokenInterface
             ];
 
             if ($keyId !== null) {
-                $header['kid'] = (string) $keyId;
+                if (!is_string($keyId) || $keyId === '') {
+                    throw new InvalidClaimException('Claim "kid" must be a non-empty string when provided.');
+                }
+
+                $header['kid'] = $keyId;
             }
 
             [$encodedHeader, $encodedPayload] = JwtToken::encodeSegments(
@@ -158,11 +155,11 @@ final readonly class AsymmetricJwt implements JwtTokenInterface
      */
     private function extractTemporalClaims(array $claims): array
     {
-        if (! isset($claims['nbf'], $claims['exp'])) {
+        if (!isset($claims['nbf'], $claims['exp'])) {
             throw new InvalidClaimException('Required claims "nbf" and "exp" are missing.');
         }
 
-        if (! is_numeric($claims['nbf']) || ! is_numeric($claims['exp'])) {
+        if (!is_numeric($claims['nbf']) || !is_numeric($claims['exp'])) {
             throw new InvalidClaimException('Claims "nbf" and "exp" must be numeric timestamps.');
         }
 
@@ -182,6 +179,36 @@ final readonly class AsymmetricJwt implements JwtTokenInterface
         return array_diff_key($claims, array_flip(self::RESERVED_CLAIMS));
     }
 
+    /**
+     * @return string|array<string, mixed>|ArrayAccess<string, mixed>
+     */
+    private function requireSupportedKeyType(mixed $key): string|array|ArrayAccess
+    {
+        if (is_string($key)) {
+            return $key;
+        }
+
+        if ($key instanceof ArrayAccess) {
+            return $key;
+        }
+
+        if (is_array($key)) {
+            $normalized = [];
+
+            foreach ($key as $keyId => $value) {
+                if (!is_string($keyId)) {
+                    throw new TokenException('Key-set array must use string key identifiers.');
+                }
+
+                $normalized[$keyId] = $value;
+            }
+
+            return $normalized;
+        }
+
+        throw new TokenException('Key must be a string or key-set.');
+    }
+
     private function sign(string $input, string $privateKey, AsymmetricJwtAlgorithm $algorithm): string
     {
         $resource = openssl_pkey_get_private($privateKey, $this->passphrase ?? '');
@@ -190,7 +217,7 @@ final readonly class AsymmetricJwt implements JwtTokenInterface
         }
 
         $result = openssl_sign($input, $signature, $resource, $algorithm->opensslAlgorithm());
-        if (! $result || ! is_string($signature)) {
+        if (!$result || !is_string($signature)) {
             throw new TokenException('JWT signing failed.');
         }
 

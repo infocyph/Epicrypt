@@ -43,6 +43,7 @@ final class TokenBench
     private SignedPayload $signedPayload;
 
     private SymmetricJwt $symmetricJwtDecoder;
+
     private SymmetricJwt $symmetricJwtEncoder;
 
     public function __construct()

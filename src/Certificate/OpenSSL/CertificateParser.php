@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Infocyph\Epicrypt\Certificate\OpenSSL;
 
 use Infocyph\Epicrypt\Certificate\Contract\CertificateParserInterface;
@@ -13,10 +15,18 @@ final class CertificateParser implements CertificateParserInterface
     public function parse(string $certificatePem): array
     {
         $parsed = openssl_x509_parse($certificatePem, false);
-        if (! is_array($parsed)) {
+        if (!is_array($parsed)) {
             throw new ConfigurationException('Certificate parsing failed.');
         }
 
-        return $parsed;
+        $normalized = [];
+        foreach ($parsed as $key => $value) {
+            if (!is_string($key)) {
+                continue;
+            }
+            $normalized[$key] = $value;
+        }
+
+        return $normalized;
     }
 }

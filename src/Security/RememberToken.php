@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Infocyph\Epicrypt\Security;
 
 use Infocyph\Epicrypt\Exception\Token\TokenException;
@@ -37,11 +39,11 @@ final readonly class RememberToken
                 return false;
             }
 
-            if ($userId !== null && (! isset($claims['sub']) || ! is_string($claims['sub']) || ! hash_equals($claims['sub'], $userId))) {
+            if ($userId !== null && (!isset($claims['sub']) || !is_string($claims['sub']) || !hash_equals($claims['sub'], $userId))) {
                 return false;
             }
 
-            if ($deviceId !== null && (! isset($claims['device']) || ! is_string($claims['device']) || ! hash_equals($claims['device'], $deviceId))) {
+            if ($deviceId !== null && (!isset($claims['device']) || !is_string($claims['device']) || !hash_equals($claims['device'], $deviceId))) {
                 return false;
             }
 

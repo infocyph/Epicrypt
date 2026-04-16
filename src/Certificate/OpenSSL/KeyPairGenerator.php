@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Infocyph\Epicrypt\Certificate\OpenSSL;
 
 use Infocyph\Epicrypt\Certificate\Contract\KeyPairGeneratorInterface;
@@ -36,18 +38,18 @@ final readonly class KeyPairGenerator implements KeyPairGeneratorInterface
             throw new ConfigurationException('OpenSSL key pair generation failed.');
         }
 
-        $privateKey = '';
+        $privateKey = null;
         $exported = openssl_pkey_export($resource, $privateKey, $passphrase ?? '');
-        if (! $exported || $privateKey === '') {
+        if (!$exported || !is_string($privateKey) || $privateKey === '') {
             throw new ConfigurationException('Failed to export private key.');
         }
 
         $details = openssl_pkey_get_details($resource);
-        if (! is_array($details) || ! isset($details['key']) || ! is_string($details['key']) || $details['key'] === '') {
+        if (!is_array($details) || !isset($details['key']) || !is_string($details['key']) || $details['key'] === '') {
             throw new ConfigurationException('Failed to export public key.');
         }
 
-        if (! $asBase64Url) {
+        if (!$asBase64Url) {
             return ['private' => $privateKey, 'public' => $details['key']];
         }
 

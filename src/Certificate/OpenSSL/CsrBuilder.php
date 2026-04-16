@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Infocyph\Epicrypt\Certificate\OpenSSL;
 
 use Infocyph\Epicrypt\Certificate\Contract\CsrBuilderInterface;
@@ -16,12 +18,12 @@ final class CsrBuilder implements CsrBuilderInterface
         $privateResource = Pem::requirePrivateKeyResource($privateKey, $passphrase);
 
         $csr = openssl_csr_new($distinguishedName, $privateResource, ['digest_alg' => 'sha512']);
-        if ($csr === false) {
+        if (!$csr instanceof \OpenSSLCertificateSigningRequest) {
             throw new ConfigurationException('CSR generation failed.');
         }
 
         $exported = openssl_csr_export($csr, $csrPem);
-        if (! $exported || ! is_string($csrPem) || $csrPem === '') {
+        if (!$exported || !is_string($csrPem) || $csrPem === '') {
             throw new ConfigurationException('CSR export failed.');
         }
 

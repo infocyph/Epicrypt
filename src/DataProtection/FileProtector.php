@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Infocyph\Epicrypt\DataProtection;
 
 use Infocyph\Epicrypt\Crypto\Enum\StreamAlgorithm;
@@ -37,7 +39,7 @@ final class FileProtector
 
     private function assertReadableFile(string $path): void
     {
-        if (! file_exists($path) || ! is_readable($path)) {
+        if (!file_exists($path) || !is_readable($path)) {
             throw new FileAccessException('Input file is not readable: ' . $path);
         }
     }

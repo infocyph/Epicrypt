@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Infocyph\Epicrypt\Generate\KeyMaterial;
 
 use Infocyph\Epicrypt\Generate\RandomBytesGenerator;

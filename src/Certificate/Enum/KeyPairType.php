@@ -9,8 +9,11 @@ use Infocyph\Epicrypt\Exception\ConfigurationException;
 enum KeyPairType: string
 {
     case OPENSSL_EC = 'openssl_ec';
+
     case OPENSSL_RSA = 'openssl_rsa';
+
     case SODIUM_BOX = 'sodium_box';
+
     case SODIUM_SIGN = 'sodium_sign';
 
     public function isOpenSsl(): bool

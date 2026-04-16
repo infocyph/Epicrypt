@@ -36,6 +36,7 @@ final class SecurityBench
     private RememberToken $rememberToken;
 
     private string $rememberTokenValue;
+
     private SignedUrl $signedUrl;
 
     private string $signedUrlValue;

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Infocyph\Epicrypt\Token\Support;
 
 use Infocyph\Epicrypt\Generate\KeyMaterial\TokenMaterialGenerator;

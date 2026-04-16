@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Infocyph\Epicrypt\Token\Jwt\Validation;
 
 use Infocyph\Epicrypt\Exception\Token\InvalidClaimException;
@@ -13,7 +15,7 @@ final class ClaimValidator
     public function assertRequired(array $claims, array $required): void
     {
         foreach ($required as $claim) {
-            if (! array_key_exists($claim, $claims)) {
+            if (!array_key_exists($claim, $claims)) {
                 throw new InvalidClaimException('Missing claim: ' . $claim);
             }
         }
@@ -24,7 +26,7 @@ final class ClaimValidator
      */
     public function assertStringClaim(array $claims, string $claim): void
     {
-        if (! isset($claims[$claim]) || ! is_string($claims[$claim]) || $claims[$claim] === '') {
+        if (!isset($claims[$claim]) || !is_string($claims[$claim]) || $claims[$claim] === '') {
             throw new InvalidClaimException('Invalid claim: ' . $claim);
         }
     }

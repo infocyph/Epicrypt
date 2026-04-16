@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Infocyph\Epicrypt\Certificate\Support;
 
 use Infocyph\Epicrypt\Exception\ConfigurationException;

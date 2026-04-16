@@ -7,15 +7,21 @@ namespace Infocyph\Epicrypt\Crypto\Enum;
 enum AeadAlgorithm: string
 {
     case AES_256_GCM = 'aes-256-gcm';
+
     case CHACHA20_POLY1305 = 'chacha20-poly1305';
+
     case CHACHA20_POLY1305_IETF = 'chacha20-poly1305-ietf';
+
     case XCHACHA20_POLY1305_IETF = 'xchacha20-poly1305-ietf';
 
     public function isAvailable(): bool
     {
-        return ! $this->requiresHardwareSupport() || sodium_crypto_aead_aes256gcm_is_available();
+        return !$this->requiresHardwareSupport() || sodium_crypto_aead_aes256gcm_is_available();
     }
 
+    /**
+     * @return int<1, max>
+     */
     public function keyLength(): int
     {
         return match ($this) {
@@ -26,6 +32,9 @@ enum AeadAlgorithm: string
         };
     }
 
+    /**
+     * @return int<1, max>
+     */
     public function nonceLength(): int
     {
         return match ($this) {

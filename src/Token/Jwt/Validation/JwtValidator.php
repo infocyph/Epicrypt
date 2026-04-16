@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Infocyph\Epicrypt\Token\Jwt\Validation;
 
 use Infocyph\Epicrypt\Exception\Token\InvalidClaimException;
@@ -27,7 +29,7 @@ final readonly class JwtValidator
         $this->expirationValidator->validate($payload['nbf'] ?? null, $payload['exp'] ?? null);
 
         if ($this->expected->jwtId !== null) {
-            if (! isset($payload['jti']) || ! is_string($payload['jti']) || ! hash_equals($this->expected->jwtId, $payload['jti'])) {
+            if (!isset($payload['jti']) || !is_string($payload['jti']) || !hash_equals($this->expected->jwtId, $payload['jti'])) {
                 throw new InvalidClaimException('Invalid JWT ID claim.');
             }
         }

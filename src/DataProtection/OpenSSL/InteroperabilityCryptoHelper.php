@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Infocyph\Epicrypt\DataProtection\OpenSSL;
 
 use Infocyph\Epicrypt\Exception\ConfigurationException;
@@ -47,7 +49,7 @@ final class InteroperabilityCryptoHelper
             $key = $this->deriveKey($secret, $salt);
 
             $expectedSignature = hash_hmac(self::HMAC_ALGORITHM, $cipherRaw, $key, true);
-            if (! hash_equals($expectedSignature, $signature)) {
+            if (!hash_equals($expectedSignature, $signature)) {
                 throw new DecryptionException('OpenSSL string signature verification failed.');
             }
 
@@ -59,7 +61,7 @@ final class InteroperabilityCryptoHelper
                 $iv,
             );
 
-            if (! is_string($decrypted)) {
+            if (!is_string($decrypted)) {
                 throw new DecryptionException('OpenSSL string decryption failed.');
             }
 
@@ -90,14 +92,14 @@ final class InteroperabilityCryptoHelper
                 $iv,
             );
 
-            if (! is_string($cipherRaw)) {
+            if (!is_string($cipherRaw)) {
                 throw new EncryptionException('OpenSSL string encryption failed.');
             }
 
             $signature = hash_hmac(self::HMAC_ALGORITHM, $cipherRaw, $key, true);
             $payload = $iv . $signature . $cipherRaw;
 
-            if (! $asBase64) {
+            if (!$asBase64) {
                 return $payload;
             }
 
@@ -117,7 +119,7 @@ final class InteroperabilityCryptoHelper
             self::KEY_ALGORITHM,
         );
 
-        if (! is_string($key) || $key === '') {
+        if (!is_string($key) || $key === '') {
             throw new ConfigurationException('Unable to derive OpenSSL encryption key.');
         }
 

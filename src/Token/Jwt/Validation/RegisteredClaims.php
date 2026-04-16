@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Infocyph\Epicrypt\Token\Jwt\Validation;
 
 use Infocyph\Epicrypt\Exception\Token\InvalidClaimException;
@@ -18,11 +20,9 @@ final readonly class RegisteredClaims
      */
     public static function fromArray(array $claims): self
     {
-        foreach (['iss', 'aud', 'sub'] as $requiredClaim) {
-            if (!isset($claims[$requiredClaim]) || !is_string($claims[$requiredClaim]) || $claims[$requiredClaim] === '') {
-                throw new InvalidClaimException("Missing or invalid required claim: {$requiredClaim}");
-            }
-        }
+        $issuer = self::requireStringClaim($claims, 'iss');
+        $audience = self::requireStringClaim($claims, 'aud');
+        $subject = self::requireStringClaim($claims, 'sub');
 
         $jwtId = $claims['jti'] ?? null;
         if ($jwtId !== null && (!is_string($jwtId) || $jwtId === '')) {
@@ -30,10 +30,23 @@ final readonly class RegisteredClaims
         }
 
         return new self(
-            issuer: $claims['iss'],
-            audience: $claims['aud'],
-            subject: $claims['sub'],
+            issuer: $issuer,
+            audience: $audience,
+            subject: $subject,
             jwtId: $jwtId,
         );
+    }
+
+    /**
+     * @param array<string, mixed> $claims
+     */
+    private static function requireStringClaim(array $claims, string $name): string
+    {
+        $value = $claims[$name] ?? null;
+        if (!is_string($value) || $value === '') {
+            throw new InvalidClaimException("Missing or invalid required claim: {$name}");
+        }
+
+        return $value;
     }
 }

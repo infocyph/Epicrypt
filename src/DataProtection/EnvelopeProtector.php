@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Infocyph\Epicrypt\DataProtection;
 
 use Infocyph\Epicrypt\Crypto\SecretBoxCipher;
@@ -23,17 +25,27 @@ final readonly class EnvelopeProtector
         try {
             $envelope = Json::decodeToArray($encodedEnvelope);
 
-            if (isset($envelope['v']) && (! is_numeric($envelope['v']) || (int) $envelope['v'] !== EnvelopeVersion::V1->value)) {
+            if (isset($envelope['v']) && (!is_numeric($envelope['v']) || (int) $envelope['v'] !== EnvelopeVersion::V1->value)) {
                 throw new DecryptionException('Unsupported envelope format version.');
             }
 
-            if (isset($envelope['alg']) && (! is_string($envelope['alg']) || $envelope['alg'] !== EnvelopeAlgorithm::SECRETBOX->value)) {
+            if (isset($envelope['alg']) && (!is_string($envelope['alg']) || $envelope['alg'] !== EnvelopeAlgorithm::SECRETBOX->value)) {
                 throw new DecryptionException('Unsupported envelope algorithm.');
             }
 
-            $dataKey = $this->cipher->decrypt((string) ($envelope['encrypted_key'] ?? ''), $masterKey);
+            $encryptedKey = $envelope['encrypted_key'] ?? null;
+            if (!is_string($encryptedKey) || $encryptedKey === '') {
+                throw new DecryptionException('Envelope encrypted_key must be a non-empty string.');
+            }
 
-            return $this->cipher->decrypt((string) ($envelope['encrypted_data'] ?? ''), $dataKey);
+            $encryptedData = $envelope['encrypted_data'] ?? null;
+            if (!is_string($encryptedData) || $encryptedData === '') {
+                throw new DecryptionException('Envelope encrypted_data must be a non-empty string.');
+            }
+
+            $dataKey = $this->cipher->decrypt($encryptedKey, $masterKey);
+
+            return $this->cipher->decrypt($encryptedData, $dataKey);
         } catch (DecryptionException $e) {
             throw $e;
         } catch (Throwable $e) {
