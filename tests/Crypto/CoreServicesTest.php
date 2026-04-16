@@ -14,6 +14,7 @@ it('encrypts and decrypts with AEAD services', function () {
     $ciphertext = $cipher->encrypt('epicrypt-aead', $key, ['aad' => 'meta']);
     $plaintext = $cipher->decrypt($ciphertext, $key, ['aad' => 'meta']);
 
+    expect($ciphertext)->toStartWith('epc1.');
     expect($plaintext)->toBe('epicrypt-aead');
 });
 

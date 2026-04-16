@@ -8,6 +8,8 @@ use Infocyph\Epicrypt\Exception\Crypto\DecryptionException;
 use Infocyph\Epicrypt\Exception\Crypto\EncryptionException;
 use Infocyph\Epicrypt\Exception\Crypto\InvalidKeyException;
 use Infocyph\Epicrypt\Internal\Base64Url;
+use Infocyph\Epicrypt\Internal\SecurityPolicy;
+use Infocyph\Epicrypt\Internal\VersionedPayload;
 
 final class SealedBoxCipher implements EncryptorInterface, DecryptorInterface
 {
@@ -25,7 +27,13 @@ final class SealedBoxCipher implements EncryptorInterface, DecryptorInterface
             throw new InvalidKeyException('Recipient keypair has invalid length.');
         }
 
-        $plaintext = sodium_crypto_box_seal_open(Base64Url::decode($ciphertext), $keypair);
+        $parsedPayload = VersionedPayload::parse($ciphertext, SecurityPolicy::ENCRYPTED_PAYLOAD_VERSION, 1);
+        if ($parsedPayload === null) {
+            throw new DecryptionException('Invalid ciphertext format.');
+        }
+        [, $parts] = $parsedPayload;
+
+        $plaintext = sodium_crypto_box_seal_open(Base64Url::decode($parts[0]), $keypair);
         if (! is_string($plaintext)) {
             throw new DecryptionException('Sealed-box decryption failed.');
         }
@@ -51,6 +59,9 @@ final class SealedBoxCipher implements EncryptorInterface, DecryptorInterface
             throw new EncryptionException('Sealed-box encryption failed.');
         }
 
-        return Base64Url::encode($ciphertext);
+        return VersionedPayload::encode(
+            SecurityPolicy::ENCRYPTED_PAYLOAD_VERSION,
+            Base64Url::encode($ciphertext),
+        );
     }
 }

@@ -3,13 +3,18 @@
 namespace Infocyph\Epicrypt\Security;
 
 use Infocyph\Epicrypt\Exception\Token\TokenException;
+use Infocyph\Epicrypt\Internal\SignedPayloadCodec;
 
 final readonly class RememberToken
 {
+    private SignedPayloadCodec $codec;
+
     public function __construct(
-        private SignedPayloadCodec $codec,
+        string $secret,
         private int $ttlSeconds = 1209600,
-    ) {}
+    ) {
+        $this->codec = new SignedPayloadCodec($secret);
+    }
 
     public function issue(string $userId, string $deviceId): string
     {

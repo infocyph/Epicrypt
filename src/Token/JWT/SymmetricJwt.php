@@ -12,6 +12,7 @@ use Infocyph\Epicrypt\Exception\Token\KeyResolutionException;
 use Infocyph\Epicrypt\Exception\Token\TokenException;
 use Infocyph\Epicrypt\Exception\Token\UnsupportedAlgorithmException;
 use Infocyph\Epicrypt\Internal\Base64Url;
+use Infocyph\Epicrypt\Internal\SecurityPolicy;
 use Infocyph\Epicrypt\Token\JWT\Support\AlgorithmMap;
 use Infocyph\Epicrypt\Token\JWT\Support\JwtToken;
 use Infocyph\Epicrypt\Token\JWT\Validation\JwtValidator;
@@ -26,7 +27,7 @@ final readonly class SymmetricJwt implements TokenEncoderInterface, TokenDecoder
     private const array RESERVED_CLAIMS = ['iss', 'aud', 'sub', 'jti', 'iat', 'nbf', 'exp', 'kid'];
 
     public function __construct(
-        private string $algorithm = 'HS512',
+        private string $algorithm = SecurityPolicy::DEFAULT_JWT_SYMMETRIC_ALGORITHM,
         private ?RegisteredClaims $expectedClaims = null,
     ) {}
 

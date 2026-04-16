@@ -6,7 +6,7 @@ use Infocyph\Epicrypt\Contract\TokenDecoderInterface;
 use Infocyph\Epicrypt\Contract\TokenEncoderInterface;
 use Infocyph\Epicrypt\Contract\TokenVerifierInterface;
 use Infocyph\Epicrypt\Exception\Token\TokenException;
-use Infocyph\Epicrypt\Security\SignedPayloadCodec;
+use Infocyph\Epicrypt\Internal\SignedPayloadCodec;
 
 final readonly class SignedPayload implements TokenEncoderInterface, TokenDecoderInterface, TokenVerifierInterface
 {
@@ -19,7 +19,11 @@ final readonly class SignedPayload implements TokenEncoderInterface, TokenDecode
      */
     public function decode(string $token, mixed $key): array
     {
-        return new SignedPayloadCodec((string) $key)->verify($token, $this->context);
+        if (! is_string($key) || $key === '') {
+            throw new TokenException('Signed payload key must be a non-empty string.');
+        }
+
+        return new SignedPayloadCodec($key)->verify($token, $this->context);
     }
 
     /**
@@ -28,7 +32,11 @@ final readonly class SignedPayload implements TokenEncoderInterface, TokenDecode
      */
     public function encode(array $claims, mixed $key, array $headers = []): string
     {
-        return new SignedPayloadCodec((string) $key)->issue(
+        if (! is_string($key) || $key === '') {
+            throw new TokenException('Signed payload key must be a non-empty string.');
+        }
+
+        return new SignedPayloadCodec($key)->issue(
             $claims,
             isset($headers['exp']) && is_numeric($headers['exp']) ? (int) $headers['exp'] : null,
             $this->context,

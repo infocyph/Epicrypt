@@ -3,13 +3,18 @@
 namespace Infocyph\Epicrypt\Security;
 
 use Infocyph\Epicrypt\Exception\Token\TokenException;
+use Infocyph\Epicrypt\Internal\SignedPayloadCodec;
 
 final readonly class ActionToken
 {
+    private SignedPayloadCodec $codec;
+
     public function __construct(
-        private SignedPayloadCodec $codec,
+        string $secret,
         private int $ttlSeconds = 900,
-    ) {}
+    ) {
+        $this->codec = new SignedPayloadCodec($secret);
+    }
 
     /**
      * @param array<string, scalar> $context

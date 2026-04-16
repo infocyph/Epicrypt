@@ -13,6 +13,7 @@ use Infocyph\Epicrypt\Exception\Token\TokenException;
 use Infocyph\Epicrypt\Exception\Token\UnsupportedAlgorithmException;
 use Infocyph\Epicrypt\Internal\Base64Url;
 use Infocyph\Epicrypt\Internal\EcdsaSignatureConverter;
+use Infocyph\Epicrypt\Internal\SecurityPolicy;
 use Infocyph\Epicrypt\Token\JWT\Support\AlgorithmMap;
 use Infocyph\Epicrypt\Token\JWT\Support\JwtToken;
 use Infocyph\Epicrypt\Token\JWT\Validation\JwtValidator;
@@ -28,7 +29,7 @@ final readonly class AsymmetricJwt implements TokenEncoderInterface, TokenDecode
 
     public function __construct(
         private ?string $passphrase = null,
-        private string $algorithm = 'RS512',
+        private string $algorithm = SecurityPolicy::DEFAULT_JWT_ASYMMETRIC_ALGORITHM,
         private ?RegisteredClaims $expectedClaims = null,
     ) {}
 

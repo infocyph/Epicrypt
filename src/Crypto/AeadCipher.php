@@ -8,8 +8,10 @@ use Infocyph\Epicrypt\Exception\Crypto\DecryptionException;
 use Infocyph\Epicrypt\Exception\Crypto\EncryptionException;
 use Infocyph\Epicrypt\Exception\Crypto\InvalidKeyException;
 use Infocyph\Epicrypt\Exception\Crypto\InvalidNonceException;
-use Infocyph\Epicrypt\Exception\Token\UnsupportedAlgorithmException;
+use Infocyph\Epicrypt\Exception\Crypto\UnsupportedCipherException;
 use Infocyph\Epicrypt\Internal\Base64Url;
+use Infocyph\Epicrypt\Internal\SecurityPolicy;
+use Infocyph\Epicrypt\Internal\VersionedPayload;
 
 final readonly class AeadCipher implements EncryptorInterface, DecryptorInterface
 {
@@ -24,7 +26,7 @@ final readonly class AeadCipher implements EncryptorInterface, DecryptorInterfac
     ];
 
     public function __construct(
-        private string $algorithm = 'xchacha20-poly1305-ietf',
+        private string $algorithm = SecurityPolicy::DEFAULT_AEAD_ALGORITHM,
     ) {}
 
     /**
@@ -35,10 +37,11 @@ final readonly class AeadCipher implements EncryptorInterface, DecryptorInterfac
         $config = $this->config();
         $decodedKey = $this->decodeKey($key, $config['key'], (bool) ($context['key_is_binary'] ?? false), 'Decryption');
 
-        $parts = explode('.', $ciphertext, 2);
-        if (count($parts) !== 2 || $parts[0] === '' || $parts[1] === '') {
+        $parsedPayload = VersionedPayload::parse($ciphertext, SecurityPolicy::ENCRYPTED_PAYLOAD_VERSION, 2);
+        if ($parsedPayload === null) {
             throw new DecryptionException('Invalid ciphertext format.');
         }
+        [, $parts] = $parsedPayload;
 
         $nonce = Base64Url::decode($parts[0]);
         if (strlen($nonce) !== $config['nonce']) {
@@ -100,7 +103,11 @@ final readonly class AeadCipher implements EncryptorInterface, DecryptorInterfac
             throw new EncryptionException('AEAD encryption failed.');
         }
 
-        return Base64Url::encode($nonce) . '.' . Base64Url::encode($ciphertext);
+        return VersionedPayload::encode(
+            SecurityPolicy::ENCRYPTED_PAYLOAD_VERSION,
+            Base64Url::encode($nonce),
+            Base64Url::encode($ciphertext),
+        );
     }
 
     /**
@@ -109,12 +116,12 @@ final readonly class AeadCipher implements EncryptorInterface, DecryptorInterfac
     private function config(): array
     {
         if (! isset(self::CONFIG[$this->algorithm])) {
-            throw new UnsupportedAlgorithmException('Unsupported AEAD algorithm: ' . $this->algorithm);
+            throw new UnsupportedCipherException('Unsupported AEAD algorithm: ' . $this->algorithm);
         }
 
         $config = self::CONFIG[$this->algorithm];
         if (($config['requires_hardware'] ?? false) && ! sodium_crypto_aead_aes256gcm_is_available()) {
-            throw new UnsupportedAlgorithmException('AES-256-GCM hardware support is not available.');
+            throw new UnsupportedCipherException('AES-256-GCM hardware support is not available.');
         }
 
         return $config;

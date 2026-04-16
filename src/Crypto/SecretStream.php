@@ -4,10 +4,10 @@ namespace Infocyph\Epicrypt\Crypto;
 
 use Infocyph\Epicrypt\Exception\Crypto\DecryptionException;
 use Infocyph\Epicrypt\Exception\Crypto\EncryptionException;
+use Infocyph\Epicrypt\Exception\Crypto\UnsupportedCipherException;
 use Infocyph\Epicrypt\Exception\FileAccessException;
 use Infocyph\Pathwise\FileManager\SafeFileReader;
 use Infocyph\Pathwise\FileManager\SafeFileWriter;
-use InvalidArgumentException;
 use RuntimeException;
 
 final readonly class SecretStream
@@ -65,7 +65,7 @@ final readonly class SecretStream
     private function assertSupportedAlgorithm(string $algorithm): void
     {
         if (! in_array($algorithm, self::SUPPORTED_ALGORITHMS, true)) {
-            throw new InvalidArgumentException('Unsupported algorithm: ' . $algorithm);
+            throw new UnsupportedCipherException('Unsupported stream algorithm: ' . $algorithm);
         }
     }
 

@@ -5,6 +5,7 @@ namespace Infocyph\Epicrypt\Security;
 use Infocyph\Epicrypt\Exception\Token\KeyResolutionException;
 use Infocyph\Epicrypt\Internal\Base64Url;
 use Infocyph\Epicrypt\Internal\SecureCompare;
+use Infocyph\Epicrypt\Internal\SecurityPolicy;
 
 final class KeyRotationHelper
 {
@@ -27,7 +28,7 @@ final class KeyRotationHelper
     {
         $key = $this->resolve($kid, $keySet);
 
-        return Base64Url::encode(hash_hmac('sha256', $payload, $key, true));
+        return Base64Url::encode(hash_hmac(SecurityPolicy::DEFAULT_KEY_ROTATION_HMAC_ALGORITHM, $payload, $key, true));
     }
 
     /**
@@ -36,13 +37,13 @@ final class KeyRotationHelper
     public function verify(string $payload, string $signature, array $keySet, ?string $kid = null): bool
     {
         if ($kid !== null) {
-            $computed = Base64Url::encode(hash_hmac('sha256', $payload, $this->resolve($kid, $keySet), true));
+            $computed = Base64Url::encode(hash_hmac(SecurityPolicy::DEFAULT_KEY_ROTATION_HMAC_ALGORITHM, $payload, $this->resolve($kid, $keySet), true));
 
             return SecureCompare::equals($computed, $signature);
         }
 
         foreach ($keySet as $key) {
-            $computed = Base64Url::encode(hash_hmac('sha256', $payload, $key, true));
+            $computed = Base64Url::encode(hash_hmac(SecurityPolicy::DEFAULT_KEY_ROTATION_HMAC_ALGORITHM, $payload, $key, true));
             if (SecureCompare::equals($computed, $signature)) {
                 return true;
             }

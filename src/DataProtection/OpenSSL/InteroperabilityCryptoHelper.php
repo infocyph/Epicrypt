@@ -2,6 +2,7 @@
 
 namespace Infocyph\Epicrypt\DataProtection\OpenSSL;
 
+use Infocyph\Epicrypt\Exception\ConfigurationException;
 use Infocyph\Epicrypt\Exception\Crypto\DecryptionException;
 use Infocyph\Epicrypt\Exception\Crypto\EncryptionException;
 use Throwable;
@@ -117,7 +118,7 @@ final class InteroperabilityCryptoHelper
         );
 
         if (! is_string($key) || $key === '') {
-            throw new \RuntimeException('Unable to derive OpenSSL encryption key.');
+            throw new ConfigurationException('Unable to derive OpenSSL encryption key.');
         }
 
         return $key;

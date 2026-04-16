@@ -3,13 +3,18 @@
 namespace Infocyph\Epicrypt\Security;
 
 use Infocyph\Epicrypt\Exception\Token\TokenException;
+use Infocyph\Epicrypt\Internal\SignedPayloadCodec;
 
 final readonly class EmailVerificationToken
 {
+    private SignedPayloadCodec $codec;
+
     public function __construct(
-        private SignedPayloadCodec $codec,
+        string $secret,
         private int $ttlSeconds = 86400,
-    ) {}
+    ) {
+        $this->codec = new SignedPayloadCodec($secret);
+    }
 
     public function issue(string $userId, string $email): string
     {

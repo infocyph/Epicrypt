@@ -4,13 +4,18 @@ namespace Infocyph\Epicrypt\Security;
 
 use Infocyph\Epicrypt\Contract\CsrfTokenManagerInterface;
 use Infocyph\Epicrypt\Exception\Token\TokenException;
+use Infocyph\Epicrypt\Internal\SignedPayloadCodec;
 
 final readonly class CsrfTokenManager implements CsrfTokenManagerInterface
 {
+    private SignedPayloadCodec $codec;
+
     public function __construct(
-        private SignedPayloadCodec $codec,
+        string $secret,
         private int $ttlSeconds = 3600,
-    ) {}
+    ) {
+        $this->codec = new SignedPayloadCodec($secret);
+    }
 
     public function issueToken(string $sessionId): string
     {

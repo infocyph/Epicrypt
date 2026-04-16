@@ -2,6 +2,8 @@
 
 namespace Infocyph\Epicrypt\Generate;
 
+use Infocyph\Epicrypt\Exception\ConfigurationException;
+
 final class Random
 {
     public static function bool(): bool
@@ -11,6 +13,13 @@ final class Random
 
     public static function number(int $length = 6): int
     {
+        if ($length < 1) {
+            throw new ConfigurationException('Number length must be at least 1.');
+        }
+        if ($length > 18) {
+            throw new ConfigurationException('Number length must be 18 or less.');
+        }
+
         return random_int(
             (int) ('1' . str_repeat('0', $length - 1)),
             (int) str_repeat('9', $length),

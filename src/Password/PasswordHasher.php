@@ -4,6 +4,7 @@ namespace Infocyph\Epicrypt\Password;
 
 use Infocyph\Epicrypt\Contract\PasswordHasherInterface;
 use Infocyph\Epicrypt\Exception\Password\PasswordHashException;
+use Infocyph\Epicrypt\Internal\SecurityPolicy;
 
 final class PasswordHasher implements PasswordHasherInterface
 {
@@ -13,19 +14,15 @@ final class PasswordHasher implements PasswordHasherInterface
     public function hashPassword(string $password, array $options = []): string
     {
         $algo = $options['algorithm'] ?? PASSWORD_ARGON2ID;
-
-        $hashOptions = [];
-        if (isset($options['memory_cost'])) {
-            $hashOptions['memory_cost'] = (int) $options['memory_cost'];
+        if (! in_array((string) $algo, password_algos(), true)) {
+            throw new PasswordHashException('Unsupported password hashing algorithm.');
         }
 
-        if (isset($options['time_cost'])) {
-            $hashOptions['time_cost'] = (int) $options['time_cost'];
-        }
-
-        if (isset($options['threads'])) {
-            $hashOptions['threads'] = (int) $options['threads'];
-        }
+        $hashOptions = [
+            'memory_cost' => (int) ($options['memory_cost'] ?? SecurityPolicy::PASSWORD_DEFAULT_MEMORY_COST),
+            'time_cost' => (int) ($options['time_cost'] ?? SecurityPolicy::PASSWORD_DEFAULT_TIME_COST),
+            'threads' => (int) ($options['threads'] ?? SecurityPolicy::PASSWORD_DEFAULT_THREADS),
+        ];
 
         $hash = password_hash($password, $algo, $hashOptions);
         if (! is_string($hash)) {

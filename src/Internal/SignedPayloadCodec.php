@@ -1,26 +1,42 @@
 <?php
 
-namespace Infocyph\Epicrypt\Security;
+namespace Infocyph\Epicrypt\Internal;
 
 use Infocyph\Epicrypt\Exception\Token\ExpiredTokenException;
 use Infocyph\Epicrypt\Exception\Token\InvalidTokenException;
-use Infocyph\Epicrypt\Internal\Base64Url;
-use Infocyph\Epicrypt\Internal\Json;
-use Infocyph\Epicrypt\Internal\SecureCompare;
+use Infocyph\Epicrypt\Exception\Token\UnsupportedAlgorithmException;
 
 final readonly class SignedPayloadCodec
 {
+    /**
+     * @var array<string>
+     */
+    private const array SUPPORTED_ALGORITHMS = ['sha256', 'sha512'];
+
     public function __construct(
         private string $secret,
-        private string $algorithm = 'sha256',
-    ) {}
+        private string $algorithm = SecurityPolicy::DEFAULT_SIGNED_PAYLOAD_ALGORITHM,
+    ) {
+        if ($this->secret === '') {
+            throw new InvalidTokenException('Signed payload secret must be non-empty.');
+        }
+
+        if (! in_array($this->algorithm, self::SUPPORTED_ALGORITHMS, true)) {
+            throw new UnsupportedAlgorithmException('Unsupported signed payload algorithm.');
+        }
+    }
 
     /**
      * @param array<string, mixed> $claims
      */
     public function issue(array $claims, ?int $expiresAt = null, ?string $type = null): string
     {
-        $header = ['alg' => strtoupper($this->algorithm), 'typ' => 'SPT'];
+        $header = [
+            'alg' => strtoupper($this->algorithm),
+            'typ' => 'SPT',
+            'v' => SecurityPolicy::SIGNED_PAYLOAD_FORMAT_VERSION,
+        ];
+
         if ($type !== null) {
             $header['ctx'] = $type;
         }
@@ -56,6 +72,10 @@ final readonly class SignedPayloadCodec
         }
 
         $header = Json::decodeToArray(Base64Url::decode($encodedHeader));
+        if (isset($header['v']) && (! is_numeric($header['v']) || (int) $header['v'] !== SecurityPolicy::SIGNED_PAYLOAD_FORMAT_VERSION)) {
+            throw new InvalidTokenException('Unsupported signed payload version.');
+        }
+
         if ($expectedType !== null && ($header['ctx'] ?? null) !== $expectedType) {
             throw new InvalidTokenException('Invalid signed payload context.');
         }

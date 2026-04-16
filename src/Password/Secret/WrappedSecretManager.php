@@ -4,6 +4,8 @@ namespace Infocyph\Epicrypt\Password\Secret;
 
 use Infocyph\Epicrypt\Exception\Password\SecretProtectionException;
 use Infocyph\Epicrypt\Internal\Base64Url;
+use Infocyph\Epicrypt\Internal\SecurityPolicy;
+use Infocyph\Epicrypt\Internal\VersionedPayload;
 
 final class WrappedSecretManager
 {
@@ -38,7 +40,11 @@ final class WrappedSecretManager
         $nonce = random_bytes(SODIUM_CRYPTO_SECRETBOX_NONCEBYTES);
         $ciphertext = sodium_crypto_secretbox($secret, $nonce, $key);
 
-        return Base64Url::encode($nonce) . '.' . Base64Url::encode($ciphertext);
+        return VersionedPayload::encode(
+            SecurityPolicy::WRAPPED_SECRET_VERSION,
+            Base64Url::encode($nonce),
+            Base64Url::encode($ciphertext),
+        );
     }
 
     /**
@@ -46,10 +52,11 @@ final class WrappedSecretManager
      */
     private function splitWrappedSecret(string $wrappedSecret): array
     {
-        $parts = explode('.', $wrappedSecret, 2);
-        if (count($parts) !== 2 || $parts[0] === '' || $parts[1] === '') {
+        $parsedPayload = VersionedPayload::parse($wrappedSecret, SecurityPolicy::WRAPPED_SECRET_VERSION, 2);
+        if ($parsedPayload === null) {
             throw new SecretProtectionException('Invalid wrapped secret format.');
         }
+        [, $parts] = $parsedPayload;
 
         return [$parts[0], $parts[1]];
     }

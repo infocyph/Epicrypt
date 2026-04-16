@@ -8,6 +8,8 @@ use Infocyph\Epicrypt\Exception\Crypto\DecryptionException;
 use Infocyph\Epicrypt\Exception\Crypto\EncryptionException;
 use Infocyph\Epicrypt\Exception\Crypto\InvalidKeyException;
 use Infocyph\Epicrypt\Internal\Base64Url;
+use Infocyph\Epicrypt\Internal\SecurityPolicy;
+use Infocyph\Epicrypt\Internal\VersionedPayload;
 
 final class SecretBoxCipher implements EncryptorInterface, DecryptorInterface
 {
@@ -18,10 +20,11 @@ final class SecretBoxCipher implements EncryptorInterface, DecryptorInterface
     {
         $decodedKey = $this->decodeKey($key, $context, 'Decryption');
 
-        $parts = explode('.', $ciphertext, 2);
-        if (count($parts) !== 2 || $parts[0] === '' || $parts[1] === '') {
+        $parsedPayload = VersionedPayload::parse($ciphertext, SecurityPolicy::ENCRYPTED_PAYLOAD_VERSION, 2);
+        if ($parsedPayload === null) {
             throw new DecryptionException('Invalid ciphertext format.');
         }
+        [, $parts] = $parsedPayload;
 
         $plaintext = sodium_crypto_secretbox_open(
             Base64Url::decode($parts[1]),
@@ -48,7 +51,11 @@ final class SecretBoxCipher implements EncryptorInterface, DecryptorInterface
             throw new EncryptionException('Secret-box encryption failed.');
         }
 
-        return Base64Url::encode($nonce) . '.' . Base64Url::encode($ciphertext);
+        return VersionedPayload::encode(
+            SecurityPolicy::ENCRYPTED_PAYLOAD_VERSION,
+            Base64Url::encode($nonce),
+            Base64Url::encode($ciphertext),
+        );
     }
 
     /**

@@ -7,19 +7,18 @@ use Infocyph\Epicrypt\Security\KeyRotationHelper;
 use Infocyph\Epicrypt\Security\PasswordResetToken;
 use Infocyph\Epicrypt\Security\RememberToken;
 use Infocyph\Epicrypt\Security\SignedUrl;
-use Infocyph\Epicrypt\Security\SignedPayloadCodec;
 
 it('signs and verifies urls', function () {
     $signedUrl = new SignedUrl('url-secret');
     $signed = $signedUrl->generate('https://example.com/download', ['file' => 'report'], time() + 300);
 
+    expect($signed)->toContain('ep_v=1');
     expect($signedUrl->verify($signed))->toBeTrue();
     expect($signedUrl->verify($signed . 'tamper'))->toBeFalse();
 });
 
 it('issues and verifies csrf tokens', function () {
-    $codec = new SignedPayloadCodec('csrf-secret');
-    $manager = new CsrfTokenManager($codec, 60);
+    $manager = new CsrfTokenManager('csrf-secret', 60);
 
     $token = $manager->issueToken('session-1');
 
@@ -28,21 +27,24 @@ it('issues and verifies csrf tokens', function () {
 });
 
 it('issues purpose-bound reset and action tokens', function () {
-    $codec = new SignedPayloadCodec('token-secret');
-
-    $passwordResetToken = new PasswordResetToken($codec, 600);
+    $passwordResetToken = new PasswordResetToken('token-secret', 600);
     $resetToken = $passwordResetToken->issue('user-1');
     expect($passwordResetToken->verify($resetToken, 'user-1'))->toBeTrue();
 
-    $actionToken = new ActionToken($codec, 600);
+    $actionToken = new ActionToken('token-secret', 600);
     $actionTokenValue = $actionToken->issue('user-1', 'delete-account');
     expect($actionToken->verify($actionTokenValue, 'user-1', 'delete-account'))->toBeTrue();
+    $segments = explode('.', $actionTokenValue, 3);
+    $headerJson = base64_decode(strtr($segments[0], '-_', '+/') . str_repeat('=', (4 - strlen($segments[0]) % 4) % 4), true);
+    expect($headerJson)->not->toBeFalse();
+    $header = json_decode((string) $headerJson, true, 512, JSON_THROW_ON_ERROR);
+    expect($header['v'] ?? null)->toBe(1);
 
-    $emailVerification = new EmailVerificationToken($codec, 600);
+    $emailVerification = new EmailVerificationToken('token-secret', 600);
     $emailToken = $emailVerification->issue('user-1', 'user@example.com');
     expect($emailVerification->verify($emailToken, 'user@example.com'))->toBeTrue();
 
-    $rememberToken = new RememberToken($codec, 600);
+    $rememberToken = new RememberToken('token-secret', 600);
     $rememberTokenValue = $rememberToken->issue('user-1', 'device-1');
     expect($rememberToken->verify($rememberTokenValue, 'user-1', 'device-1'))->toBeTrue();
 });
