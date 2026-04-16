@@ -2,13 +2,12 @@
 
 namespace Infocyph\Epicrypt\Crypto;
 
-use Infocyph\Epicrypt\Contract\SignerInterface;
-use Infocyph\Epicrypt\Contract\VerifierInterface;
+use Infocyph\Epicrypt\Crypto\Contract\SignatureInterface;
 use Infocyph\Epicrypt\Exception\Crypto\InvalidKeyException;
 use Infocyph\Epicrypt\Exception\Crypto\SignatureException;
 use Infocyph\Epicrypt\Internal\Base64Url;
 
-final class Signature implements SignerInterface, VerifierInterface
+final class Signature implements SignatureInterface
 {
     /**
      * @param array<string, mixed> $context

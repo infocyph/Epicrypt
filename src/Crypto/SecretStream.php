@@ -2,9 +2,9 @@
 
 namespace Infocyph\Epicrypt\Crypto;
 
+use Infocyph\Epicrypt\Crypto\Enum\StreamAlgorithm;
 use Infocyph\Epicrypt\Exception\Crypto\DecryptionException;
 use Infocyph\Epicrypt\Exception\Crypto\EncryptionException;
-use Infocyph\Epicrypt\Exception\Crypto\UnsupportedCipherException;
 use Infocyph\Epicrypt\Exception\FileAccessException;
 use Infocyph\Pathwise\FileManager\SafeFileReader;
 use Infocyph\Pathwise\FileManager\SafeFileWriter;
@@ -12,18 +12,7 @@ use RuntimeException;
 
 final readonly class SecretStream
 {
-    private const array SUPPORTED_ALGORITHMS = ['xchacha20poly1305', 'xchacha20'];
-
-    private string $algorithm;
-
-    public function __construct(
-        private string $key,
-        string $algorithm = 'xchacha20poly1305',
-        private string $additionalData = '',
-    ) {
-        $this->assertSupportedAlgorithm($algorithm);
-        $this->algorithm = $algorithm;
-    }
+    public function __construct(private string $key, private StreamAlgorithm $algorithm = StreamAlgorithm::XCHACHA20POLY1305, private string $additionalData = '') {}
 
     public function decrypt(string $inputPath, string $outputPath, int $chunkSize = 8192): void
     {
@@ -32,7 +21,7 @@ final readonly class SecretStream
         $fileWriter = new SafeFileWriter($outputPath, false);
 
         try {
-            if ($this->algorithm === 'xchacha20poly1305') {
+            if ($this->algorithm->usesSecretStream()) {
                 $this->decryptUsingSecretStream($inputPath, $fileWriter, $chunkSize);
             } else {
                 $this->decryptUsingCryptoStream($inputPath, $fileWriter, $chunkSize);
@@ -51,21 +40,15 @@ final readonly class SecretStream
         $fileWriter = new SafeFileWriter($outputPath, false);
 
         try {
-            return match ($this->algorithm) {
-                'xchacha20poly1305' => $this->encryptUsingSecretStream($inputPath, $fileWriter, $chunkSize),
-                'xchacha20' => $this->encryptUsingCryptoStream($inputPath, $fileWriter, $chunkSize),
-            };
+            if ($this->algorithm->usesSecretStream()) {
+                return $this->encryptUsingSecretStream($inputPath, $fileWriter, $chunkSize);
+            }
+
+            return $this->encryptUsingCryptoStream($inputPath, $fileWriter, $chunkSize);
         } catch (RuntimeException $e) {
             throw new EncryptionException($e->getMessage(), 0, $e);
         } finally {
             $fileWriter->close();
-        }
-    }
-
-    private function assertSupportedAlgorithm(string $algorithm): void
-    {
-        if (! in_array($algorithm, self::SUPPORTED_ALGORITHMS, true)) {
-            throw new UnsupportedCipherException('Unsupported stream algorithm: ' . $algorithm);
         }
     }
 
@@ -81,8 +64,8 @@ final readonly class SecretStream
         $fileReader = new SafeFileReader($inputPath);
 
         try {
-            $nonce = $fileReader->binary(SODIUM_CRYPTO_STREAM_XCHACHA20_NONCEBYTES)->current();
-            if (! is_string($nonce) || strlen($nonce) !== SODIUM_CRYPTO_STREAM_XCHACHA20_NONCEBYTES) {
+            $nonce = $fileReader->binary($this->algorithm->prefixLength())->current();
+            if (! is_string($nonce) || strlen($nonce) !== $this->algorithm->prefixLength()) {
                 throw new RuntimeException('Invalid nonce length.');
             }
 
@@ -107,8 +90,8 @@ final readonly class SecretStream
         $fileReader = new SafeFileReader($inputPath);
 
         try {
-            $header = $fileReader->binary(SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_HEADERBYTES)->current();
-            if (! is_string($header) || strlen($header) !== SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_HEADERBYTES) {
+            $header = $fileReader->binary($this->algorithm->prefixLength())->current();
+            if (! is_string($header) || strlen($header) !== $this->algorithm->prefixLength()) {
                 throw new RuntimeException('Invalid secret stream header.');
             }
 
@@ -153,7 +136,7 @@ final readonly class SecretStream
 
     private function encryptUsingCryptoStream(string $inputPath, SafeFileWriter $fileWriter, int $chunkSize): int
     {
-        $nonce = random_bytes(SODIUM_CRYPTO_STREAM_XCHACHA20_NONCEBYTES);
+        $nonce = random_bytes($this->algorithm->prefixLength());
         $fileWriter->binary($nonce);
 
         $fileReader = new SafeFileReader($inputPath);

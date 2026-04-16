@@ -2,55 +2,44 @@
 
 namespace Infocyph\Epicrypt\Crypto;
 
-use Infocyph\Epicrypt\Contract\DecryptorInterface;
-use Infocyph\Epicrypt\Contract\EncryptorInterface;
+use Infocyph\Epicrypt\Crypto\Contract\CipherInterface;
+use Infocyph\Epicrypt\Crypto\Enum\AeadAlgorithm;
+use Infocyph\Epicrypt\Exception\Crypto\CryptoException;
 use Infocyph\Epicrypt\Exception\Crypto\DecryptionException;
 use Infocyph\Epicrypt\Exception\Crypto\EncryptionException;
 use Infocyph\Epicrypt\Exception\Crypto\InvalidKeyException;
 use Infocyph\Epicrypt\Exception\Crypto\InvalidNonceException;
-use Infocyph\Epicrypt\Exception\Crypto\UnsupportedCipherException;
 use Infocyph\Epicrypt\Internal\Base64Url;
-use Infocyph\Epicrypt\Internal\SecurityPolicy;
+use Infocyph\Epicrypt\Internal\Enum\EncryptedPayloadVersion;
 use Infocyph\Epicrypt\Internal\VersionedPayload;
 
-final readonly class AeadCipher implements EncryptorInterface, DecryptorInterface
+final readonly class AeadCipher implements CipherInterface
 {
-    /**
-     * @var array<string, array{suffix: string, nonce: int, key: int, requires_hardware?: bool}>
-     */
-    private const array CONFIG = [
-        'aes-256-gcm' => ['suffix' => 'aes256gcm', 'nonce' => SODIUM_CRYPTO_AEAD_AES256GCM_NPUBBYTES, 'key' => SODIUM_CRYPTO_AEAD_AES256GCM_KEYBYTES, 'requires_hardware' => true],
-        'chacha20-poly1305' => ['suffix' => 'chacha20poly1305', 'nonce' => SODIUM_CRYPTO_AEAD_CHACHA20POLY1305_NPUBBYTES, 'key' => SODIUM_CRYPTO_AEAD_CHACHA20POLY1305_KEYBYTES],
-        'chacha20-poly1305-ietf' => ['suffix' => 'chacha20poly1305_ietf', 'nonce' => SODIUM_CRYPTO_AEAD_CHACHA20POLY1305_IETF_NPUBBYTES, 'key' => SODIUM_CRYPTO_AEAD_CHACHA20POLY1305_IETF_KEYBYTES],
-        'xchacha20-poly1305-ietf' => ['suffix' => 'xchacha20poly1305_ietf', 'nonce' => SODIUM_CRYPTO_AEAD_XCHACHA20POLY1305_IETF_NPUBBYTES, 'key' => SODIUM_CRYPTO_AEAD_XCHACHA20POLY1305_IETF_KEYBYTES],
-    ];
-
-    public function __construct(
-        private string $algorithm = SecurityPolicy::DEFAULT_AEAD_ALGORITHM,
-    ) {}
+    public function __construct(private AeadAlgorithm $algorithm = AeadAlgorithm::XCHACHA20_POLY1305_IETF) {}
 
     /**
      * @param array<string, mixed> $context
      */
     public function decrypt(string $ciphertext, mixed $key, array $context = []): string
     {
-        $config = $this->config();
-        $decodedKey = $this->decodeKey($key, $config['key'], (bool) ($context['key_is_binary'] ?? false), 'Decryption');
+        $this->assertAlgorithmAvailability();
 
-        $parsedPayload = VersionedPayload::parse($ciphertext, SecurityPolicy::ENCRYPTED_PAYLOAD_VERSION, 2);
+        $decodedKey = $this->decodeKey($key, $this->algorithm->keyLength(), (bool) ($context['key_is_binary'] ?? false), 'Decryption');
+
+        $parsedPayload = VersionedPayload::parse($ciphertext, EncryptedPayloadVersion::V1->value, 2);
         if ($parsedPayload === null) {
             throw new DecryptionException('Invalid ciphertext format.');
         }
         [, $parts] = $parsedPayload;
 
         $nonce = Base64Url::decode($parts[0]);
-        if (strlen($nonce) !== $config['nonce']) {
-            throw new InvalidNonceException(sprintf('Nonce must be %d bytes.', $config['nonce']));
+        if (strlen($nonce) !== $this->algorithm->nonceLength()) {
+            throw new InvalidNonceException(sprintf('Nonce must be %d bytes.', $this->algorithm->nonceLength()));
         }
 
         $aad = (string) ($context['aad'] ?? '');
         $plaintext = call_user_func(
-            'sodium_crypto_aead_' . $config['suffix'] . '_decrypt',
+            'sodium_crypto_aead_' . $this->algorithm->sodiumSuffix() . '_decrypt',
             Base64Url::decode($parts[1]),
             $aad,
             $nonce,
@@ -69,8 +58,9 @@ final readonly class AeadCipher implements EncryptorInterface, DecryptorInterfac
      */
     public function encrypt(string $plaintext, mixed $key, array $context = []): string
     {
-        $config = $this->config();
-        $decodedKey = $this->decodeKey($key, $config['key'], (bool) ($context['key_is_binary'] ?? false), 'Encryption');
+        $this->assertAlgorithmAvailability();
+
+        $decodedKey = $this->decodeKey($key, $this->algorithm->keyLength(), (bool) ($context['key_is_binary'] ?? false), 'Encryption');
 
         if (array_key_exists('nonce', $context)) {
             $nonce = $context['nonce'];
@@ -82,17 +72,17 @@ final readonly class AeadCipher implements EncryptorInterface, DecryptorInterfac
                 $nonce = Base64Url::decode($nonce);
             }
         } else {
-            $nonce = random_bytes($config['nonce']);
+            $nonce = random_bytes($this->algorithm->nonceLength());
         }
 
-        if (strlen($nonce) !== $config['nonce']) {
-            throw new InvalidNonceException(sprintf('Nonce must be %d bytes.', $config['nonce']));
+        if (strlen($nonce) !== $this->algorithm->nonceLength()) {
+            throw new InvalidNonceException(sprintf('Nonce must be %d bytes.', $this->algorithm->nonceLength()));
         }
 
         $aad = (string) ($context['aad'] ?? '');
 
         $ciphertext = call_user_func(
-            'sodium_crypto_aead_' . $config['suffix'] . '_encrypt',
+            'sodium_crypto_aead_' . $this->algorithm->sodiumSuffix() . '_encrypt',
             $plaintext,
             $aad,
             $nonce,
@@ -104,27 +94,17 @@ final readonly class AeadCipher implements EncryptorInterface, DecryptorInterfac
         }
 
         return VersionedPayload::encode(
-            SecurityPolicy::ENCRYPTED_PAYLOAD_VERSION,
+            EncryptedPayloadVersion::V1->value,
             Base64Url::encode($nonce),
             Base64Url::encode($ciphertext),
         );
     }
 
-    /**
-     * @return array{suffix: string, nonce: int, key: int, requires_hardware?: bool}
-     */
-    private function config(): array
+    private function assertAlgorithmAvailability(): void
     {
-        if (! isset(self::CONFIG[$this->algorithm])) {
-            throw new UnsupportedCipherException('Unsupported AEAD algorithm: ' . $this->algorithm);
+        if (! $this->algorithm->isAvailable()) {
+            throw new CryptoException('AES-256-GCM hardware support is not available.');
         }
-
-        $config = self::CONFIG[$this->algorithm];
-        if (($config['requires_hardware'] ?? false) && ! sodium_crypto_aead_aes256gcm_is_available()) {
-            throw new UnsupportedCipherException('AES-256-GCM hardware support is not available.');
-        }
-
-        return $config;
     }
 
     private function decodeKey(mixed $key, int $expectedLength, bool $isBinary, string $operation): string

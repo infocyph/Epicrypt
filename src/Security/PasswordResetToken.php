@@ -4,6 +4,7 @@ namespace Infocyph\Epicrypt\Security;
 
 use Infocyph\Epicrypt\Exception\Token\TokenException;
 use Infocyph\Epicrypt\Internal\SignedPayloadCodec;
+use Infocyph\Epicrypt\Security\Enum\SecurityTokenPurpose;
 
 final readonly class PasswordResetToken
 {
@@ -18,17 +19,20 @@ final readonly class PasswordResetToken
 
     public function issue(string $userId): string
     {
+        $purpose = SecurityTokenPurpose::PASSWORD_RESET->value;
+
         return $this->codec->issue([
             'sub' => $userId,
-            'purpose' => 'password_reset',
-        ], time() + $this->ttlSeconds, 'password_reset');
+            'purpose' => $purpose,
+        ], time() + $this->ttlSeconds, $purpose);
     }
 
     public function verify(string $token, ?string $userId = null): bool
     {
         try {
-            $claims = $this->codec->verify($token, 'password_reset');
-            if (($claims['purpose'] ?? null) !== 'password_reset') {
+            $purpose = SecurityTokenPurpose::PASSWORD_RESET->value;
+            $claims = $this->codec->verify($token, $purpose);
+            if (($claims['purpose'] ?? null) !== $purpose) {
                 return false;
             }
 

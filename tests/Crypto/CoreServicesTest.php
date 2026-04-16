@@ -1,9 +1,9 @@
 <?php
 
+use Infocyph\Epicrypt\Certificate\KeyPairGenerator;
 use Infocyph\Epicrypt\Crypto\AeadCipher;
 use Infocyph\Epicrypt\Crypto\Mac;
 use Infocyph\Epicrypt\Crypto\Signature;
-use Infocyph\Epicrypt\Crypto\Support\KeyPair;
 use Infocyph\Epicrypt\Generate\KeyMaterial\KeyMaterialGenerator;
 
 it('encrypts and decrypts with AEAD services', function () {
@@ -19,7 +19,7 @@ it('encrypts and decrypts with AEAD services', function () {
 });
 
 it('signs and verifies detached signatures', function () {
-    $keys = KeyPair::sodiumSign();
+    $keys = KeyPairGenerator::sodiumSign()->generate(asBase64Url: true);
 
     $signatureService = new Signature();
     $signature = $signatureService->sign('epicrypt-signature', $keys['private']);

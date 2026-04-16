@@ -2,16 +2,15 @@
 
 namespace Infocyph\Epicrypt\Crypto;
 
-use Infocyph\Epicrypt\Contract\DecryptorInterface;
-use Infocyph\Epicrypt\Contract\EncryptorInterface;
+use Infocyph\Epicrypt\Crypto\Contract\CipherInterface;
 use Infocyph\Epicrypt\Exception\Crypto\DecryptionException;
 use Infocyph\Epicrypt\Exception\Crypto\EncryptionException;
 use Infocyph\Epicrypt\Exception\Crypto\InvalidKeyException;
 use Infocyph\Epicrypt\Internal\Base64Url;
-use Infocyph\Epicrypt\Internal\SecurityPolicy;
+use Infocyph\Epicrypt\Internal\Enum\EncryptedPayloadVersion;
 use Infocyph\Epicrypt\Internal\VersionedPayload;
 
-final class SealedBoxCipher implements EncryptorInterface, DecryptorInterface
+final class SealedBoxCipher implements CipherInterface
 {
     /**
      * @param array<string, mixed> $context
@@ -27,7 +26,7 @@ final class SealedBoxCipher implements EncryptorInterface, DecryptorInterface
             throw new InvalidKeyException('Recipient keypair has invalid length.');
         }
 
-        $parsedPayload = VersionedPayload::parse($ciphertext, SecurityPolicy::ENCRYPTED_PAYLOAD_VERSION, 1);
+        $parsedPayload = VersionedPayload::parse($ciphertext, EncryptedPayloadVersion::V1->value, 1);
         if ($parsedPayload === null) {
             throw new DecryptionException('Invalid ciphertext format.');
         }
@@ -60,7 +59,7 @@ final class SealedBoxCipher implements EncryptorInterface, DecryptorInterface
         }
 
         return VersionedPayload::encode(
-            SecurityPolicy::ENCRYPTED_PAYLOAD_VERSION,
+            EncryptedPayloadVersion::V1->value,
             Base64Url::encode($ciphertext),
         );
     }

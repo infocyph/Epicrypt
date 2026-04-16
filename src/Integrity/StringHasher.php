@@ -2,8 +2,8 @@
 
 namespace Infocyph\Epicrypt\Integrity;
 
-use Infocyph\Epicrypt\Contract\HasherInterface;
 use Infocyph\Epicrypt\Exception\Integrity\HashingException;
+use Infocyph\Epicrypt\Integrity\Contract\HasherInterface;
 use Infocyph\Epicrypt\Internal\SecureCompare;
 
 final readonly class StringHasher implements HasherInterface

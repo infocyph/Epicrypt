@@ -4,25 +4,20 @@ namespace Infocyph\Epicrypt\Internal;
 
 use Infocyph\Epicrypt\Exception\Token\ExpiredTokenException;
 use Infocyph\Epicrypt\Exception\Token\InvalidTokenException;
-use Infocyph\Epicrypt\Exception\Token\UnsupportedAlgorithmException;
+use Infocyph\Epicrypt\Internal\Enum\SignedPayloadAlgorithm;
+use Infocyph\Epicrypt\Internal\Enum\SignedPayloadVersion;
 
+/**
+ * @internal
+ */
 final readonly class SignedPayloadCodec
 {
-    /**
-     * @var array<string>
-     */
-    private const array SUPPORTED_ALGORITHMS = ['sha256', 'sha512'];
-
     public function __construct(
         private string $secret,
-        private string $algorithm = SecurityPolicy::DEFAULT_SIGNED_PAYLOAD_ALGORITHM,
+        private SignedPayloadAlgorithm $algorithm = SignedPayloadAlgorithm::SHA512,
     ) {
         if ($this->secret === '') {
             throw new InvalidTokenException('Signed payload secret must be non-empty.');
-        }
-
-        if (! in_array($this->algorithm, self::SUPPORTED_ALGORITHMS, true)) {
-            throw new UnsupportedAlgorithmException('Unsupported signed payload algorithm.');
         }
     }
 
@@ -32,9 +27,9 @@ final readonly class SignedPayloadCodec
     public function issue(array $claims, ?int $expiresAt = null, ?string $type = null): string
     {
         $header = [
-            'alg' => strtoupper($this->algorithm),
+            'alg' => strtoupper($this->algorithm->value),
             'typ' => 'SPT',
-            'v' => SecurityPolicy::SIGNED_PAYLOAD_FORMAT_VERSION,
+            'v' => SignedPayloadVersion::V1->value,
         ];
 
         if ($type !== null) {
@@ -72,7 +67,7 @@ final readonly class SignedPayloadCodec
         }
 
         $header = Json::decodeToArray(Base64Url::decode($encodedHeader));
-        if (isset($header['v']) && (! is_numeric($header['v']) || (int) $header['v'] !== SecurityPolicy::SIGNED_PAYLOAD_FORMAT_VERSION)) {
+        if (isset($header['v']) && (! is_numeric($header['v']) || (int) $header['v'] !== SignedPayloadVersion::V1->value)) {
             throw new InvalidTokenException('Unsupported signed payload version.');
         }
 
@@ -90,6 +85,6 @@ final readonly class SignedPayloadCodec
 
     private function sign(string $value): string
     {
-        return Base64Url::encode(hash_hmac($this->algorithm, $value, $this->secret, true));
+        return Base64Url::encode(hash_hmac($this->algorithm->value, $value, $this->secret, true));
     }
 }

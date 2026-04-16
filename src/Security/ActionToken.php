@@ -4,6 +4,7 @@ namespace Infocyph\Epicrypt\Security;
 
 use Infocyph\Epicrypt\Exception\Token\TokenException;
 use Infocyph\Epicrypt\Internal\SignedPayloadCodec;
+use Infocyph\Epicrypt\Security\Enum\SecurityTokenPurpose;
 
 final readonly class ActionToken
 {
@@ -21,19 +22,22 @@ final readonly class ActionToken
      */
     public function issue(string $subject, string $action, array $context = []): string
     {
+        $purpose = SecurityTokenPurpose::ACTION_TOKEN->value;
+
         return $this->codec->issue([
             'sub' => $subject,
             'action' => $action,
             'ctx' => $context,
-            'purpose' => 'action_token',
-        ], time() + $this->ttlSeconds, 'action_token');
+            'purpose' => $purpose,
+        ], time() + $this->ttlSeconds, $purpose);
     }
 
     public function verify(string $token, ?string $subject = null, ?string $action = null): bool
     {
         try {
-            $claims = $this->codec->verify($token, 'action_token');
-            if (($claims['purpose'] ?? null) !== 'action_token') {
+            $purpose = SecurityTokenPurpose::ACTION_TOKEN->value;
+            $claims = $this->codec->verify($token, $purpose);
+            if (($claims['purpose'] ?? null) !== $purpose) {
                 return false;
             }
 

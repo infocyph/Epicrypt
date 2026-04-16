@@ -4,6 +4,7 @@ namespace Infocyph\Epicrypt\Security;
 
 use Infocyph\Epicrypt\Exception\Token\TokenException;
 use Infocyph\Epicrypt\Internal\SignedPayloadCodec;
+use Infocyph\Epicrypt\Security\Enum\SecurityTokenPurpose;
 
 final readonly class RememberToken
 {
@@ -18,18 +19,21 @@ final readonly class RememberToken
 
     public function issue(string $userId, string $deviceId): string
     {
+        $purpose = SecurityTokenPurpose::REMEMBER_TOKEN->value;
+
         return $this->codec->issue([
             'sub' => $userId,
             'device' => $deviceId,
-            'purpose' => 'remember_token',
-        ], time() + $this->ttlSeconds, 'remember_token');
+            'purpose' => $purpose,
+        ], time() + $this->ttlSeconds, $purpose);
     }
 
     public function verify(string $token, ?string $userId = null, ?string $deviceId = null): bool
     {
         try {
-            $claims = $this->codec->verify($token, 'remember_token');
-            if (($claims['purpose'] ?? null) !== 'remember_token') {
+            $purpose = SecurityTokenPurpose::REMEMBER_TOKEN->value;
+            $claims = $this->codec->verify($token, $purpose);
+            if (($claims['purpose'] ?? null) !== $purpose) {
                 return false;
             }
 

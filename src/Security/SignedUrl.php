@@ -2,11 +2,12 @@
 
 namespace Infocyph\Epicrypt\Security;
 
-use Infocyph\Epicrypt\Contract\SignedUrlGeneratorInterface;
-use Infocyph\Epicrypt\Contract\SignedUrlVerifierInterface;
 use Infocyph\Epicrypt\Internal\Base64Url;
+use Infocyph\Epicrypt\Internal\Enum\SignedUrlVersion;
 use Infocyph\Epicrypt\Internal\SecureCompare;
 use Infocyph\Epicrypt\Internal\SecurityPolicy;
+use Infocyph\Epicrypt\Security\Contract\SignedUrlGeneratorInterface;
+use Infocyph\Epicrypt\Security\Contract\SignedUrlVerifierInterface;
 
 final readonly class SignedUrl implements SignedUrlGeneratorInterface, SignedUrlVerifierInterface
 {
@@ -30,7 +31,7 @@ final readonly class SignedUrl implements SignedUrlGeneratorInterface, SignedUrl
         }
 
         $merged = array_merge($existing, $parameters);
-        $merged[$this->versionParam] = SecurityPolicy::SIGNED_URL_FORMAT_VERSION;
+        $merged[$this->versionParam] = SignedUrlVersion::V1->value;
         if ($expiresAt !== null) {
             $merged[$this->expiresParam] = $expiresAt;
         }
@@ -61,7 +62,7 @@ final readonly class SignedUrl implements SignedUrlGeneratorInterface, SignedUrl
         }
 
         if (isset($query[$this->versionParam])) {
-            if (! is_numeric($query[$this->versionParam]) || (int) $query[$this->versionParam] !== SecurityPolicy::SIGNED_URL_FORMAT_VERSION) {
+            if (! is_numeric($query[$this->versionParam]) || (int) $query[$this->versionParam] !== SignedUrlVersion::V1->value) {
                 return false;
             }
         }

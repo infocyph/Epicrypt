@@ -6,8 +6,9 @@ use Infocyph\Epicrypt\Crypto\SecretBoxCipher;
 use Infocyph\Epicrypt\Exception\Crypto\DecryptionException;
 use Infocyph\Epicrypt\Exception\Crypto\EncryptionException;
 use Infocyph\Epicrypt\Generate\KeyMaterial\KeyMaterialGenerator;
+use Infocyph\Epicrypt\Internal\Enum\EnvelopeAlgorithm;
+use Infocyph\Epicrypt\Internal\Enum\EnvelopeVersion;
 use Infocyph\Epicrypt\Internal\Json;
-use Infocyph\Epicrypt\Internal\SecurityPolicy;
 use Throwable;
 
 final readonly class EnvelopeProtector
@@ -22,11 +23,11 @@ final readonly class EnvelopeProtector
         try {
             $envelope = Json::decodeToArray($encodedEnvelope);
 
-            if (isset($envelope['v']) && (! is_numeric($envelope['v']) || (int) $envelope['v'] !== SecurityPolicy::ENVELOPE_FORMAT_VERSION)) {
+            if (isset($envelope['v']) && (! is_numeric($envelope['v']) || (int) $envelope['v'] !== EnvelopeVersion::V1->value)) {
                 throw new DecryptionException('Unsupported envelope format version.');
             }
 
-            if (isset($envelope['alg']) && (! is_string($envelope['alg']) || $envelope['alg'] !== SecurityPolicy::ENVELOPE_ALGORITHM)) {
+            if (isset($envelope['alg']) && (! is_string($envelope['alg']) || $envelope['alg'] !== EnvelopeAlgorithm::SECRETBOX->value)) {
                 throw new DecryptionException('Unsupported envelope algorithm.');
             }
 
@@ -45,8 +46,8 @@ final readonly class EnvelopeProtector
      */
     public function encodeEnvelope(array $envelope): string
     {
-        $envelope['v'] = (int) ($envelope['v'] ?? SecurityPolicy::ENVELOPE_FORMAT_VERSION);
-        $envelope['alg'] = (string) ($envelope['alg'] ?? SecurityPolicy::ENVELOPE_ALGORITHM);
+        $envelope['v'] = (int) ($envelope['v'] ?? EnvelopeVersion::V1->value);
+        $envelope['alg'] = (string) ($envelope['alg'] ?? EnvelopeAlgorithm::SECRETBOX->value);
 
         return Json::encode($envelope);
     }
@@ -60,8 +61,8 @@ final readonly class EnvelopeProtector
             $dataKey = $this->keyGenerator->generate();
 
             return [
-                'v' => SecurityPolicy::ENVELOPE_FORMAT_VERSION,
-                'alg' => SecurityPolicy::ENVELOPE_ALGORITHM,
+                'v' => EnvelopeVersion::V1->value,
+                'alg' => EnvelopeAlgorithm::SECRETBOX->value,
                 'encrypted_data' => $this->cipher->encrypt($plaintext, $dataKey),
                 'encrypted_key' => $this->cipher->encrypt($dataKey, $masterKey),
             ];

@@ -2,9 +2,10 @@
 
 namespace Infocyph\Epicrypt\Password;
 
-use Infocyph\Epicrypt\Contract\PasswordHasherInterface;
 use Infocyph\Epicrypt\Exception\Password\PasswordHashException;
 use Infocyph\Epicrypt\Internal\SecurityPolicy;
+use Infocyph\Epicrypt\Password\Contract\PasswordHasherInterface;
+use Infocyph\Epicrypt\Password\Enum\PasswordHashAlgorithm;
 
 final class PasswordHasher implements PasswordHasherInterface
 {
@@ -13,8 +14,9 @@ final class PasswordHasher implements PasswordHasherInterface
      */
     public function hashPassword(string $password, array $options = []): string
     {
-        $algo = $options['algorithm'] ?? PASSWORD_ARGON2ID;
-        if (! in_array((string) $algo, password_algos(), true)) {
+        $algorithm = $this->resolveAlgorithm($options['algorithm'] ?? PasswordHashAlgorithm::ARGON2ID);
+        $algo = $algorithm->toPasswordAlgorithm();
+        if (! in_array($algo, password_algos(), true)) {
             throw new PasswordHashException('Unsupported password hashing algorithm.');
         }
 
@@ -38,5 +40,14 @@ final class PasswordHasher implements PasswordHasherInterface
     public function verifyPassword(string $password, string $hash, array $options = []): bool
     {
         return password_verify($password, $hash);
+    }
+
+    private function resolveAlgorithm(mixed $algorithm): PasswordHashAlgorithm
+    {
+        if (! ($algorithm instanceof PasswordHashAlgorithm)) {
+            throw new PasswordHashException('Password hashing algorithm must be a PasswordHashAlgorithm enum.');
+        }
+
+        return $algorithm;
     }
 }

@@ -2,8 +2,8 @@
 
 namespace Infocyph\Epicrypt\Generate;
 
-use Infocyph\Epicrypt\Contract\RandomGeneratorInterface;
 use Infocyph\Epicrypt\Exception\ConfigurationException;
+use Infocyph\Epicrypt\Generate\Contract\RandomGeneratorInterface;
 use Infocyph\Epicrypt\Internal\Base64Url;
 
 final class RandomBytesGenerator implements RandomGeneratorInterface

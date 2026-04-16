@@ -2,8 +2,8 @@
 
 namespace Infocyph\Epicrypt\Password\Generator;
 
-use Infocyph\Epicrypt\Contract\PasswordGeneratorInterface;
 use Infocyph\Epicrypt\Exception\Password\InvalidPasswordException;
+use Infocyph\Epicrypt\Password\Contract\PasswordGeneratorInterface;
 
 final readonly class PasswordGenerator implements PasswordGeneratorInterface
 {

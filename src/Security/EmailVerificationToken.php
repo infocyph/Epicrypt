@@ -4,6 +4,7 @@ namespace Infocyph\Epicrypt\Security;
 
 use Infocyph\Epicrypt\Exception\Token\TokenException;
 use Infocyph\Epicrypt\Internal\SignedPayloadCodec;
+use Infocyph\Epicrypt\Security\Enum\SecurityTokenPurpose;
 
 final readonly class EmailVerificationToken
 {
@@ -18,18 +19,21 @@ final readonly class EmailVerificationToken
 
     public function issue(string $userId, string $email): string
     {
+        $purpose = SecurityTokenPurpose::EMAIL_VERIFICATION->value;
+
         return $this->codec->issue([
             'sub' => $userId,
             'email' => $email,
-            'purpose' => 'email_verification',
-        ], time() + $this->ttlSeconds, 'email_verification');
+            'purpose' => $purpose,
+        ], time() + $this->ttlSeconds, $purpose);
     }
 
     public function verify(string $token, ?string $email = null): bool
     {
         try {
-            $claims = $this->codec->verify($token, 'email_verification');
-            if (($claims['purpose'] ?? null) !== 'email_verification') {
+            $purpose = SecurityTokenPurpose::EMAIL_VERIFICATION->value;
+            $claims = $this->codec->verify($token, $purpose);
+            if (($claims['purpose'] ?? null) !== $purpose) {
                 return false;
             }
 

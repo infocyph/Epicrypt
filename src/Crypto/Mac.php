@@ -2,10 +2,11 @@
 
 namespace Infocyph\Epicrypt\Crypto;
 
+use Infocyph\Epicrypt\Crypto\Contract\MacInterface;
 use Infocyph\Epicrypt\Exception\Crypto\InvalidKeyException;
 use Infocyph\Epicrypt\Internal\Base64Url;
 
-final class Mac
+final class Mac implements MacInterface
 {
     /**
      * @param array<string, mixed> $context

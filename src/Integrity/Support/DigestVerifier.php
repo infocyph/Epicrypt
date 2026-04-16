@@ -2,8 +2,11 @@
 
 namespace Infocyph\Epicrypt\Integrity\Support;
 
-use Infocyph\Epicrypt\Contract\HasherInterface;
+use Infocyph\Epicrypt\Integrity\Contract\HasherInterface;
 
+/**
+ * @internal
+ */
 final readonly class DigestVerifier
 {
     public function __construct(

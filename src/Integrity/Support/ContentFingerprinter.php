@@ -4,6 +4,9 @@ namespace Infocyph\Epicrypt\Integrity\Support;
 
 use Infocyph\Epicrypt\Integrity\StringHasher;
 
+/**
+ * @internal
+ */
 final readonly class ContentFingerprinter
 {
     public function __construct(

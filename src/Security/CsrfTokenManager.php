@@ -2,9 +2,10 @@
 
 namespace Infocyph\Epicrypt\Security;
 
-use Infocyph\Epicrypt\Contract\CsrfTokenManagerInterface;
 use Infocyph\Epicrypt\Exception\Token\TokenException;
 use Infocyph\Epicrypt\Internal\SignedPayloadCodec;
+use Infocyph\Epicrypt\Security\Contract\CsrfTokenManagerInterface;
+use Infocyph\Epicrypt\Security\Enum\SecurityTokenPurpose;
 
 final readonly class CsrfTokenManager implements CsrfTokenManagerInterface
 {
@@ -19,16 +20,18 @@ final readonly class CsrfTokenManager implements CsrfTokenManagerInterface
 
     public function issueToken(string $sessionId): string
     {
+        $purpose = SecurityTokenPurpose::CSRF->value;
+
         return $this->codec->issue([
             'sid' => $sessionId,
             'nonce' => bin2hex(random_bytes(16)),
-        ], time() + $this->ttlSeconds, 'csrf');
+        ], time() + $this->ttlSeconds, $purpose);
     }
 
     public function verifyToken(string $sessionId, string $token): bool
     {
         try {
-            $claims = $this->codec->verify($token, 'csrf');
+            $claims = $this->codec->verify($token, SecurityTokenPurpose::CSRF->value);
 
             return isset($claims['sid']) && is_string($claims['sid']) && hash_equals($claims['sid'], $sessionId);
         } catch (TokenException) {

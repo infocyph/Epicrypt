@@ -2,16 +2,15 @@
 
 namespace Infocyph\Epicrypt\Crypto;
 
-use Infocyph\Epicrypt\Contract\DecryptorInterface;
-use Infocyph\Epicrypt\Contract\EncryptorInterface;
+use Infocyph\Epicrypt\Crypto\Contract\CipherInterface;
 use Infocyph\Epicrypt\Exception\Crypto\DecryptionException;
 use Infocyph\Epicrypt\Exception\Crypto\EncryptionException;
 use Infocyph\Epicrypt\Exception\Crypto\InvalidKeyException;
 use Infocyph\Epicrypt\Internal\Base64Url;
-use Infocyph\Epicrypt\Internal\SecurityPolicy;
+use Infocyph\Epicrypt\Internal\Enum\EncryptedPayloadVersion;
 use Infocyph\Epicrypt\Internal\VersionedPayload;
 
-final class SecretBoxCipher implements EncryptorInterface, DecryptorInterface
+final class SecretBoxCipher implements CipherInterface
 {
     /**
      * @param array<string, mixed> $context
@@ -20,7 +19,7 @@ final class SecretBoxCipher implements EncryptorInterface, DecryptorInterface
     {
         $decodedKey = $this->decodeKey($key, $context, 'Decryption');
 
-        $parsedPayload = VersionedPayload::parse($ciphertext, SecurityPolicy::ENCRYPTED_PAYLOAD_VERSION, 2);
+        $parsedPayload = VersionedPayload::parse($ciphertext, EncryptedPayloadVersion::V1->value, 2);
         if ($parsedPayload === null) {
             throw new DecryptionException('Invalid ciphertext format.');
         }
@@ -52,7 +51,7 @@ final class SecretBoxCipher implements EncryptorInterface, DecryptorInterface
         }
 
         return VersionedPayload::encode(
-            SecurityPolicy::ENCRYPTED_PAYLOAD_VERSION,
+            EncryptedPayloadVersion::V1->value,
             Base64Url::encode($nonce),
             Base64Url::encode($ciphertext),
         );
