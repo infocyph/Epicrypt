@@ -13,7 +13,6 @@ language = "en"
 root_doc = "index"
 
 extensions = [
-    "myst_parser",
     "sphinx.ext.todo",
     "sphinx.ext.autosectionlabel",
     "sphinx.ext.intersphinx",
@@ -21,17 +20,6 @@ extensions = [
     "sphinx_design",
     "sphinxcontrib.phpdomain",
 ]
-
-myst_enable_extensions = [
-    "colon_fence",
-    "deflist",
-    "attrs_block",
-    "attrs_inline",
-    "tasklist",
-    "fieldlist",
-]
-
-myst_heading_anchors = 3
 autosectionlabel_prefix_document = True
 todo_include_todos = True
 
