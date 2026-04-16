@@ -3,6 +3,7 @@
 use Infocyph\Epicrypt\Certificate\CertificateBuilder;
 use Infocyph\Epicrypt\Certificate\CertificateParser;
 use Infocyph\Epicrypt\Certificate\CsrBuilder;
+use Infocyph\Epicrypt\Certificate\Enum\KeyExchangeBackend;
 use Infocyph\Epicrypt\Certificate\Enum\OpenSslCurveName;
 use Infocyph\Epicrypt\Certificate\Enum\OpenSslRsaBits;
 use Infocyph\Epicrypt\Certificate\KeyExchange;
@@ -52,6 +53,12 @@ it('derives the same shared secret from both parties with sodium key exchange', 
     $secretBA = $exchange->derive($partyB['private'], $partyA['public']);
 
     expect($secretAB)->toBe($secretBA);
+});
+
+it('supports enum based key exchange backend selection', function () {
+    $exchange = KeyExchange::forBackend(KeyExchangeBackend::SODIUM);
+
+    expect($exchange->backend())->toBe(KeyExchangeBackend::SODIUM);
 });
 
 it('rejects curve selection for RSA key pair generation', function () {

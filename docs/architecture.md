@@ -32,11 +32,12 @@ Example:
 When multiple backends satisfy the same responsibility, Epicrypt exposes named constructors:
 
 ```php
+use Infocyph\Epicrypt\Certificate\Enum\KeyExchangeBackend;
 use Infocyph\Epicrypt\Certificate\KeyExchange;
 
-$keyExchange = KeyExchange::sodium();
-// or
-$keyExchange = KeyExchange::openSsl();
+$keyExchange = KeyExchange::forBackend(KeyExchangeBackend::SODIUM);
+// or:
+$keyExchange = KeyExchange::forBackend(KeyExchangeBackend::OPENSSL);
 ```
 
 ## Contracts and Ownership
@@ -65,4 +66,3 @@ Epicrypt follows:
 - fail-closed behavior
 - versioned payload framing for sensitive formats
 - constant-time comparison for security checks where applicable
-
