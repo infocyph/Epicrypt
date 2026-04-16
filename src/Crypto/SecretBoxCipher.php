@@ -1,0 +1,75 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Infocyph\Epicrypt\Crypto;
+
+use Infocyph\Epicrypt\Crypto\Contract\CipherInterface;
+use Infocyph\Epicrypt\Exception\Crypto\DecryptionException;
+use Infocyph\Epicrypt\Exception\Crypto\InvalidKeyException;
+use Infocyph\Epicrypt\Internal\Base64Url;
+use Infocyph\Epicrypt\Internal\Enum\EncryptedPayloadVersion;
+use Infocyph\Epicrypt\Internal\VersionedPayload;
+
+final class SecretBoxCipher implements CipherInterface
+{
+    /**
+     * @param array<string, mixed> $context
+     */
+    public function decrypt(string $ciphertext, mixed $key, array $context = []): string
+    {
+        $decodedKey = $this->decodeKey($key, $context, 'Decryption');
+
+        $parsedPayload = VersionedPayload::parse($ciphertext, EncryptedPayloadVersion::V1->value, 2);
+        if ($parsedPayload === null) {
+            throw new DecryptionException('Invalid ciphertext format.');
+        }
+        [, $parts] = $parsedPayload;
+
+        $plaintext = sodium_crypto_secretbox_open(
+            Base64Url::decode($parts[1]),
+            Base64Url::decode($parts[0]),
+            $decodedKey,
+        );
+
+        if (!is_string($plaintext)) {
+            throw new DecryptionException('Secret-box decryption failed.');
+        }
+
+        return $plaintext;
+    }
+
+    /**
+     * @param array<string, mixed> $context
+     */
+    public function encrypt(string $plaintext, mixed $key, array $context = []): string
+    {
+        $decodedKey = $this->decodeKey($key, $context, 'Encryption');
+        $nonce = random_bytes(SODIUM_CRYPTO_SECRETBOX_NONCEBYTES);
+
+        $ciphertext = sodium_crypto_secretbox($plaintext, $nonce, $decodedKey);
+
+        return VersionedPayload::encode(
+            EncryptedPayloadVersion::V1->value,
+            Base64Url::encode($nonce),
+            Base64Url::encode($ciphertext),
+        );
+    }
+
+    /**
+     * @param array<string, mixed> $context
+     */
+    private function decodeKey(mixed $key, array $context, string $operation): string
+    {
+        if (!is_string($key) || $key === '') {
+            throw new InvalidKeyException(sprintf('%s key must be a non-empty string.', $operation));
+        }
+
+        $decodedKey = (bool) ($context['key_is_binary'] ?? false) ? $key : Base64Url::decode($key);
+        if (strlen($decodedKey) !== SODIUM_CRYPTO_SECRETBOX_KEYBYTES) {
+            throw new InvalidKeyException(sprintf('%s key must be 32 bytes.', $operation));
+        }
+
+        return $decodedKey;
+    }
+}
