@@ -58,5 +58,5 @@ Many Epicrypt APIs accept keys as **Base64URL strings** by default.
 ## Next
 
 - Read [Architecture](architecture.md) first
-- Then jump into the capability guide for your use case
-
+- Use the [Use Cases hub](use-cases/index.md) to choose the right feature quickly
+- Then jump into the matching capability guide for API details

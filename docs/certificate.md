@@ -35,13 +35,14 @@ Return shape:
 ### Sodium (Curve25519)
 
 ```php
+use Infocyph\Epicrypt\Certificate\Enum\KeyExchangeBackend;
 use Infocyph\Epicrypt\Certificate\KeyExchange;
 use Infocyph\Epicrypt\Certificate\KeyPairGenerator;
 
 $a = KeyPairGenerator::sodium()->generate(asBase64Url: true);
 $b = KeyPairGenerator::sodium()->generate(asBase64Url: true);
 
-$exchange = KeyExchange::sodium();
+$exchange = KeyExchange::forBackend(KeyExchangeBackend::SODIUM);
 $secretAB = $exchange->derive($a['private'], $b['public']);
 $secretBA = $exchange->derive($b['private'], $a['public']);
 ```
@@ -49,9 +50,11 @@ $secretBA = $exchange->derive($b['private'], $a['public']);
 ### OpenSSL
 
 ```php
-$exchange = KeyExchange::openSsl();
+$exchange = KeyExchange::forBackend(KeyExchangeBackend::OPENSSL);
 $shared = $exchange->derive($privatePem, $publicPem);
 ```
+
+If you prefer direct named constructors, `KeyExchange::sodium()` and `KeyExchange::openSsl()` remain available and map to the same backend enum values.
 
 ## CSR and Certificate
 

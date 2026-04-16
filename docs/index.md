@@ -49,6 +49,13 @@ security
 
 ```{toctree}
 :maxdepth: 2
+:caption: Use Cases
+
+use-cases/index
+```
+
+```{toctree}
+:maxdepth: 2
 :caption: Operations
 
 error-handling
@@ -61,4 +68,3 @@ benchmarking
 - Namespace root: `Infocyph\\Epicrypt`
 - PHP: `>=8.4`
 - Extensions: `ext-sodium`, `ext-openssl`, `ext-json`, `ext-mbstring`, `ext-ctype`, `ext-simplexml`
-

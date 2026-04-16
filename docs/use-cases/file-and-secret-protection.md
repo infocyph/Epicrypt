@@ -1,0 +1,53 @@
+# File and Secret Protection Flow
+
+Use this flow when protecting data at rest (files, blobs, or serialized secret material).
+
+## Choose the Capability
+
+- Use `DataProtection\StringProtector` for app string payloads.
+- Use `DataProtection\FileProtector` for filesystem encryption/decryption.
+- Use `DataProtection\EnvelopeProtector` for versioned envelope-based protected payloads.
+- Use `Password\Secret\WrappedSecretManager` when wrapping/unwrapping secret values under a master key.
+
+## Minimal File Protection Example
+
+```php
+<?php
+
+declare(strict_types=1);
+
+use Infocyph\Epicrypt\DataProtection\FileProtector;
+
+$protector = new FileProtector();
+
+$protector->encrypt('/var/app/input.db', '/var/app/input.db.enc', $key, [
+    'key_is_binary' => true,
+]);
+
+$protector->decrypt('/var/app/input.db.enc', '/var/app/input.db', $key, [
+    'key_is_binary' => true,
+]);
+```
+
+## Minimal Secret Wrapping Example
+
+```php
+use Infocyph\Epicrypt\Password\Secret\MasterSecretGenerator;
+use Infocyph\Epicrypt\Password\Secret\WrappedSecretManager;
+
+$master = (new MasterSecretGenerator())->generate();
+$manager = new WrappedSecretManager();
+
+$wrapped = $manager->wrap('db-password', $master);
+$plain = $manager->unwrap($wrapped, $master);
+```
+
+## Why This Flow
+
+- DataProtection classes provide higher-level safe workflows on top of crypto primitives.
+- Password Secret classes give explicit secret lifecycle behavior instead of ad-hoc encryption calls.
+
+## Avoid
+
+- encrypting big files using non-streaming single-shot primitives
+- reusing nonces manually across encryptions
