@@ -54,10 +54,14 @@ Documentation Map
    :caption: Use Cases
 
    use-cases/index
-   use-cases/web-app-security
-   use-cases/api-and-token-security
-   use-cases/file-and-secret-protection
-   use-cases/pki-and-key-exchange
+   use-cases/certificate-complete-examples
+   use-cases/crypto-complete-examples
+   use-cases/token-complete-examples
+   use-cases/password-complete-examples
+   use-cases/integrity-complete-examples
+   use-cases/generate-complete-examples
+   use-cases/data-protection-complete-examples
+   use-cases/security-complete-examples
 
 .. toctree::
    :maxdepth: 2
