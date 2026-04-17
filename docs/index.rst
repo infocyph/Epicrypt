@@ -50,18 +50,10 @@ Documentation Map
    complete-usage-reference
 
 .. toctree::
-   :maxdepth: 1
+   :maxdepth: 2
    :caption: Use Cases
 
    use-cases/index
-   use-cases/certificate-complete-examples
-   use-cases/crypto-complete-examples
-   use-cases/token-complete-examples
-   use-cases/password-complete-examples
-   use-cases/integrity-complete-examples
-   use-cases/generate-complete-examples
-   use-cases/data-protection-complete-examples
-   use-cases/security-complete-examples
 
 .. toctree::
    :maxdepth: 2

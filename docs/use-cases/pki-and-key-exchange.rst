@@ -3,6 +3,11 @@ PKI and Key Exchange Flow
 
 Use this flow for asymmetric interoperability, certificate lifecycle, and shared-secret derivation.
 
+Brief
+-----
+
+The ``Certificate`` domain groups key pairs, CSRs, certificates, and shared-secret derivation in one place. Use it when trust material has to move between systems, libraries, or deployment boundaries.
+
 Choose the Capability
 ---------------------
 
@@ -34,6 +39,11 @@ Named constructors are still available:
 - ``KeyExchange::sodium()``
 - ``KeyExchange::openSsl()``
 
+Learn by Example
+----------------
+
+Scenario: generate a server key pair, create a CSR, self-sign a certificate for local development, then inspect the result.
+
 Minimal CSR + Certificate Example
 ---------------------------------
 
@@ -53,9 +63,18 @@ Minimal CSR + Certificate Example
        'commonName' => 'example.local',
    ];
 
+   // Build the CSR first if you need CA signing later.
    $csr = CsrBuilder::openSsl()->build($dn, $keys['private']);
+
+   // Self-sign for local development or internal testing.
    $cert = CertificateBuilder::openSsl()->selfSign($dn, $keys['private'], 365);
    $parsed = CertificateParser::openSsl()->parse($cert);
+
+Related Pages
+-------------
+
+- For fuller PKI and key-exchange coverage, see :doc:`Certificate Complete Examples <certificate-complete-examples>`.
+- For application-level signed payloads and JWTs, see :doc:`API and Token Security <api-and-token-security>`.
 
 Avoid
 -----

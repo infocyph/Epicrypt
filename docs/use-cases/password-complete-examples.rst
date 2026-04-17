@@ -1,7 +1,10 @@
 Password Complete Examples
 ==========================
 
-This page contains complete usage examples for ``Password`` APIs.
+This page groups ``Password`` examples by the job you are doing: generate a password, enforce policy, hash it, score it, or protect a stored secret.
+
+Generate a Password
+-------------------
 
 .. code-block:: php
 
@@ -9,16 +12,8 @@ This page contains complete usage examples for ``Password`` APIs.
 
    declare(strict_types=1);
 
-   use Infocyph\Epicrypt\Password\Enum\PasswordHashAlgorithm;
    use Infocyph\Epicrypt\Password\Generator\PasswordGenerator;
-   use Infocyph\Epicrypt\Password\Generator\PasswordPolicy;
-   use Infocyph\Epicrypt\Password\PasswordHasher;
-   use Infocyph\Epicrypt\Password\PasswordStrength;
-   use Infocyph\Epicrypt\Password\Secret\MasterSecretGenerator;
-   use Infocyph\Epicrypt\Password\Secret\SecureSecretSerializer;
-   use Infocyph\Epicrypt\Password\Secret\WrappedSecretManager;
 
-   // PasswordGenerator options
    $password = (new PasswordGenerator())->generate(20, [
        'min_length' => 16,
        'require_upper' => true,
@@ -28,10 +23,35 @@ This page contains complete usage examples for ``Password`` APIs.
        'include_ambiguous' => false,
    ]);
 
-   // PasswordPolicy value object
+Define a Password Policy
+------------------------
+
+Use this when the policy must be explicit and reusable.
+
+.. code-block:: php
+
+   <?php
+
+   declare(strict_types=1);
+
+   use Infocyph\Epicrypt\Password\Generator\PasswordPolicy;
+
    $policy = new PasswordPolicy(minLength: 12, requireUpper: true, requireLower: true, requireDigit: true, requireSymbol: true);
 
-   // PasswordHasher
+Hash and Verify a Password
+--------------------------
+
+.. code-block:: php
+
+   <?php
+
+   declare(strict_types=1);
+
+   use Infocyph\Epicrypt\Password\Generator\PasswordGenerator;
+   use Infocyph\Epicrypt\Password\Enum\PasswordHashAlgorithm;
+   use Infocyph\Epicrypt\Password\PasswordHasher;
+
+   $password = (new PasswordGenerator())->generate(20);
    $hasher = new PasswordHasher();
    $hash = $hasher->hashPassword($password, [
        'algorithm' => PasswordHashAlgorithm::ARGON2ID,
@@ -41,14 +61,52 @@ This page contains complete usage examples for ``Password`` APIs.
    ]);
    $passwordValid = $hasher->verifyPassword($password, $hash);
 
-   // PasswordStrength
+Score Password Strength
+-----------------------
+
+.. code-block:: php
+
+   <?php
+
+   declare(strict_types=1);
+
+   use Infocyph\Epicrypt\Password\Generator\PasswordGenerator;
+   use Infocyph\Epicrypt\Password\PasswordStrength;
+
+   $password = (new PasswordGenerator())->generate(20);
    $score = (new PasswordStrength())->score($password); // 0..100
 
-   // Secret helpers
+Wrap and Unwrap a Secret
+------------------------
+
+Use this when an application secret must stay encrypted at rest.
+
+.. code-block:: php
+
+   <?php
+
+   declare(strict_types=1);
+
+   use Infocyph\Epicrypt\Password\Secret\MasterSecretGenerator;
+   use Infocyph\Epicrypt\Password\Secret\WrappedSecretManager;
+
    $masterSecret = (new MasterSecretGenerator())->generate(32, true);
    $wrappedManager = new WrappedSecretManager();
    $wrapped = $wrappedManager->wrap('db-password', $masterSecret);
    $plain = $wrappedManager->unwrap($wrapped, $masterSecret);
+
+Serialize Secret Material
+-------------------------
+
+Use this when secret-bearing data needs a stable serialized representation before storage.
+
+.. code-block:: php
+
+   <?php
+
+   declare(strict_types=1);
+
+   use Infocyph\Epicrypt\Password\Secret\SecureSecretSerializer;
 
    $serializer = new SecureSecretSerializer();
    $serialized = $serializer->serialize(['username' => 'alice', 'password' => 'db-password']);
