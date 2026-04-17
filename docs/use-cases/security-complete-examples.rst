@@ -1,7 +1,42 @@
 Security Complete Examples
 ==========================
 
-This page contains complete usage examples for ``Security`` APIs.
+This page groups ``Security`` examples around common web application scenes: signed links, CSRF, purpose-bound account tokens, and key rotation.
+
+Generate and Verify a Signed URL
+--------------------------------
+
+.. code-block:: php
+
+   <?php
+
+   declare(strict_types=1);
+
+   use Infocyph\Epicrypt\Security\SignedUrl;
+
+   $signedUrl = new SignedUrl('url-secret');
+   $link = $signedUrl->generate('https://example.com/download', ['file' => 'report.csv'], time() + 300);
+   $linkValid = $signedUrl->verify($link);
+
+Issue and Verify a CSRF Token
+-----------------------------
+
+.. code-block:: php
+
+   <?php
+
+   declare(strict_types=1);
+
+   use Infocyph\Epicrypt\Security\CsrfTokenManager;
+
+   $csrf = new CsrfTokenManager('csrf-secret', 3600);
+   $csrfToken = $csrf->issueToken('session-123');
+   $csrfValid = $csrf->verifyToken('session-123', $csrfToken);
+
+Issue Purpose-Bound Account Tokens
+----------------------------------
+
+Use these classes for recovery, verification, remembered devices, and one-off actions.
 
 .. code-block:: php
 
@@ -10,25 +45,11 @@ This page contains complete usage examples for ``Security`` APIs.
    declare(strict_types=1);
 
    use Infocyph\Epicrypt\Security\ActionToken;
-   use Infocyph\Epicrypt\Security\CsrfTokenManager;
    use Infocyph\Epicrypt\Security\EmailVerificationToken;
-   use Infocyph\Epicrypt\Security\KeyRotationHelper;
+   use Infocyph\Epicrypt\Security\Enum\SecurityTokenPurpose;
    use Infocyph\Epicrypt\Security\PasswordResetToken;
    use Infocyph\Epicrypt\Security\RememberToken;
-   use Infocyph\Epicrypt\Security\SignedUrl;
-   use Infocyph\Epicrypt\Security\Enum\SecurityTokenPurpose;
 
-   // SignedUrl
-   $signedUrl = new SignedUrl('url-secret');
-   $link = $signedUrl->generate('https://example.com/download', ['file' => 'report.csv'], time() + 300);
-   $linkValid = $signedUrl->verify($link);
-
-   // CsrfTokenManager
-   $csrf = new CsrfTokenManager('csrf-secret', 3600);
-   $csrfToken = $csrf->issueToken('session-123');
-   $csrfValid = $csrf->verifyToken('session-123', $csrfToken);
-
-   // Purpose-bound tokens
    $reset = new PasswordResetToken('token-secret', 1800);
    $resetToken = $reset->issue('user-1');
    $resetValid = $reset->verify($resetToken, 'user-1');
@@ -46,7 +67,19 @@ This page contains complete usage examples for ``Security`` APIs.
    $actionValid = $action->verify($actionToken, 'user-1', 'delete-account');
    $csrfPurpose = SecurityTokenPurpose::CSRF->value;
 
-   // KeyRotationHelper
+Rotate Keys Safely
+------------------
+
+Use this when signatures must be accepted during a key rollover window.
+
+.. code-block:: php
+
+   <?php
+
+   declare(strict_types=1);
+
+   use Infocyph\Epicrypt\Security\KeyRotationHelper;
+
    $rotation = new KeyRotationHelper();
    $keys = ['k1' => 'legacy-key', 'k2' => 'active-key'];
    $signature = $rotation->sign('payload', 'k2', $keys);
