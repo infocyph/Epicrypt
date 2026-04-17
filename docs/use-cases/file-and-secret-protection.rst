@@ -21,16 +21,14 @@ Minimal File Protection Example
    declare(strict_types=1);
 
    use Infocyph\Epicrypt\DataProtection\FileProtector;
+   use Infocyph\Epicrypt\Generate\KeyMaterial\KeyMaterialGenerator;
 
    $protector = new FileProtector();
+   $key = (new KeyMaterialGenerator())->generate(SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_KEYBYTES);
 
-   $protector->encrypt('/var/app/input.db', '/var/app/input.db.enc', $key, [
-       'key_is_binary' => true,
-   ]);
+   $protector->encrypt('/var/app/input.db', '/var/app/input.db.enc', $key, 8192, false);
 
-   $protector->decrypt('/var/app/input.db.enc', '/var/app/input.db', $key, [
-       'key_is_binary' => true,
-   ]);
+   $protector->decrypt('/var/app/input.db.enc', '/var/app/input.db', $key, 8192, false);
 
 Minimal Secret Wrapping Example
 -------------------------------

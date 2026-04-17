@@ -1,5 +1,5 @@
-Use Cases
-=========
+Overview
+========
 
 This section answers one practical question first:
 
