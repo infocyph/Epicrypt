@@ -47,6 +47,7 @@ Use these pages for browser-facing application flows.
 
 .. toctree::
    :maxdepth: 1
+   :hidden:
 
    web-app-security
    security-complete-examples
@@ -59,6 +60,7 @@ Use these pages for bearer tokens, signed payloads, and API authorization bounda
 
 .. toctree::
    :maxdepth: 1
+   :hidden:
 
    api-and-token-security
    token-complete-examples
@@ -70,6 +72,7 @@ Use these pages for application payloads, file encryption, and wrapped secret ma
 
 .. toctree::
    :maxdepth: 1
+   :hidden:
 
    file-and-secret-protection
    data-protection-complete-examples
@@ -81,6 +84,7 @@ Use these pages for key generation, certificate workflows, and shared-secret der
 
 .. toctree::
    :maxdepth: 1
+   :hidden:
 
    pki-and-key-exchange
    certificate-complete-examples
@@ -92,6 +96,7 @@ Use these pages when you need direct primitives or supporting utilities.
 
 .. toctree::
    :maxdepth: 1
+   :hidden:
 
    crypto-complete-examples
    integrity-complete-examples
