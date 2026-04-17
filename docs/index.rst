@@ -53,6 +53,7 @@ Documentation Map
    :maxdepth: 1
    :caption: Use Cases
 
+   use-cases/index
    use-cases/web-app-security
    use-cases/api-and-token-security
    use-cases/file-and-secret-protection
