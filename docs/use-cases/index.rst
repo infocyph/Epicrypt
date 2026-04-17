@@ -45,62 +45,42 @@ Secure Web Applications
 
 Use these pages for browser-facing application flows.
 
-.. toctree::
-   :maxdepth: 1
-   :hidden:
-
-   web-app-security
-   security-complete-examples
-   password-complete-examples
+- :doc:`Web App Security Flow <web-app-security>`
+- :doc:`Security Complete Examples <security-complete-examples>`
+- :doc:`Password Complete Examples <password-complete-examples>`
 
 Secure APIs and Service-to-Service Flows
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Use these pages for bearer tokens, signed payloads, and API authorization boundaries.
 
-.. toctree::
-   :maxdepth: 1
-   :hidden:
-
-   api-and-token-security
-   token-complete-examples
+- :doc:`API and Token Security Flow <api-and-token-security>`
+- :doc:`Token Complete Examples <token-complete-examples>`
 
 Protect Data at Rest
 ^^^^^^^^^^^^^^^^^^^^
 
 Use these pages for application payloads, file encryption, and wrapped secret material.
 
-.. toctree::
-   :maxdepth: 1
-   :hidden:
-
-   file-and-secret-protection
-   data-protection-complete-examples
+- :doc:`File and Secret Protection Flow <file-and-secret-protection>`
+- :doc:`Data Protection Complete Examples <data-protection-complete-examples>`
 
 Work with PKI and Trust Material
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Use these pages for key generation, certificate workflows, and shared-secret derivation.
 
-.. toctree::
-   :maxdepth: 1
-   :hidden:
-
-   pki-and-key-exchange
-   certificate-complete-examples
+- :doc:`PKI and Key Exchange Flow <pki-and-key-exchange>`
+- :doc:`Certificate Complete Examples <certificate-complete-examples>`
 
 Use Lower-Level Building Blocks
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Use these pages when you need direct primitives or supporting utilities.
 
-.. toctree::
-   :maxdepth: 1
-   :hidden:
-
-   crypto-complete-examples
-   integrity-complete-examples
-   generate-complete-examples
+- :doc:`Crypto Complete Examples <crypto-complete-examples>`
+- :doc:`Integrity Complete Examples <integrity-complete-examples>`
+- :doc:`Generate Complete Examples <generate-complete-examples>`
 
 Capability Guides
 -----------------
