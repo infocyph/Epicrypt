@@ -47,12 +47,16 @@ Documentation Map
    generate
    data-protection
    security
+   complete-usage-reference
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1
    :caption: Use Cases
 
-   use-cases/index
+   use-cases/web-app-security
+   use-cases/api-and-token-security
+   use-cases/file-and-secret-protection
+   use-cases/pki-and-key-exchange
 
 .. toctree::
    :maxdepth: 2

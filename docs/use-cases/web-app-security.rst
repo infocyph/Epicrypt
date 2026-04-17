@@ -37,8 +37,8 @@ Minimal Example
    $secret = $_ENV['EPICRYPT_APP_SECRET'];
 
    $csrf = new CsrfTokenManager($secret);
-   $csrfToken = $csrf->generate('session-123');
-   $isCsrfValid = $csrf->verify($csrfToken, 'session-123');
+   $csrfToken = $csrf->issueToken('session-123');
+   $isCsrfValid = $csrf->verifyToken('session-123', $csrfToken);
 
    $reset = new PasswordResetToken($secret, ttlSeconds: 900);
    $resetToken = $reset->issue('user-42');
