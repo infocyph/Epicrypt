@@ -10,6 +10,7 @@ Scope
 - signed payload tokens
 - opaque tokens
 - claim validation and key resolution
+- key-ring verification helpers for signed payload and JWT migration
 
 Symmetric JWT
 -------------
@@ -46,6 +47,25 @@ Important
 
 - ``encode`` requires ``nbf`` and ``exp`` claims.
 - ``decode`` requires expected claims (``RegisteredClaims``) in constructor.
+
+JWT Key Rings
+-------------
+
+.. code-block:: php
+
+   use Infocyph\Epicrypt\Security\KeyRing;
+   use Infocyph\Epicrypt\Token\Jwt\Enum\SymmetricJwtAlgorithm;
+   use Infocyph\Epicrypt\Token\Jwt\SymmetricJwt;
+   use Infocyph\Epicrypt\Token\Jwt\Validation\RegisteredClaims;
+
+   $jwt = new SymmetricJwt(
+       SymmetricJwtAlgorithm::HS512,
+       new RegisteredClaims('issuer-service', 'audience-service', 'subject-service', 'token-1'),
+   );
+
+   $ring = new KeyRing(['legacy' => 'legacy-secret', 'active' => 'active-secret'], 'active');
+   $claims = $jwt->decodeWithAnyKey($token, $ring);
+   $isValid = $jwt->verifyWithAnyKey($token, $ring);
 
 Asymmetric JWT
 --------------
@@ -99,6 +119,19 @@ Signed Payload Token
 
    $claims = $payload->decode($token, 'payload-secret');
    $isValid = $payload->verify($token, 'payload-secret');
+
+Signed Payload Key Rings
+------------------------
+
+.. code-block:: php
+
+   use Infocyph\Epicrypt\Security\KeyRing;
+   use Infocyph\Epicrypt\Token\Payload\SignedPayload;
+
+   $payload = new SignedPayload('reset_password');
+   $ring = new KeyRing(['legacy' => 'legacy-secret', 'active' => 'active-secret'], 'active');
+   $claims = $payload->decodeWithAnyKey($token, $ring);
+   $isValid = $payload->verifyWithAnyKey($token, $ring);
 
 Opaque Token
 ------------

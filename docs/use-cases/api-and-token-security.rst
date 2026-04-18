@@ -75,6 +75,7 @@ Why This Flow
 -------------
 
 - JWT classes already enforce algorithm enums and claim validation.
+- JWT and signed payload flows support key-ring-based verification during rotation windows.
 - Opaque tokens avoid overloading bearer tokens with sensitive claim data.
 
 Related Pages

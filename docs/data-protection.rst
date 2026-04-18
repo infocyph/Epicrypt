@@ -12,6 +12,7 @@ Higher-level security workflows built on crypto primitives:
 - file protection
 - envelope encryption
 - OpenSSL interoperability helper
+- migration and re-encryption helpers
 
 String Protector
 ----------------
@@ -26,6 +27,18 @@ String Protector
    $protector = new StringProtector();
    $ciphertext = $protector->encrypt('sensitive data', $key);
    $plaintext = $protector->decrypt($ciphertext, $key);
+
+Rotation and Migration
+----------------------
+
+.. code-block:: php
+
+   use Infocyph\Epicrypt\DataProtection\StringProtector;
+   use Infocyph\Epicrypt\Security\KeyRing;
+
+   $ring = new KeyRing(['legacy' => $legacyKey, 'current' => $currentKey], 'current');
+   $plaintext = (new StringProtector())->decryptWithAny($ciphertext, $ring);
+   $migrated = (new StringProtector())->reencryptWithAny($ciphertext, $ring, $currentKey);
 
 Envelope Protector
 ------------------
@@ -48,6 +61,14 @@ Envelope payload includes:
 - ``encrypted_data``
 - ``encrypted_key``
 
+Envelope Re-Encryption
+----------------------
+
+.. code-block:: php
+
+   $migrated = (new EnvelopeProtector())->reencryptWithAny($encoded, [$legacyMasterKey], $currentMasterKey);
+   $plain = (new EnvelopeProtector())->decrypt($migrated, $currentMasterKey);
+
 File Protector
 --------------
 
@@ -67,3 +88,5 @@ OpenSSL Interoperability Helper
 -------------------------------
 
 ``DataProtection\\OpenSSL\\InteroperabilityCryptoHelper`` provides a compatibility-oriented string encryption format using OpenSSL + HMAC.
+
+Prefer it only for compatibility or migration boundaries, not for new storage formats.

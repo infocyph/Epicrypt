@@ -136,6 +136,35 @@ Use this when you manage key sets and need to pick one key by ``kid``.
    KeyResolver::validate($symKeys, 'k2');
    $resolved = KeyResolver::resolve($symKeys, 'k2');
 
+Verify with a Key Ring During Rotation
+--------------------------------------
+
+Use this when old and active verification keys must coexist during a short migration window.
+
+.. code-block:: php
+
+   <?php
+
+   declare(strict_types=1);
+
+   use Infocyph\Epicrypt\Security\KeyRing;
+   use Infocyph\Epicrypt\Token\Jwt\Enum\SymmetricJwtAlgorithm;
+   use Infocyph\Epicrypt\Token\Jwt\SymmetricJwt;
+   use Infocyph\Epicrypt\Token\Jwt\Validation\RegisteredClaims;
+
+   $jwt = new SymmetricJwt(
+       SymmetricJwtAlgorithm::HS512,
+       new RegisteredClaims('issuer-service', 'audience-service', 'subject-service', 'token-1'),
+   );
+
+   $ring = new KeyRing([
+       'legacy' => 'legacy-secret',
+       'active' => 'active-secret',
+   ], 'active');
+
+   $claims = $jwt->decodeWithAnyKey($token, $ring);
+   $valid = $jwt->verifyWithAnyKey($token, $ring);
+
 Validate Claims Directly
 ------------------------
 
