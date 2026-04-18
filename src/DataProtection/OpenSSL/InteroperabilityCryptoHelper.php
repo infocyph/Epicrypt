@@ -4,11 +4,17 @@ declare(strict_types=1);
 
 namespace Infocyph\Epicrypt\DataProtection\OpenSSL;
 
+use Infocyph\Epicrypt\DataProtection\StringProtector;
 use Infocyph\Epicrypt\Exception\ConfigurationException;
 use Infocyph\Epicrypt\Exception\Crypto\DecryptionException;
 use Infocyph\Epicrypt\Exception\Crypto\EncryptionException;
 use Throwable;
 
+/**
+ * Compatibility-oriented helper for legacy OpenSSL payload formats.
+ *
+ * Prefer ``DataProtection\StringProtector`` or ``DataProtection\EnvelopeProtector`` for new systems.
+ */
 final class InteroperabilityCryptoHelper
 {
     private const string CIPHER = 'aes-256-ctr';
@@ -22,6 +28,11 @@ final class InteroperabilityCryptoHelper
     private const int KEY_LENGTH = 50;
 
     private const int SIGNATURE_LENGTH = 64;
+
+    public function decryptCompatibleString(string $ciphertext, string $secret, string $salt, bool $isBase64 = true): string
+    {
+        return $this->decryptString($ciphertext, $secret, $salt, $isBase64);
+    }
 
     public function decryptString(string $ciphertext, string $secret, string $salt, bool $isBase64 = true): string
     {
@@ -73,6 +84,11 @@ final class InteroperabilityCryptoHelper
         }
     }
 
+    public function encryptCompatibleString(string $plaintext, string $secret, string $salt, bool $asBase64 = true): string
+    {
+        return $this->encryptString($plaintext, $secret, $salt, $asBase64);
+    }
+
     public function encryptString(string $plaintext, string $secret, string $salt, bool $asBase64 = true): string
     {
         try {
@@ -107,6 +123,23 @@ final class InteroperabilityCryptoHelper
         } catch (Throwable $e) {
             throw new EncryptionException($e->getMessage(), 0, $e);
         }
+    }
+
+    /**
+     * @param array<string, mixed> $currentContext
+     */
+    public function migrateToStringProtector(
+        string $ciphertext,
+        string $secret,
+        string $salt,
+        string $currentKey,
+        array $currentContext = [],
+        bool $isBase64 = true,
+        ?StringProtector $protector = null,
+    ): string {
+        $plaintext = $this->decryptString($ciphertext, $secret, $salt, $isBase64);
+
+        return ($protector ?? new StringProtector())->encrypt($plaintext, $currentKey, $currentContext);
     }
 
     private function deriveKey(string $secret, string $salt): string

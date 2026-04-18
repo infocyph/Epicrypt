@@ -8,8 +8,10 @@ Scope
 
 - password generation and policy
 - password hashing and verification
+- password rehash lifecycle
 - master secret generation
 - wrapped secret protection
+- wrapped secret rotation and rewrap flows
 - secure secret serialization
 
 Password Generator
@@ -53,6 +55,23 @@ You can tune hashing options:
        'threads' => 2,
    ]);
 
+Password Rehash Lifecycle
+-------------------------
+
+.. code-block:: php
+
+   use Infocyph\Epicrypt\Password\PasswordHasher;
+   use Infocyph\Epicrypt\Security\Policy\SecurityProfile;
+
+   $hasher = new PasswordHasher();
+   $result = $hasher->verifyAndRehash('password', $storedHash, [
+       'profile' => SecurityProfile::MODERN,
+   ]);
+
+   if ($result->verified && $result->rehashedHash !== null) {
+       $storedHash = $result->rehashedHash;
+   }
+
 Password Strength
 -----------------
 
@@ -77,6 +96,20 @@ Master Secret + Wrapped Secret
    $plain = (new WrappedSecretManager())->unwrap($wrapped, $masterSecret);
 
 Wrapped secret format is versioned (``eps1.*``) and fail-closed on invalid input.
+
+Wrapped Secret Rotation
+-----------------------
+
+.. code-block:: php
+
+   use Infocyph\Epicrypt\Password\Secret\WrappedSecretManager;
+   use Infocyph\Epicrypt\Security\KeyRing;
+
+   $manager = new WrappedSecretManager();
+   $rotated = $manager->rewrap($wrapped, $oldMasterSecret, $newMasterSecret);
+
+   $ring = new KeyRing(['old' => $oldMasterSecret, 'new' => $newMasterSecret], 'new');
+   $plain = $manager->unwrapWithAny($rotated, $ring);
 
 Secure Secret Serialization
 ---------------------------

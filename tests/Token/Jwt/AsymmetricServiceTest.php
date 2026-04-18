@@ -3,6 +3,7 @@
 use Infocyph\Epicrypt\Token\Jwt\AsymmetricJwt;
 use Infocyph\Epicrypt\Token\Jwt\Enum\AsymmetricJwtAlgorithm;
 use Infocyph\Epicrypt\Token\Jwt\Validation\RegisteredClaims;
+use Infocyph\Epicrypt\Security\KeyRing;
 
 beforeEach(function () {
     $resource = openssl_pkey_new([
@@ -10,7 +11,10 @@ beforeEach(function () {
         'private_key_bits' => 2048,
     ]);
 
-    expect($resource)->not->toBeFalse();
+    if ($resource === false) {
+        $this->markTestSkipped('OpenSSL key generation is unavailable in this environment.');
+    }
+
     openssl_pkey_export($resource, $privateKey);
     $details = openssl_pkey_get_details($resource);
 
@@ -73,4 +77,40 @@ it('verifies tokens with Token/Jwt asymmetric verifier service', function () {
 
     expect($wrongKeyDetails)->toBeArray();
     expect($jwt->verify($token, $wrongKeyDetails['key']))->toBeFalse();
+});
+
+it('verifies asymmetric jwt tokens against a rotating public key ring', function () {
+    $now = time();
+    $claims = [
+        'iss' => 'issuer-service',
+        'aud' => 'audience-service',
+        'sub' => 'subject-service',
+        'jti' => 'token-service',
+        'nbf' => $now,
+        'exp' => $now + 600,
+    ];
+
+    $token = (new AsymmetricJwt(null, AsymmetricJwtAlgorithm::RS512))->encode($claims, $this->privateKey);
+    $jwt = new AsymmetricJwt(
+        null,
+        AsymmetricJwtAlgorithm::RS512,
+        new RegisteredClaims('issuer-service', 'audience-service', 'subject-service', 'token-service'),
+    );
+
+    $wrongKeyResource = openssl_pkey_new([
+        'private_key_type' => OPENSSL_KEYTYPE_RSA,
+        'private_key_bits' => 2048,
+    ]);
+    expect($wrongKeyResource)->not->toBeFalse();
+    $wrongKeyDetails = openssl_pkey_get_details($wrongKeyResource);
+    expect($wrongKeyDetails)->toBeArray();
+
+    $ring = new KeyRing([
+        'legacy' => $wrongKeyDetails['key'],
+        'active' => $this->publicKey,
+    ], 'active');
+
+    expect($jwt->verifyWithAnyKey($token, $ring))->toBeTrue();
+    expect($jwt->decodeWithAnyKey($token, $ring))->toBeObject();
+    expect($jwt->verifyWithAnyKey($token, [$wrongKeyDetails['key']]))->toBeFalse();
 });

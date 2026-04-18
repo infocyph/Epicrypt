@@ -11,6 +11,8 @@ use Infocyph\Epicrypt\Generate\KeyMaterial\KeyMaterialGenerator;
 use Infocyph\Epicrypt\Internal\Enum\EnvelopeAlgorithm;
 use Infocyph\Epicrypt\Internal\Enum\EnvelopeVersion;
 use Infocyph\Epicrypt\Internal\Json;
+use Infocyph\Epicrypt\Internal\KeyCandidates;
+use Infocyph\Epicrypt\Security\KeyRing;
 use Throwable;
 
 final readonly class EnvelopeProtector
@@ -54,6 +56,23 @@ final readonly class EnvelopeProtector
     }
 
     /**
+     * @param iterable<string, string>|KeyRing $masterKeys
+     */
+    public function decryptWithAny(string $encodedEnvelope, iterable|KeyRing $masterKeys): string
+    {
+        $lastException = null;
+        foreach ($this->orderedKeys($masterKeys) as $masterKey) {
+            try {
+                return $this->decrypt($encodedEnvelope, $masterKey);
+            } catch (DecryptionException $e) {
+                $lastException = $e;
+            }
+        }
+
+        throw new DecryptionException('Unable to decrypt envelope with any supplied master key.', 0, $lastException);
+    }
+
+    /**
      * @param array{encrypted_data: string, encrypted_key: string, v?: int, alg?: string} $envelope
      */
     public function encodeEnvelope(array $envelope): string
@@ -80,6 +99,40 @@ final readonly class EnvelopeProtector
             ];
         } catch (Throwable $e) {
             throw new EncryptionException($e->getMessage(), 0, $e);
+        }
+    }
+
+    public function reencrypt(string $encodedEnvelope, string $oldMasterKey, string $newMasterKey): string
+    {
+        $plaintext = $this->decrypt($encodedEnvelope, $oldMasterKey);
+
+        return $this->encodeEnvelope($this->encrypt($plaintext, $newMasterKey));
+    }
+
+    /**
+     * @param iterable<string, string>|KeyRing $masterKeys
+     */
+    public function reencryptWithAny(string $encodedEnvelope, iterable|KeyRing $masterKeys, string $newMasterKey): string
+    {
+        $plaintext = $this->decryptWithAny($encodedEnvelope, $masterKeys);
+
+        return $this->encodeEnvelope($this->encrypt($plaintext, $newMasterKey));
+    }
+
+    /**
+     * @param iterable<string, string>|KeyRing $keys
+     * @return list<string>
+     */
+    private function orderedKeys(iterable|KeyRing $keys): array
+    {
+        try {
+            return KeyCandidates::ordered(
+                $keys,
+                'All master key candidates must be non-empty strings.',
+                'At least one master key candidate is required.',
+            );
+        } catch (\InvalidArgumentException $e) {
+            throw new DecryptionException($e->getMessage(), 0, $e);
         }
     }
 }

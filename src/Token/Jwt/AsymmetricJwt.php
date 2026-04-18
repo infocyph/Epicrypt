@@ -12,6 +12,8 @@ use Infocyph\Epicrypt\Exception\Token\TokenException;
 use Infocyph\Epicrypt\Exception\Token\UnsupportedAlgorithmException;
 use Infocyph\Epicrypt\Internal\Base64Url;
 use Infocyph\Epicrypt\Internal\EcdsaSignatureConverter;
+use Infocyph\Epicrypt\Internal\KeyCandidates;
+use Infocyph\Epicrypt\Security\KeyRing;
 use Infocyph\Epicrypt\Token\Contract\JwtTokenInterface;
 use Infocyph\Epicrypt\Token\Jwt\Enum\AsymmetricJwtAlgorithm;
 use Infocyph\Epicrypt\Token\Jwt\Support\JwtToken;
@@ -79,6 +81,23 @@ final readonly class AsymmetricJwt implements JwtTokenInterface
         } catch (Throwable $e) {
             throw new InvalidTokenException($e->getMessage(), 0, $e);
         }
+    }
+
+    /**
+     * @param iterable<string, string>|KeyRing $keys
+     */
+    public function decodeWithAnyKey(string $token, iterable|KeyRing $keys): object
+    {
+        $lastException = null;
+        foreach ($this->orderedKeys($keys) as $key) {
+            try {
+                return $this->decode($token, $key);
+            } catch (Throwable $e) {
+                $lastException = $e;
+            }
+        }
+
+        throw new InvalidTokenException('JWT verification failed for every supplied asymmetric key.', 0, $lastException);
     }
 
     /**
@@ -150,6 +169,20 @@ final readonly class AsymmetricJwt implements JwtTokenInterface
     }
 
     /**
+     * @param iterable<string, string>|KeyRing $keys
+     */
+    public function verifyWithAnyKey(string $token, iterable|KeyRing $keys): bool
+    {
+        try {
+            $this->decodeWithAnyKey($token, $keys);
+
+            return true;
+        } catch (Throwable) {
+            return false;
+        }
+    }
+
+    /**
      * @param array<string, mixed> $claims
      * @return array{int, int}
      */
@@ -168,6 +201,23 @@ final readonly class AsymmetricJwt implements JwtTokenInterface
         }
 
         return [(int) $claims['nbf'], (int) $claims['exp']];
+    }
+
+    /**
+     * @param iterable<string, string>|KeyRing $keys
+     * @return list<string>
+     */
+    private function orderedKeys(iterable|KeyRing $keys): array
+    {
+        try {
+            return KeyCandidates::ordered(
+                $keys,
+                'All asymmetric JWT key candidates must be non-empty strings.',
+                'At least one asymmetric JWT key candidate is required.',
+            );
+        } catch (\InvalidArgumentException $e) {
+            throw new TokenException($e->getMessage(), 0, $e);
+        }
     }
 
     /**

@@ -34,6 +34,7 @@ Documentation Map
 
    getting-started
    architecture
+   security-recommendations
 
 .. toctree::
    :maxdepth: 2

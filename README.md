@@ -32,4 +32,3 @@ See the `docs/` folder for full guides:
 - capability guides
 - testing and benchmarking
 - error handling
-
