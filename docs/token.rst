@@ -17,8 +17,8 @@ Symmetric JWT
 
 .. code-block:: php
 
+   use Infocyph\Epicrypt\Security\Policy\SecurityProfile;
    use Infocyph\Epicrypt\Token\Jwt\SymmetricJwt;
-   use Infocyph\Epicrypt\Token\Jwt\Enum\SymmetricJwtAlgorithm;
    use Infocyph\Epicrypt\Token\Jwt\Validation\RegisteredClaims;
 
    $now = time();
@@ -32,10 +32,10 @@ Symmetric JWT
        'scope' => 'admin',
    ];
 
-   $token = (new SymmetricJwt(SymmetricJwtAlgorithm::HS512))->encode($claims, 'super-secret-key');
+   $token = SymmetricJwt::forProfile(SecurityProfile::MODERN)->encode($claims, 'super-secret-key');
 
-   $jwt = new SymmetricJwt(
-       SymmetricJwtAlgorithm::HS512,
+   $jwt = SymmetricJwt::forProfile(
+       SecurityProfile::MODERN,
        new RegisteredClaims('issuer-service', 'audience-service', 'subject-service', 'token-1'),
    );
 
@@ -54,26 +54,27 @@ JWT Key Rings
 .. code-block:: php
 
    use Infocyph\Epicrypt\Security\KeyRing;
-   use Infocyph\Epicrypt\Token\Jwt\Enum\SymmetricJwtAlgorithm;
+   use Infocyph\Epicrypt\Security\Policy\SecurityProfile;
    use Infocyph\Epicrypt\Token\Jwt\SymmetricJwt;
    use Infocyph\Epicrypt\Token\Jwt\Validation\RegisteredClaims;
 
-   $jwt = new SymmetricJwt(
-       SymmetricJwtAlgorithm::HS512,
+   $jwt = SymmetricJwt::forProfile(
+       SecurityProfile::MODERN,
        new RegisteredClaims('issuer-service', 'audience-service', 'subject-service', 'token-1'),
    );
 
    $ring = new KeyRing(['legacy' => 'legacy-secret', 'active' => 'active-secret'], 'active');
    $claims = $jwt->decodeWithAnyKey($token, $ring);
    $isValid = $jwt->verifyWithAnyKey($token, $ring);
+   $result = $jwt->verifyWithAnyKeyResult($token, $ring);
 
 Asymmetric JWT
 --------------
 
 .. code-block:: php
 
+   use Infocyph\Epicrypt\Security\Policy\SecurityProfile;
    use Infocyph\Epicrypt\Token\Jwt\AsymmetricJwt;
-   use Infocyph\Epicrypt\Token\Jwt\Enum\AsymmetricJwtAlgorithm;
    use Infocyph\Epicrypt\Token\Jwt\Validation\RegisteredClaims;
 
    $resource = openssl_pkey_new([
@@ -94,10 +95,9 @@ Asymmetric JWT
        'exp' => $now + 600,
    ];
 
-   $token = (new AsymmetricJwt(null, AsymmetricJwtAlgorithm::RS512))->encode($claims, $privateKey);
-   $jwt = new AsymmetricJwt(
-       null,
-       AsymmetricJwtAlgorithm::RS512,
+   $token = AsymmetricJwt::forProfile(SecurityProfile::MODERN)->encode($claims, $privateKey);
+   $jwt = AsymmetricJwt::forProfile(
+       SecurityProfile::MODERN,
        new RegisteredClaims('issuer-service', 'audience-service', 'subject-service', 'token-1'),
    );
    $isValid = $jwt->verify($token, $publicKey);
@@ -132,6 +132,7 @@ Signed Payload Key Rings
    $ring = new KeyRing(['legacy' => 'legacy-secret', 'active' => 'active-secret'], 'active');
    $claims = $payload->decodeWithAnyKey($token, $ring);
    $isValid = $payload->verifyWithAnyKey($token, $ring);
+   $result = $payload->verifyWithAnyKeyResult($token, $ring);
 
 Opaque Token
 ------------

@@ -35,6 +35,7 @@ Documentation Map
    getting-started
    architecture
    security-recommendations
+   migration-and-rotation
 
 .. toctree::
    :maxdepth: 2

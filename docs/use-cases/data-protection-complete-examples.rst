@@ -16,10 +16,11 @@ Use this when you need easy encrypt/decrypt calls for short data stored in your 
 
    use Infocyph\Epicrypt\DataProtection\StringProtector;
    use Infocyph\Epicrypt\Generate\KeyMaterial\KeyMaterialGenerator;
+   use Infocyph\Epicrypt\Security\Policy\SecurityProfile;
 
    $key = (new KeyMaterialGenerator())->generate(SODIUM_CRYPTO_SECRETBOX_KEYBYTES);
 
-   $stringProtector = new StringProtector();
+   $stringProtector = StringProtector::forProfile(SecurityProfile::MODERN);
    $ciphertext = $stringProtector->encrypt('sensitive data', $key);
    $plaintext = $stringProtector->decrypt($ciphertext, $key);
 
@@ -36,10 +37,11 @@ Use this when you want a structured protected payload that can be encoded and st
 
    use Infocyph\Epicrypt\DataProtection\EnvelopeProtector;
    use Infocyph\Epicrypt\Generate\KeyMaterial\KeyMaterialGenerator;
+   use Infocyph\Epicrypt\Security\Policy\SecurityProfile;
 
    $key = (new KeyMaterialGenerator())->generate(SODIUM_CRYPTO_SECRETBOX_KEYBYTES);
 
-   $envelopeProtector = new EnvelopeProtector();
+   $envelopeProtector = EnvelopeProtector::forProfile(SecurityProfile::MODERN);
    $envelope = $envelopeProtector->encrypt('payload', $key);
    $encodedEnvelope = $envelopeProtector->encodeEnvelope($envelope);
    $decoded = $envelopeProtector->decrypt($encodedEnvelope, $key);
@@ -57,9 +59,10 @@ Use this when you need stream-based encryption for files or large blobs.
 
    use Infocyph\Epicrypt\DataProtection\FileProtector;
    use Infocyph\Epicrypt\Generate\KeyMaterial\KeyMaterialGenerator;
+   use Infocyph\Epicrypt\Security\Policy\SecurityProfile;
 
    $fileKey = (new KeyMaterialGenerator())->generate(SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_KEYBYTES);
-   $fileProtector = new FileProtector();
+   $fileProtector = FileProtector::forProfile(SecurityProfile::MODERN);
    $lastChunk = $fileProtector->encrypt('/tmp/in.bin', '/tmp/in.bin.epc', $fileKey, 8192, false);
    $fileProtector->decrypt('/tmp/in.bin.epc', '/tmp/in.dec.bin', $fileKey, 8192, false);
 

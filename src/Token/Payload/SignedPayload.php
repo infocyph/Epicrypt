@@ -8,6 +8,7 @@ use Infocyph\Epicrypt\Exception\Token\TokenException;
 use Infocyph\Epicrypt\Internal\KeyCandidates;
 use Infocyph\Epicrypt\Internal\SignedPayloadCodec;
 use Infocyph\Epicrypt\Security\KeyRing;
+use Infocyph\Epicrypt\Security\KeyVerificationResult;
 use Infocyph\Epicrypt\Token\Contract\PayloadTokenInterface;
 
 final readonly class SignedPayload implements PayloadTokenInterface
@@ -79,12 +80,37 @@ final readonly class SignedPayload implements PayloadTokenInterface
      */
     public function verifyWithAnyKey(string $token, iterable|KeyRing $keys): bool
     {
-        try {
-            $this->decodeWithAnyKey($token, $keys);
+        return $this->verifyWithAnyKeyResult($token, $keys)->verified;
+    }
 
-            return true;
-        } catch (TokenException) {
-            return false;
+    /**
+     * @param iterable<string, string>|KeyRing $keys
+     */
+    public function verifyWithAnyKeyResult(string $token, iterable|KeyRing $keys): KeyVerificationResult
+    {
+        foreach ($this->orderedKeyEntries($keys) as $entry) {
+            if ($this->verify($token, $entry['key'])) {
+                return new KeyVerificationResult(true, $entry['id'], !$entry['active']);
+            }
+        }
+
+        return new KeyVerificationResult(false);
+    }
+
+    /**
+     * @param iterable<string, string>|KeyRing $keys
+     * @return list<array{id: ?string, key: string, active: bool}>
+     */
+    private function orderedKeyEntries(iterable|KeyRing $keys): array
+    {
+        try {
+            return KeyCandidates::orderedEntries(
+                $keys,
+                'All signed payload key candidates must be non-empty strings.',
+                'At least one signed payload key candidate is required.',
+            );
+        } catch (\InvalidArgumentException $e) {
+            throw new TokenException($e->getMessage(), 0, $e);
         }
     }
 
@@ -94,14 +120,6 @@ final readonly class SignedPayload implements PayloadTokenInterface
      */
     private function orderedKeys(iterable|KeyRing $keys): array
     {
-        try {
-            return KeyCandidates::ordered(
-                $keys,
-                'All signed payload key candidates must be non-empty strings.',
-                'At least one signed payload key candidate is required.',
-            );
-        } catch (\InvalidArgumentException $e) {
-            throw new TokenException($e->getMessage(), 0, $e);
-        }
+        return array_column($this->orderedKeyEntries($keys), 'key');
     }
 }

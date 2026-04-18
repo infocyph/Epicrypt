@@ -109,7 +109,8 @@ Wrapped Secret Rotation
    $rotated = $manager->rewrap($wrapped, $oldMasterSecret, $newMasterSecret);
 
    $ring = new KeyRing(['old' => $oldMasterSecret, 'new' => $newMasterSecret], 'new');
-   $plain = $manager->unwrapWithAny($rotated, $ring);
+   $result = $manager->unwrapWithAnyKeyResult($rotated, $ring);
+   $plain = $result->plaintext;
 
 Secure Secret Serialization
 ---------------------------

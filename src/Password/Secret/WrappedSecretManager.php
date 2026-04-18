@@ -28,14 +28,14 @@ final class WrappedSecretManager
     /**
      * @param iterable<string, string>|KeyRing $masterSecrets
      */
-    public function rewrapWithAny(
+    public function rewrapWithAnyKey(
         string $wrappedSecret,
         iterable|KeyRing $masterSecrets,
         string $newMasterSecret,
         bool $masterSecretsAreBinary = false,
         bool $newMasterSecretIsBinary = false,
     ): string {
-        $plaintext = $this->unwrapWithAny($wrappedSecret, $masterSecrets, $masterSecretsAreBinary);
+        $plaintext = $this->unwrapWithAnyKeyResult($wrappedSecret, $masterSecrets, $masterSecretsAreBinary)->plaintext;
 
         return $this->wrap($plaintext, $newMasterSecret, $newMasterSecretIsBinary);
     }
@@ -65,12 +65,24 @@ final class WrappedSecretManager
     /**
      * @param iterable<string, string>|KeyRing $masterSecrets
      */
-    public function unwrapWithAny(string $wrappedSecret, iterable|KeyRing $masterSecrets, bool $masterSecretsAreBinary = false): string
+    public function unwrapWithAnyKey(string $wrappedSecret, iterable|KeyRing $masterSecrets, bool $masterSecretsAreBinary = false): string
+    {
+        return $this->unwrapWithAnyKeyResult($wrappedSecret, $masterSecrets, $masterSecretsAreBinary)->plaintext;
+    }
+
+    /**
+     * @param iterable<string, string>|KeyRing $masterSecrets
+     */
+    public function unwrapWithAnyKeyResult(string $wrappedSecret, iterable|KeyRing $masterSecrets, bool $masterSecretsAreBinary = false): UnwrappedSecretResult
     {
         $lastException = null;
-        foreach ($this->orderedKeys($masterSecrets) as $masterSecret) {
+        foreach ($this->orderedKeyEntries($masterSecrets) as $entry) {
             try {
-                return $this->unwrap($wrappedSecret, $masterSecret, $masterSecretsAreBinary);
+                return new UnwrappedSecretResult(
+                    $this->unwrap($wrappedSecret, $entry['key'], $masterSecretsAreBinary),
+                    $entry['id'],
+                    !$entry['active'],
+                );
             } catch (SecretProtectionException $e) {
                 $lastException = $e;
             }
@@ -98,12 +110,12 @@ final class WrappedSecretManager
 
     /**
      * @param iterable<string, string>|KeyRing $keys
-     * @return list<string>
+     * @return list<array{id: ?string, key: string, active: bool}>
      */
-    private function orderedKeys(iterable|KeyRing $keys): array
+    private function orderedKeyEntries(iterable|KeyRing $keys): array
     {
         try {
-            return KeyCandidates::ordered(
+            return KeyCandidates::orderedEntries(
                 $keys,
                 'All master secret candidates must be non-empty strings.',
                 'At least one master secret candidate is required.',

@@ -53,23 +53,40 @@ final readonly class KeyRing
     }
 
     /**
-     * @return list<string>
+     * @return list<array{id: string, key: string, active: bool}>
      */
-    public function orderedKeys(): array
+    public function orderedEntries(): array
     {
-        if ($this->activeKeyId === null) {
-            return array_values($this->keys);
+        $ordered = [];
+
+        if ($this->activeKeyId !== null) {
+            $ordered[] = [
+                'id' => $this->activeKeyId,
+                'key' => $this->keys[$this->activeKeyId],
+                'active' => true,
+            ];
         }
 
-        $ordered = [$this->keys[$this->activeKeyId]];
         foreach ($this->keys as $keyId => $key) {
             if ($keyId === $this->activeKeyId) {
                 continue;
             }
 
-            $ordered[] = $key;
+            $ordered[] = [
+                'id' => $keyId,
+                'key' => $key,
+                'active' => false,
+            ];
         }
 
         return $ordered;
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function orderedKeys(): array
+    {
+        return array_column($this->orderedEntries(), 'key');
     }
 }

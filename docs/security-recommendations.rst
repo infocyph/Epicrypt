@@ -22,6 +22,21 @@ If you are starting fresh, prefer these defaults:
 - Browser workflow tokens: ``Security`` domain helpers such as ``PasswordResetToken`` and ``SignedUrl``
 - New ciphertext formats: modern ``DataProtection`` APIs, not compatibility helpers
 
+Public Surface First
+--------------------
+
+For new applications, start from these domains first:
+
+- ``Password``
+- ``Token``
+- ``DataProtection``
+- ``Security``
+
+Treat these as lower-level or advanced:
+
+- ``Crypto`` for direct primitive control
+- compatibility helpers only for migration or interop boundaries
+
 Choose the Right Tool
 ---------------------
 
@@ -66,11 +81,13 @@ Use:
 - ``StringProtector`` for ordinary application payloads
 - ``EnvelopeProtector`` when you want a structured encoded envelope
 - ``FileProtector`` for large files and streaming-safe encryption
+- ``FileProtector::reencryptWithAnyKey()`` when migrating protected files across rotating keys
 
 Prefer:
 
 - re-encrypting stored legacy ciphertext into the current format
-- ``decryptWithAny()`` or ``reencryptWithAny()`` only during migration windows
+- ``decryptWithAnyKey()`` or ``reencryptWithAnyKey()`` only during migration windows
+- result helpers like ``decryptWithAnyKeyResult()`` when migration code needs to know which key matched
 
 Avoid:
 
@@ -91,6 +108,7 @@ Prefer:
 
 - ``kid`` plus key-set mode when rotating JWT signing keys
 - ``KeyRing``-based verification helpers during short transition windows
+- ``verifyWithAnyKeyResult()`` when callers need to know whether a fallback key matched
 
 Avoid:
 
@@ -139,10 +157,13 @@ Prefer this pattern:
 2. re-encrypt or re-issue using the current Epicrypt format
 3. keep fallback verification only for a short migration period
 
+If you want a hard migration boundary, use ``SecurityProfile::LEGACY_DECRYPT_ONLY`` on profile-aware factories. It allows decrypt/verify flows while blocking new encrypt/issue operations.
+
 In particular:
 
 - prefer ``StringProtector`` and ``EnvelopeProtector`` for new protected data
 - treat ``OpenSSL\InteroperabilityCryptoHelper`` as migration-oriented, not as the preferred default
+- follow the migration cookbook for active-key and fallback-key rollout patterns
 
 Binary vs Base64URL
 -------------------

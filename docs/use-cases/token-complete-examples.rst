@@ -14,6 +14,7 @@ Use this when the issuer and verifier share one secret or a keyed secret set.
 
    declare(strict_types=1);
 
+   use Infocyph\Epicrypt\Security\Policy\SecurityProfile;
    use Infocyph\Epicrypt\Token\Jwt\Enum\SymmetricJwtAlgorithm;
    use Infocyph\Epicrypt\Token\Jwt\SymmetricJwt;
    use Infocyph\Epicrypt\Token\Jwt\Validation\RegisteredClaims;
@@ -32,10 +33,10 @@ Use this when the issuer and verifier share one secret or a keyed secret set.
 
    // Use a key id when the verifier may choose among multiple secrets.
    $symKeys = ['k1' => 'legacy-secret', 'k2' => 'active-secret'];
-   $sym = new SymmetricJwt(SymmetricJwtAlgorithm::HS512);
+   $sym = SymmetricJwt::forProfile(SecurityProfile::MODERN);
    $symToken = $sym->encode($claims, $symKeys);
-   $symVerifier = new SymmetricJwt(
-       SymmetricJwtAlgorithm::HS512,
+   $symVerifier = SymmetricJwt::forProfile(
+       SecurityProfile::MODERN,
        new RegisteredClaims('issuer-service', 'audience-service', 'subject-service', 'token-1'),
    );
    $symPayload = $symVerifier->decode($symToken, $symKeys);
@@ -53,8 +54,8 @@ Use this when one service signs with a private key and others verify with public
    declare(strict_types=1);
 
    use Infocyph\Epicrypt\Certificate\KeyPairGenerator;
+   use Infocyph\Epicrypt\Security\Policy\SecurityProfile;
    use Infocyph\Epicrypt\Token\Jwt\AsymmetricJwt;
-   use Infocyph\Epicrypt\Token\Jwt\Enum\AsymmetricJwtAlgorithm;
    use Infocyph\Epicrypt\Token\Jwt\Validation\RegisteredClaims;
 
    $now = time();
@@ -73,11 +74,10 @@ Use this when one service signs with a private key and others verify with public
    $rsaB = KeyPairGenerator::openSsl()->generate();
    $privateSet = ['k1' => $rsaA['private'], 'k2' => $rsaB['private']];
    $publicSet = ['k1' => $rsaA['public'], 'k2' => $rsaB['public']];
-   $asym = new AsymmetricJwt(null, AsymmetricJwtAlgorithm::RS512);
+   $asym = AsymmetricJwt::forProfile(SecurityProfile::MODERN);
    $asymToken = $asym->encode($claims, $privateSet);
-   $asymVerifier = new AsymmetricJwt(
-       null,
-       AsymmetricJwtAlgorithm::RS512,
+   $asymVerifier = AsymmetricJwt::forProfile(
+       SecurityProfile::MODERN,
        new RegisteredClaims('issuer-service', 'audience-service', 'subject-service', 'token-1'),
    );
    $asymPayload = $asymVerifier->decode($asymToken, $publicSet);
@@ -148,12 +148,13 @@ Use this when old and active verification keys must coexist during a short migra
    declare(strict_types=1);
 
    use Infocyph\Epicrypt\Security\KeyRing;
+   use Infocyph\Epicrypt\Security\Policy\SecurityProfile;
    use Infocyph\Epicrypt\Token\Jwt\Enum\SymmetricJwtAlgorithm;
    use Infocyph\Epicrypt\Token\Jwt\SymmetricJwt;
    use Infocyph\Epicrypt\Token\Jwt\Validation\RegisteredClaims;
 
-   $jwt = new SymmetricJwt(
-       SymmetricJwtAlgorithm::HS512,
+   $jwt = SymmetricJwt::forProfile(
+       SecurityProfile::MODERN,
        new RegisteredClaims('issuer-service', 'audience-service', 'subject-service', 'token-1'),
    );
 

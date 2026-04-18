@@ -4,6 +4,7 @@ use Infocyph\Epicrypt\Security\ActionToken;
 use Infocyph\Epicrypt\Security\CsrfTokenManager;
 use Infocyph\Epicrypt\Security\EmailVerificationToken;
 use Infocyph\Epicrypt\Security\KeyRotationHelper;
+use Infocyph\Epicrypt\Security\KeyRing;
 use Infocyph\Epicrypt\Security\PasswordResetToken;
 use Infocyph\Epicrypt\Security\RememberToken;
 use Infocyph\Epicrypt\Security\SignedUrl;
@@ -52,11 +53,15 @@ it('issues purpose-bound reset and action tokens', function () {
 it('verifies signatures across rotated key sets', function () {
     $rotation = new KeyRotationHelper();
 
-    $keys = ['k1' => 'legacy-key', 'k2' => 'active-key'];
+    $keys = new KeyRing(['k1' => 'legacy-key', 'k2' => 'active-key'], 'k2');
     $payload = 'important-payload';
 
-    $signature = $rotation->sign($payload, 'k2', $keys);
+    $signature = $rotation->signWithKeyRing($payload, $keys);
+    $result = $rotation->verifyResult($payload, $signature, $keys);
 
     expect($rotation->verify($payload, $signature, $keys, 'k2'))->toBeTrue();
+    expect($result->verified)->toBeTrue();
+    expect($result->matchedKeyId)->toBe('k2');
+    expect($result->usedFallbackKey)->toBeFalse();
     expect($rotation->verify($payload, $signature, ['k1' => 'legacy-key'], 'k1'))->toBeFalse();
 });

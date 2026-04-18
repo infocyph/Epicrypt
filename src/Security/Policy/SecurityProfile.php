@@ -25,6 +25,11 @@ enum SecurityProfile: string
         return $this !== self::MODERN;
     }
 
+    public function allowsWrites(): bool
+    {
+        return $this !== self::LEGACY_DECRYPT_ONLY;
+    }
+
     public function defaultAeadAlgorithm(): AeadAlgorithm
     {
         return match ($this) {

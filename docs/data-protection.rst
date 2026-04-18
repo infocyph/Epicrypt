@@ -21,10 +21,11 @@ String Protector
 
    use Infocyph\Epicrypt\DataProtection\StringProtector;
    use Infocyph\Epicrypt\Generate\KeyMaterial\KeyMaterialGenerator;
+   use Infocyph\Epicrypt\Security\Policy\SecurityProfile;
 
    $key = (new KeyMaterialGenerator())->generate(SODIUM_CRYPTO_SECRETBOX_KEYBYTES);
 
-   $protector = new StringProtector();
+   $protector = StringProtector::forProfile(SecurityProfile::MODERN);
    $ciphertext = $protector->encrypt('sensitive data', $key);
    $plaintext = $protector->decrypt($ciphertext, $key);
 
@@ -35,10 +36,12 @@ Rotation and Migration
 
    use Infocyph\Epicrypt\DataProtection\StringProtector;
    use Infocyph\Epicrypt\Security\KeyRing;
+   use Infocyph\Epicrypt\Security\Policy\SecurityProfile;
 
    $ring = new KeyRing(['legacy' => $legacyKey, 'current' => $currentKey], 'current');
-   $plaintext = (new StringProtector())->decryptWithAny($ciphertext, $ring);
-   $migrated = (new StringProtector())->reencryptWithAny($ciphertext, $ring, $currentKey);
+   $result = StringProtector::forProfile(SecurityProfile::MODERN)->decryptWithAnyKeyResult($ciphertext, $ring);
+   $plaintext = $result->plaintext;
+   $migrated = StringProtector::forProfile(SecurityProfile::MODERN)->reencryptWithAnyKey($ciphertext, $ring, $currentKey);
 
 Envelope Protector
 ------------------
@@ -47,12 +50,14 @@ Envelope Protector
 
    use Infocyph\Epicrypt\DataProtection\EnvelopeProtector;
    use Infocyph\Epicrypt\Generate\KeyMaterial\KeyMaterialGenerator;
+   use Infocyph\Epicrypt\Security\Policy\SecurityProfile;
 
    $masterKey = (new KeyMaterialGenerator())->generate(SODIUM_CRYPTO_SECRETBOX_KEYBYTES);
-   $envelope = (new EnvelopeProtector())->encrypt('payload', $masterKey);
+   $envelopeProtector = EnvelopeProtector::forProfile(SecurityProfile::MODERN);
+   $envelope = $envelopeProtector->encrypt('payload', $masterKey);
 
-   $encoded = (new EnvelopeProtector())->encodeEnvelope($envelope);
-   $plain = (new EnvelopeProtector())->decrypt($encoded, $masterKey);
+   $encoded = $envelopeProtector->encodeEnvelope($envelope);
+   $plain = $envelopeProtector->decrypt($encoded, $masterKey);
 
 Envelope payload includes:
 
@@ -66,8 +71,32 @@ Envelope Re-Encryption
 
 .. code-block:: php
 
-   $migrated = (new EnvelopeProtector())->reencryptWithAny($encoded, [$legacyMasterKey], $currentMasterKey);
-   $plain = (new EnvelopeProtector())->decrypt($migrated, $currentMasterKey);
+   use Infocyph\Epicrypt\DataProtection\EnvelopeProtector;
+   use Infocyph\Epicrypt\Security\KeyRing;
+
+   $protector = EnvelopeProtector::forProfile(SecurityProfile::MODERN);
+   $ring = new KeyRing(['legacy' => $legacyMasterKey, 'current' => $currentMasterKey], 'current');
+   $result = $protector->decryptWithAnyKeyResult($encoded, $ring);
+   $migrated = $protector->reencryptWithAnyKey($encoded, $ring, $currentMasterKey);
+   $plain = $protector->decrypt($migrated, $currentMasterKey);
+
+File Re-Encryption
+------------------
+
+.. code-block:: php
+
+   use Infocyph\Epicrypt\DataProtection\FileMigrationResult;
+   use Infocyph\Epicrypt\DataProtection\FileProtector;
+   use Infocyph\Epicrypt\Security\KeyRing;
+   use Infocyph\Epicrypt\Security\Policy\SecurityProfile;
+
+   $ring = new KeyRing(['legacy' => $legacyFileKey, 'current' => $currentFileKey], 'current');
+   $result = FileProtector::forProfile(SecurityProfile::MODERN)->reencryptWithAnyKey(
+       '/tmp/input.txt.epc',
+       '/tmp/input.txt.new.epc',
+       $ring,
+       $currentFileKey,
+   );
 
 File Protector
 --------------
@@ -76,11 +105,12 @@ File Protector
 
    use Infocyph\Epicrypt\DataProtection\FileProtector;
    use Infocyph\Epicrypt\Generate\KeyMaterial\KeyMaterialGenerator;
+   use Infocyph\Epicrypt\Security\Policy\SecurityProfile;
 
    $key = (new KeyMaterialGenerator())
        ->generate(SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_KEYBYTES);
 
-   $file = new FileProtector();
+   $file = FileProtector::forProfile(SecurityProfile::MODERN);
    $file->encrypt('/tmp/input.txt', '/tmp/input.txt.epc', $key);
    $file->decrypt('/tmp/input.txt.epc', '/tmp/input.dec.txt', $key);
 

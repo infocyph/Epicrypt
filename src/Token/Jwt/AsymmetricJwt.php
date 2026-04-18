@@ -14,6 +14,8 @@ use Infocyph\Epicrypt\Internal\Base64Url;
 use Infocyph\Epicrypt\Internal\EcdsaSignatureConverter;
 use Infocyph\Epicrypt\Internal\KeyCandidates;
 use Infocyph\Epicrypt\Security\KeyRing;
+use Infocyph\Epicrypt\Security\KeyVerificationResult;
+use Infocyph\Epicrypt\Security\Policy\SecurityProfile;
 use Infocyph\Epicrypt\Token\Contract\JwtTokenInterface;
 use Infocyph\Epicrypt\Token\Jwt\Enum\AsymmetricJwtAlgorithm;
 use Infocyph\Epicrypt\Token\Jwt\Support\JwtToken;
@@ -28,7 +30,17 @@ final readonly class AsymmetricJwt implements JwtTokenInterface
      */
     private const array RESERVED_CLAIMS = ['iss', 'aud', 'sub', 'jti', 'iat', 'nbf', 'exp', 'kid'];
 
-    public function __construct(private ?string $passphrase = null, private AsymmetricJwtAlgorithm $algorithm = AsymmetricJwtAlgorithm::RS512, private ?RegisteredClaims $expectedClaims = null) {}
+    public function __construct(
+        private ?string $passphrase = null,
+        private AsymmetricJwtAlgorithm $algorithm = AsymmetricJwtAlgorithm::RS512,
+        private ?RegisteredClaims $expectedClaims = null,
+        private SecurityProfile $profile = SecurityProfile::MODERN,
+    ) {}
+
+    public static function forProfile(SecurityProfile $profile = SecurityProfile::MODERN, ?RegisteredClaims $expectedClaims = null, ?string $passphrase = null): self
+    {
+        return new self($passphrase, $profile->defaultAsymmetricJwtAlgorithm(), $expectedClaims, $profile);
+    }
 
     public function decode(string $token, mixed $key): object
     {
@@ -106,6 +118,7 @@ final readonly class AsymmetricJwt implements JwtTokenInterface
      */
     public function encode(array $claims, mixed $key, array $headers = []): string
     {
+        $this->assertCanIssue();
         $key = $this->requireSupportedKeyType($key);
 
         $registeredClaims = RegisteredClaims::fromArray($claims);
@@ -173,12 +186,27 @@ final readonly class AsymmetricJwt implements JwtTokenInterface
      */
     public function verifyWithAnyKey(string $token, iterable|KeyRing $keys): bool
     {
-        try {
-            $this->decodeWithAnyKey($token, $keys);
+        return $this->verifyWithAnyKeyResult($token, $keys)->verified;
+    }
 
-            return true;
-        } catch (Throwable) {
-            return false;
+    /**
+     * @param iterable<string, string>|KeyRing $keys
+     */
+    public function verifyWithAnyKeyResult(string $token, iterable|KeyRing $keys): KeyVerificationResult
+    {
+        foreach ($this->orderedKeyEntries($keys) as $entry) {
+            if ($this->verify($token, $entry['key'])) {
+                return new KeyVerificationResult(true, $entry['id'], !$entry['active']);
+            }
+        }
+
+        return new KeyVerificationResult(false);
+    }
+
+    private function assertCanIssue(): void
+    {
+        if (!$this->profile->allowsWrites()) {
+            throw new TokenException('JWT issuing is disabled for the legacy-decrypt-only profile.');
         }
     }
 
@@ -205,12 +233,12 @@ final readonly class AsymmetricJwt implements JwtTokenInterface
 
     /**
      * @param iterable<string, string>|KeyRing $keys
-     * @return list<string>
+     * @return list<array{id: ?string, key: string, active: bool}>
      */
-    private function orderedKeys(iterable|KeyRing $keys): array
+    private function orderedKeyEntries(iterable|KeyRing $keys): array
     {
         try {
-            return KeyCandidates::ordered(
+            return KeyCandidates::orderedEntries(
                 $keys,
                 'All asymmetric JWT key candidates must be non-empty strings.',
                 'At least one asymmetric JWT key candidate is required.',
@@ -218,6 +246,15 @@ final readonly class AsymmetricJwt implements JwtTokenInterface
         } catch (\InvalidArgumentException $e) {
             throw new TokenException($e->getMessage(), 0, $e);
         }
+    }
+
+    /**
+     * @param iterable<string, string>|KeyRing $keys
+     * @return list<string>
+     */
+    private function orderedKeys(iterable|KeyRing $keys): array
+    {
+        return array_column($this->orderedKeyEntries($keys), 'key');
     }
 
     /**
