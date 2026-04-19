@@ -20,7 +20,7 @@ If you are starting fresh, prefer these defaults:
 - Revocable random bearer tokens: ``Token\Opaque\OpaqueToken``
 - Small signed action/reset payloads: ``Token\Payload\SignedPayload``
 - Browser workflow tokens: ``Security`` domain helpers such as ``PasswordResetToken`` and ``SignedUrl``
-- New ciphertext formats: modern ``DataProtection`` APIs, not compatibility helpers
+- New ciphertext formats: modern ``DataProtection`` APIs
 
 Public Surface First
 --------------------
@@ -35,7 +35,6 @@ For new applications, start from these domains first:
 Treat these as lower-level or advanced:
 
 - ``Crypto`` for direct primitive control
-- compatibility helpers only for migration or interop boundaries
 
 Choose the Right Tool
 ---------------------
@@ -71,7 +70,7 @@ Use:
 Prefer:
 
 - one active master secret
-- short fallback windows for older secrets
+- short fallback windows for previous key versions
 
 Protected Data
 ^^^^^^^^^^^^^^
@@ -81,18 +80,17 @@ Use:
 - ``StringProtector`` for ordinary application payloads
 - ``EnvelopeProtector`` when you want a structured encoded envelope
 - ``FileProtector`` for large files and streaming-safe encryption
-- ``FileProtector::reencryptWithAnyKey()`` when migrating protected files across rotating keys
+- ``FileProtector::reencryptWithAnyKey()`` when rotating protected files across key versions
 
 Prefer:
 
-- re-encrypting stored legacy ciphertext into the current format
-- ``decryptWithAnyKey()`` or ``reencryptWithAnyKey()`` only during migration windows
-- result helpers like ``decryptWithAnyKeyResult()`` when migration code needs to know which key matched
+- re-encrypting artifacts under the active key when fallback keys match
+- ``decryptWithAnyKey()`` or ``reencryptWithAnyKey()`` only during rotation windows
+- result helpers like ``decryptWithAnyKeyResult()`` when rotation code needs to know which key matched
 
 Avoid:
 
 - using low-level crypto primitives directly unless you really need them
-- using compatibility formats for new storage
 
 Tokens
 ^^^^^^
@@ -146,24 +144,22 @@ Prefer:
 - derived keys when the design specifically needs deterministic derivation
 - explicit context/info separation for derived subkeys
 
-Compatibility and Migration
----------------------------
+Key Rotation
+------------
 
-Use compatibility helpers only when you must read or migrate an older format.
+Use key-ring helpers during planned key rollover.
 
 Prefer this pattern:
 
-1. decrypt or verify the legacy value
-2. re-encrypt or re-issue using the current Epicrypt format
-3. keep fallback verification only for a short migration period
-
-If you want a hard migration boundary, use ``SecurityProfile::LEGACY_DECRYPT_ONLY`` on profile-aware factories. It allows decrypt/verify flows while blocking new encrypt/issue operations.
+1. issue new artifacts with the active key
+2. keep decode/verify paths able to read active and fallback keys during rollout
+3. re-encrypt or re-issue under the active key when a fallback key matches
+4. remove fallback keys after the rollover window closes
 
 In particular:
 
 - prefer ``StringProtector`` and ``EnvelopeProtector`` for new protected data
-- treat ``OpenSSL\InteroperabilityCryptoHelper`` as migration-oriented, not as the preferred default
-- follow the migration cookbook for active-key and fallback-key rollout patterns
+- follow the key rotation cookbook for active-key and fallback-key rollout patterns
 
 Binary vs Base64URL
 -------------------
@@ -183,4 +179,4 @@ Simple Rule of Thumb
 
 - If a higher-level ``Password``, ``Security``, ``Token``, or ``DataProtection`` API fits your use case, choose it first.
 - Reach for ``Crypto`` primitives only when you need direct cryptographic control.
-- Prefer modern defaults, active-key rotation, and migration into current formats.
+- Prefer modern defaults and active-key rotation.

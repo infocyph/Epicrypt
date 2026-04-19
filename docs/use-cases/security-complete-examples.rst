@@ -81,7 +81,7 @@ Use this when signatures must be accepted during a key rollover window.
    use Infocyph\Epicrypt\Security\KeyRotationHelper;
 
    $rotation = new KeyRotationHelper();
-   $keys = ['k1' => 'legacy-key', 'k2' => 'active-key'];
+   $keys = ['k1' => 'previous-key', 'k2' => 'active-key'];
    $signature = $rotation->sign('payload', 'k2', $keys);
    $validWithKid = $rotation->verify('payload', $signature, $keys, 'k2');
    $validAgainstWholeSet = $rotation->verify('payload', $signature, $keys);

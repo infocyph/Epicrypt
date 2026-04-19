@@ -21,11 +21,10 @@
     },
     "require": {
         "php": ">=8.4",
-        "ext-ctype": "*",
+        "ext-hash": "*",
         "ext-json": "*",
         "ext-mbstring": "*",
         "ext-openssl": "*",
-        "ext-simplexml": "*",
         "ext-sodium": "*",
         "infocyph/pathwise": "^2.3.1"
     },

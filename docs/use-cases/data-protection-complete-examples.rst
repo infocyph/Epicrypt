@@ -1,7 +1,7 @@
 Data Protection Complete Examples
 =================================
 
-This page groups ``DataProtection`` examples by what you are protecting: strings, envelopes, files, and legacy-compatible payloads.
+This page groups ``DataProtection`` examples by what you are protecting: strings, envelopes, and files.
 
 Protect an Application String
 -----------------------------
@@ -20,7 +20,7 @@ Use this when you need easy encrypt/decrypt calls for short data stored in your 
 
    $key = (new KeyMaterialGenerator())->generate(SODIUM_CRYPTO_SECRETBOX_KEYBYTES);
 
-   $stringProtector = StringProtector::forProfile(SecurityProfile::MODERN);
+   $stringProtector = StringProtector::forProfile();
    $ciphertext = $stringProtector->encrypt('sensitive data', $key);
    $plaintext = $stringProtector->decrypt($ciphertext, $key);
 
@@ -65,20 +65,3 @@ Use this when you need stream-based encryption for files or large blobs.
    $fileProtector = FileProtector::forProfile(SecurityProfile::MODERN);
    $lastChunk = $fileProtector->encrypt('/tmp/in.bin', '/tmp/in.bin.epc', $fileKey, 8192, false);
    $fileProtector->decrypt('/tmp/in.bin.epc', '/tmp/in.dec.bin', $fileKey, 8192, false);
-
-Work with Legacy OpenSSL-Compatible Payloads
---------------------------------------------
-
-Use this when interoperability with an older OpenSSL-based payload format is required.
-
-.. code-block:: php
-
-   <?php
-
-   declare(strict_types=1);
-
-   use Infocyph\Epicrypt\DataProtection\OpenSSL\InteroperabilityCryptoHelper;
-
-   $interop = new InteroperabilityCryptoHelper();
-   $interopCipher = $interop->encryptString('legacy-payload', 'app-secret', 'salt-value', true);
-   $interopPlain = $interop->decryptString($interopCipher, 'app-secret', 'salt-value', true);

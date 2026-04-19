@@ -34,12 +34,11 @@ final readonly class AsymmetricJwt implements JwtTokenInterface
         private ?string $passphrase = null,
         private AsymmetricJwtAlgorithm $algorithm = AsymmetricJwtAlgorithm::RS512,
         private ?RegisteredClaims $expectedClaims = null,
-        private SecurityProfile $profile = SecurityProfile::MODERN,
     ) {}
 
     public static function forProfile(SecurityProfile $profile = SecurityProfile::MODERN, ?RegisteredClaims $expectedClaims = null, ?string $passphrase = null): self
     {
-        return new self($passphrase, $profile->defaultAsymmetricJwtAlgorithm(), $expectedClaims, $profile);
+        return new self($passphrase, $profile->defaultAsymmetricJwtAlgorithm(), $expectedClaims);
     }
 
     public function decode(string $token, mixed $key): object
@@ -118,7 +117,6 @@ final readonly class AsymmetricJwt implements JwtTokenInterface
      */
     public function encode(array $claims, mixed $key, array $headers = []): string
     {
-        $this->assertCanIssue();
         $key = $this->requireSupportedKeyType($key);
 
         $registeredClaims = RegisteredClaims::fromArray($claims);
@@ -201,13 +199,6 @@ final readonly class AsymmetricJwt implements JwtTokenInterface
         }
 
         return new KeyVerificationResult(false);
-    }
-
-    private function assertCanIssue(): void
-    {
-        if (!$this->profile->allowsWrites()) {
-            throw new TokenException('JWT issuing is disabled for the legacy-decrypt-only profile.');
-        }
     }
 
     /**

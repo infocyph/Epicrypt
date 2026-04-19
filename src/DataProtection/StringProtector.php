@@ -9,22 +9,19 @@ use Infocyph\Epicrypt\Crypto\Contract\EncryptorInterface;
 use Infocyph\Epicrypt\Crypto\SecretBoxCipher;
 use Infocyph\Epicrypt\DataProtection\Support\ProtectionContext;
 use Infocyph\Epicrypt\Exception\Crypto\DecryptionException;
-use Infocyph\Epicrypt\Exception\Crypto\EncryptionException;
 use Infocyph\Epicrypt\Internal\KeyCandidates;
 use Infocyph\Epicrypt\Security\KeyRing;
-use Infocyph\Epicrypt\Security\Policy\SecurityProfile;
 use Throwable;
 
 final readonly class StringProtector implements EncryptorInterface, DecryptorInterface
 {
     public function __construct(
         private SecretBoxCipher $cipher = new SecretBoxCipher(),
-        private SecurityProfile $profile = SecurityProfile::MODERN,
     ) {}
 
-    public static function forProfile(SecurityProfile $profile = SecurityProfile::MODERN): self
+    public static function forProfile(): self
     {
-        return new self(profile: $profile);
+        return new self();
     }
 
     /**
@@ -73,39 +70,30 @@ final readonly class StringProtector implements EncryptorInterface, DecryptorInt
      */
     public function encrypt(string $plaintext, mixed $key, array $context = []): string
     {
-        $this->assertCanWrite('String protection writes are disabled for the legacy-decrypt-only profile.');
-
         return $this->cipher->encrypt($plaintext, $key, ProtectionContext::normalize($context));
     }
 
     /**
      * @param array<string, mixed> $currentContext
-     * @param array<string, mixed> $legacyContext
+     * @param array<string, mixed> $sourceContext
      */
-    public function reencrypt(string $ciphertext, mixed $oldKey, mixed $newKey, array $legacyContext = [], array $currentContext = []): string
+    public function reencrypt(string $ciphertext, mixed $oldKey, mixed $newKey, array $sourceContext = [], array $currentContext = []): string
     {
-        $plaintext = $this->decrypt($ciphertext, $oldKey, $legacyContext);
+        $plaintext = $this->decrypt($ciphertext, $oldKey, $sourceContext);
 
         return $this->encrypt($plaintext, $newKey, $currentContext);
     }
 
     /**
      * @param array<string, mixed> $currentContext
-     * @param array<string, mixed> $legacyContext
-     * @param iterable<string, string>|KeyRing $legacyKeys
+     * @param array<string, mixed> $sourceContext
+     * @param iterable<string, string>|KeyRing $sourceKeys
      */
-    public function reencryptWithAnyKey(string $ciphertext, iterable|KeyRing $legacyKeys, mixed $newKey, array $legacyContext = [], array $currentContext = []): string
+    public function reencryptWithAnyKey(string $ciphertext, iterable|KeyRing $sourceKeys, mixed $newKey, array $sourceContext = [], array $currentContext = []): string
     {
-        $plaintext = $this->decryptWithAnyKeyResult($ciphertext, $legacyKeys, $legacyContext)->plaintext;
+        $plaintext = $this->decryptWithAnyKeyResult($ciphertext, $sourceKeys, $sourceContext)->plaintext;
 
         return $this->encrypt($plaintext, $newKey, $currentContext);
-    }
-
-    private function assertCanWrite(string $message): void
-    {
-        if (!$this->profile->allowsWrites()) {
-            throw new EncryptionException($message);
-        }
     }
 
     /**

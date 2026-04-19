@@ -71,7 +71,7 @@ Key Rotation Helper
    use Infocyph\Epicrypt\Security\KeyRotationHelper;
 
    $keys = [
-       'k1' => 'legacy-key',
+       'k1' => 'previous-key',
        'k2' => 'active-key',
    ];
 

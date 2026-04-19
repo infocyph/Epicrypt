@@ -18,12 +18,11 @@ final readonly class FileProtector
 {
     public function __construct(
         private StreamAlgorithm $algorithm = StreamAlgorithm::XCHACHA20POLY1305,
-        private SecurityProfile $profile = SecurityProfile::MODERN,
     ) {}
 
     public static function forProfile(SecurityProfile $profile = SecurityProfile::MODERN): self
     {
-        return new self($profile->defaultStreamAlgorithm(), $profile);
+        return new self($profile->defaultStreamAlgorithm());
     }
 
     public function decrypt(
@@ -70,7 +69,6 @@ final readonly class FileProtector
         int $chunkSize = 8192,
         bool $keyIsBinary = false,
     ): int {
-        $this->assertCanWrite('File encryption is disabled for the legacy-decrypt-only profile.');
         $this->assertReadableFile($inputPath);
         $stream = new SecretStream($this->decodeKey($key, $keyIsBinary), $this->algorithm, '');
 
@@ -109,19 +107,19 @@ final readonly class FileProtector
         bool $keysAreBinary = false,
         bool $newKeyIsBinary = false,
     ): FileMigrationResult {
-        $outputPath = $this->temporaryPathFor($path . '.migrated');
+        $outputPath = $this->temporaryPathFor($path . '.rotated');
         $result = $this->reencryptWithAnyKey($path, $outputPath, $keys, $newKey, $chunkSize, $keysAreBinary, $newKeyIsBinary);
 
         if (file_exists($path) && !unlink($path)) {
             $this->deleteIfExists($outputPath);
 
-            throw new FileAccessException('Unable to replace original file during in-place migration: ' . $path);
+            throw new FileAccessException('Unable to replace original file during in-place rotation: ' . $path);
         }
 
         if (!rename($outputPath, $path)) {
             $this->deleteIfExists($outputPath);
 
-            throw new FileAccessException('Unable to finalize in-place migration for file: ' . $path);
+            throw new FileAccessException('Unable to finalize in-place rotation for file: ' . $path);
         }
 
         return new FileMigrationResult($path, $result->matchedKeyId, $result->usedFallbackKey);
@@ -148,13 +146,6 @@ final readonly class FileProtector
             return new FileMigrationResult($outputPath, $result->matchedKeyId, $result->usedFallbackKey);
         } finally {
             $this->deleteIfExists($tempPath);
-        }
-    }
-
-    private function assertCanWrite(string $message): void
-    {
-        if (!$this->profile->allowsWrites()) {
-            throw new FileAccessException($message);
         }
     }
 

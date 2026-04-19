@@ -10,7 +10,7 @@ Scope
 - signed payload tokens
 - opaque tokens
 - claim validation and key resolution
-- key-ring verification helpers for signed payload and JWT migration
+- key-ring verification helpers for signed payload and JWT rotation
 
 Symmetric JWT
 -------------
@@ -63,7 +63,7 @@ JWT Key Rings
        new RegisteredClaims('issuer-service', 'audience-service', 'subject-service', 'token-1'),
    );
 
-   $ring = new KeyRing(['legacy' => 'legacy-secret', 'active' => 'active-secret'], 'active');
+   $ring = new KeyRing(['previous' => 'previous-secret', 'active' => 'active-secret'], 'active');
    $claims = $jwt->decodeWithAnyKey($token, $ring);
    $isValid = $jwt->verifyWithAnyKey($token, $ring);
    $result = $jwt->verifyWithAnyKeyResult($token, $ring);
@@ -129,7 +129,7 @@ Signed Payload Key Rings
    use Infocyph\Epicrypt\Token\Payload\SignedPayload;
 
    $payload = new SignedPayload('reset_password');
-   $ring = new KeyRing(['legacy' => 'legacy-secret', 'active' => 'active-secret'], 'active');
+   $ring = new KeyRing(['previous' => 'previous-secret', 'active' => 'active-secret'], 'active');
    $claims = $payload->decodeWithAnyKey($token, $ring);
    $isValid = $payload->verifyWithAnyKey($token, $ring);
    $result = $payload->verifyWithAnyKeyResult($token, $ring);

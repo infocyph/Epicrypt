@@ -53,7 +53,7 @@ it('issues purpose-bound reset and action tokens', function () {
 it('verifies signatures across rotated key sets', function () {
     $rotation = new KeyRotationHelper();
 
-    $keys = new KeyRing(['k1' => 'legacy-key', 'k2' => 'active-key'], 'k2');
+    $keys = new KeyRing(['k1' => 'previous-key', 'k2' => 'active-key'], 'k2');
     $payload = 'important-payload';
 
     $signature = $rotation->signWithKeyRing($payload, $keys);
@@ -63,5 +63,5 @@ it('verifies signatures across rotated key sets', function () {
     expect($result->verified)->toBeTrue();
     expect($result->matchedKeyId)->toBe('k2');
     expect($result->usedFallbackKey)->toBeFalse();
-    expect($rotation->verify($payload, $signature, ['k1' => 'legacy-key'], 'k1'))->toBeFalse();
+    expect($rotation->verify($payload, $signature, ['k1' => 'previous-key'], 'k1'))->toBeFalse();
 });

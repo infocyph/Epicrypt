@@ -16,8 +16,7 @@ Requirements
 - ``ext-openssl``
 - ``ext-json``
 - ``ext-mbstring``
-- ``ext-ctype``
-- ``ext-simplexml``
+- ``ext-hash``
 
 First 5 Minutes
 ---------------
