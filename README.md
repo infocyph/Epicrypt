@@ -22,7 +22,7 @@ composer require infocyph/epicrypt
 ## Requirements
 
 - PHP `>=8.4`
-- `ext-sodium`, `ext-openssl`, `ext-json`, `ext-mbstring`, `ext-ctype`, `ext-simplexml`
+- `ext-sodium`, `ext-openssl`, `ext-json`, `ext-mbstring`, `ext-hash`
 
 ## Documentation
 

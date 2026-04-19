@@ -35,7 +35,7 @@ Documentation Map
    getting-started
    architecture
    security-recommendations
-   migration-and-rotation
+   key-rotation
 
 .. toctree::
    :maxdepth: 2
@@ -82,4 +82,4 @@ Package
 
 - Namespace root: ``Infocyph\\Epicrypt``
 - PHP: ``>=8.4``
-- Extensions: ``ext-sodium``, ``ext-openssl``, ``ext-json``, ``ext-mbstring``, ``ext-ctype``, ``ext-simplexml``
+- Extensions: ``ext-sodium``, ``ext-openssl``, ``ext-json``, ``ext-mbstring``, ``ext-hash``

@@ -14,54 +14,40 @@ use Infocyph\Epicrypt\Token\Jwt\Enum\SymmetricJwtAlgorithm;
 
 enum SecurityProfile: string
 {
-    case COMPATIBILITY = 'compatibility';
-
-    case LEGACY_DECRYPT_ONLY = 'legacy-decrypt-only';
-
     case MODERN = 'modern';
-
-    public function allowsLegacyDecrypt(): bool
-    {
-        return $this !== self::MODERN;
-    }
-
-    public function allowsWrites(): bool
-    {
-        return $this !== self::LEGACY_DECRYPT_ONLY;
-    }
 
     public function defaultAeadAlgorithm(): AeadAlgorithm
     {
         return match ($this) {
-            self::MODERN, self::COMPATIBILITY, self::LEGACY_DECRYPT_ONLY => AeadAlgorithm::XCHACHA20_POLY1305_IETF,
+            self::MODERN => AeadAlgorithm::XCHACHA20_POLY1305_IETF,
         };
     }
 
     public function defaultAsymmetricJwtAlgorithm(): AsymmetricJwtAlgorithm
     {
         return match ($this) {
-            self::MODERN, self::COMPATIBILITY, self::LEGACY_DECRYPT_ONLY => AsymmetricJwtAlgorithm::RS512,
+            self::MODERN => AsymmetricJwtAlgorithm::RS512,
         };
     }
 
     public function defaultPasswordAlgorithm(): PasswordHashAlgorithm
     {
         return match ($this) {
-            self::MODERN, self::COMPATIBILITY, self::LEGACY_DECRYPT_ONLY => PasswordHashAlgorithm::ARGON2ID,
+            self::MODERN => PasswordHashAlgorithm::ARGON2ID,
         };
     }
 
     public function defaultStreamAlgorithm(): StreamAlgorithm
     {
         return match ($this) {
-            self::MODERN, self::COMPATIBILITY, self::LEGACY_DECRYPT_ONLY => StreamAlgorithm::XCHACHA20POLY1305,
+            self::MODERN => StreamAlgorithm::XCHACHA20POLY1305,
         };
     }
 
     public function defaultSymmetricJwtAlgorithm(): SymmetricJwtAlgorithm
     {
         return match ($this) {
-            self::MODERN, self::COMPATIBILITY, self::LEGACY_DECRYPT_ONLY => SymmetricJwtAlgorithm::HS512,
+            self::MODERN => SymmetricJwtAlgorithm::HS512,
         };
     }
 
@@ -69,8 +55,6 @@ enum SecurityProfile: string
     {
         return match ($this) {
             self::MODERN => SODIUM_CRYPTO_PWHASH_MEMLIMIT_MODERATE,
-            self::COMPATIBILITY => SODIUM_CRYPTO_PWHASH_MEMLIMIT_INTERACTIVE,
-            self::LEGACY_DECRYPT_ONLY => SODIUM_CRYPTO_PWHASH_MEMLIMIT_INTERACTIVE,
         };
     }
 
@@ -78,8 +62,6 @@ enum SecurityProfile: string
     {
         return match ($this) {
             self::MODERN => SODIUM_CRYPTO_PWHASH_OPSLIMIT_MODERATE,
-            self::COMPATIBILITY => SODIUM_CRYPTO_PWHASH_OPSLIMIT_INTERACTIVE,
-            self::LEGACY_DECRYPT_ONLY => SODIUM_CRYPTO_PWHASH_OPSLIMIT_INTERACTIVE,
         };
     }
 
@@ -90,18 +72,6 @@ enum SecurityProfile: string
     {
         return match ($this) {
             self::MODERN => [
-                'algorithm' => $this->defaultPasswordAlgorithm(),
-                'memory_cost' => InternalSecurityPolicy::PASSWORD_DEFAULT_MEMORY_COST,
-                'time_cost' => InternalSecurityPolicy::PASSWORD_DEFAULT_TIME_COST,
-                'threads' => InternalSecurityPolicy::PASSWORD_DEFAULT_THREADS,
-            ],
-            self::COMPATIBILITY => [
-                'algorithm' => $this->defaultPasswordAlgorithm(),
-                'memory_cost' => InternalSecurityPolicy::PASSWORD_DEFAULT_MEMORY_COST,
-                'time_cost' => InternalSecurityPolicy::PASSWORD_DEFAULT_TIME_COST,
-                'threads' => max(1, min(InternalSecurityPolicy::PASSWORD_DEFAULT_THREADS, 2)),
-            ],
-            self::LEGACY_DECRYPT_ONLY => [
                 'algorithm' => $this->defaultPasswordAlgorithm(),
                 'memory_cost' => InternalSecurityPolicy::PASSWORD_DEFAULT_MEMORY_COST,
                 'time_cost' => InternalSecurityPolicy::PASSWORD_DEFAULT_TIME_COST,

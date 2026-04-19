@@ -12,7 +12,7 @@ it('verifies signed payloads against a key ring', function () {
     );
 
     $keyRing = new KeyRing([
-        'legacy' => 'legacy-secret',
+        'previous' => 'previous-secret',
         'active' => 'active-secret',
     ], 'active');
 

@@ -1,19 +1,19 @@
-Migration and Rotation Cookbook
-===============================
+Key Rotation Cookbook
+=====================
 
-This page shows the preferred Epicrypt migration pattern once your application has:
+This page shows the preferred Epicrypt key-rotation pattern once your application has:
 
 - one active key for new writes
-- one or more fallback keys for legacy reads
-- a short migration window where successful fallback reads trigger re-issue or re-encryption
+- one or more fallback keys for rollover reads
+- a short rotation window where successful fallback reads trigger re-issue or re-encryption
 
 Core Model
 ----------
 
-Use the same mental model across domains:
+Use the same model across domains:
 
 - active key: used for all new writes
-- fallback keys: accepted only during migration
+- fallback keys: accepted only during a rotation window
 - matched key id: recorded when you need to know which candidate succeeded
 - used fallback key: tells you whether the value should be rewritten under the active key
 
@@ -24,21 +24,21 @@ Represent that with ``KeyRing``:
    use Infocyph\Epicrypt\Security\KeyRing;
 
    $ring = new KeyRing([
-       'legacy-2025' => $legacyKey,
-       'active-2026' => $activeKey,
-   ], 'active-2026');
+       'k2026-q1' => $previousKey,
+       'k2026-q2' => $activeKey,
+   ], 'k2026-q2');
 
 Protected Strings
 -----------------
 
-Use ``decryptWithAnyKeyResult()`` when a protected value may have been encrypted with an older key.
+Use ``decryptWithAnyKeyResult()`` when a protected value may have been encrypted with a previous key version.
 
 .. code-block:: php
 
    use Infocyph\Epicrypt\DataProtection\StringProtector;
    use Infocyph\Epicrypt\Security\Policy\SecurityProfile;
 
-   $protector = StringProtector::forProfile(SecurityProfile::MODERN);
+   $protector = StringProtector::forProfile();
    $result = $protector->decryptWithAnyKeyResult($ciphertext, $ring);
 
    $plaintext = $result->plaintext;
@@ -67,7 +67,7 @@ Envelope-Protected Data
 Wrapped Secrets
 ---------------
 
-Wrapped secrets should also move forward when an older master key matches.
+Wrapped secrets should also move forward when a previous master key matches.
 
 .. code-block:: php
 
@@ -102,7 +102,7 @@ When you only need verification metadata, prefer ``verifyWithAnyKeyResult()``.
 Files
 -----
 
-Protected files should be re-encrypted into a new destination or migrated in place.
+Protected files should be re-encrypted into a new destination or rotated in place.
 
 .. code-block:: php
 
@@ -118,14 +118,13 @@ Protected files should be re-encrypted into a new destination or migrated in pla
    );
 
    if ($result->usedFallbackKey) {
-       // The migration consumed a fallback key and is now on the active key.
+       // The file was read with a fallback key and is now on the active key.
    }
 
 Operational Guidance
 --------------------
 
-- keep fallback keys only as long as legacy artifacts still exist
+- keep fallback keys only during an active rollover window
 - rewrite on successful fallback reads when doing so is safe for your workflow
-- remove old keys after the migration window closes
-- prefer ``SecurityProfile::MODERN`` for new writes unless you are intentionally operating a compatibility boundary
-- use ``SecurityProfile::LEGACY_DECRYPT_ONLY`` on profile-aware factories when a service should keep reading old artifacts but must stop producing new ones
+- remove retired keys after the rotation window closes
+- prefer ``SecurityProfile::MODERN`` for new writes

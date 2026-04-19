@@ -109,7 +109,6 @@ final readonly class EnvelopeProtector
     public function encrypt(string $plaintext, string $masterKey): array
     {
         try {
-            $this->assertCanWrite('Envelope encryption is disabled for the legacy-decrypt-only profile.');
             $dataKey = $this->keyGenerator->forPurpose(KeyPurpose::SECRETBOX, $this->profile);
 
             return [
@@ -138,13 +137,6 @@ final readonly class EnvelopeProtector
         $plaintext = $this->decryptWithAnyKeyResult($encodedEnvelope, $masterKeys)->plaintext;
 
         return $this->encodeEnvelope($this->encrypt($plaintext, $newMasterKey));
-    }
-
-    private function assertCanWrite(string $message): void
-    {
-        if (!$this->profile->allowsWrites()) {
-            throw new EncryptionException($message);
-        }
     }
 
     /**

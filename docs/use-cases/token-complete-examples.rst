@@ -32,7 +32,7 @@ Use this when the issuer and verifier share one secret or a keyed secret set.
    ];
 
    // Use a key id when the verifier may choose among multiple secrets.
-   $symKeys = ['k1' => 'legacy-secret', 'k2' => 'active-secret'];
+   $symKeys = ['k1' => 'previous-secret', 'k2' => 'active-secret'];
    $sym = SymmetricJwt::forProfile(SecurityProfile::MODERN);
    $symToken = $sym->encode($claims, $symKeys);
    $symVerifier = SymmetricJwt::forProfile(
@@ -132,14 +132,14 @@ Use this when you manage key sets and need to pick one key by ``kid``.
 
    use Infocyph\Epicrypt\Token\Jwt\KeyResolver;
 
-   $symKeys = ['k1' => 'legacy-secret', 'k2' => 'active-secret'];
+   $symKeys = ['k1' => 'previous-secret', 'k2' => 'active-secret'];
    KeyResolver::validate($symKeys, 'k2');
    $resolved = KeyResolver::resolve($symKeys, 'k2');
 
 Verify with a Key Ring During Rotation
 --------------------------------------
 
-Use this when old and active verification keys must coexist during a short migration window.
+Use this when previous and active verification keys must coexist during a short rotation window.
 
 .. code-block:: php
 
@@ -159,7 +159,7 @@ Use this when old and active verification keys must coexist during a short migra
    );
 
    $ring = new KeyRing([
-       'legacy' => 'legacy-secret',
+       'previous' => 'previous-secret',
        'active' => 'active-secret',
    ], 'active');
 

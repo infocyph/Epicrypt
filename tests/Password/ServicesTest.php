@@ -23,13 +23,13 @@ it('detects password rehash lifecycle state and can produce a replacement hash',
     $password = 'MyStrongPassword!2026';
     $hasher = new PasswordHasher();
 
-    $legacyHash = $hasher->hashPassword($password, [
+    $previousHash = $hasher->hashPassword($password, [
         'algorithm' => PasswordHashAlgorithm::BCRYPT,
     ]);
 
-    expect($hasher->needsRehash($legacyHash))->toBeTrue();
+    expect($hasher->needsRehash($previousHash))->toBeTrue();
 
-    $result = $hasher->verifyAndNeedsRehash($password, $legacyHash, [
+    $result = $hasher->verifyAndNeedsRehash($password, $previousHash, [
         'profile' => SecurityProfile::MODERN,
     ]);
 
@@ -37,7 +37,7 @@ it('detects password rehash lifecycle state and can produce a replacement hash',
     expect($result->needsRehash)->toBeTrue();
     expect($result->rehashedHash)->toBeNull();
 
-    $rehashed = $hasher->verifyAndRehash($password, $legacyHash, [
+    $rehashed = $hasher->verifyAndRehash($password, $previousHash, [
         'profile' => SecurityProfile::MODERN,
     ]);
 
@@ -57,8 +57,8 @@ it('wraps and unwraps secrets with master secret', function () {
     expect($manager->unwrap($wrapped, $master))->toBe('sensitive-secret');
 
     $segments = explode('.', $wrapped, 3);
-    $legacyWrapped = $segments[1] . '.' . $segments[2];
-    expect($manager->unwrap($legacyWrapped, $master))->toBe('sensitive-secret');
+    $unversionedWrapped = $segments[1] . '.' . $segments[2];
+    expect($manager->unwrap($unversionedWrapped, $master))->toBe('sensitive-secret');
 });
 
 it('supports wrapped secret rollover and rewrap flows', function () {

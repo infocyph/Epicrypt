@@ -11,8 +11,7 @@ Higher-level security workflows built on crypto primitives:
 - string protection
 - file protection
 - envelope encryption
-- OpenSSL interoperability helper
-- migration and re-encryption helpers
+- key rotation and re-encryption helpers
 
 String Protector
 ----------------
@@ -25,12 +24,12 @@ String Protector
 
    $key = (new KeyMaterialGenerator())->generate(SODIUM_CRYPTO_SECRETBOX_KEYBYTES);
 
-   $protector = StringProtector::forProfile(SecurityProfile::MODERN);
+   $protector = StringProtector::forProfile();
    $ciphertext = $protector->encrypt('sensitive data', $key);
    $plaintext = $protector->decrypt($ciphertext, $key);
 
-Rotation and Migration
-----------------------
+Key Rotation
+------------
 
 .. code-block:: php
 
@@ -38,10 +37,10 @@ Rotation and Migration
    use Infocyph\Epicrypt\Security\KeyRing;
    use Infocyph\Epicrypt\Security\Policy\SecurityProfile;
 
-   $ring = new KeyRing(['legacy' => $legacyKey, 'current' => $currentKey], 'current');
-   $result = StringProtector::forProfile(SecurityProfile::MODERN)->decryptWithAnyKeyResult($ciphertext, $ring);
+   $ring = new KeyRing(['previous' => $previousKey, 'current' => $currentKey], 'current');
+   $result = StringProtector::forProfile()->decryptWithAnyKeyResult($ciphertext, $ring);
    $plaintext = $result->plaintext;
-   $migrated = StringProtector::forProfile(SecurityProfile::MODERN)->reencryptWithAnyKey($ciphertext, $ring, $currentKey);
+   $rotatedCiphertext = StringProtector::forProfile()->reencryptWithAnyKey($ciphertext, $ring, $currentKey);
 
 Envelope Protector
 ------------------
@@ -75,22 +74,21 @@ Envelope Re-Encryption
    use Infocyph\Epicrypt\Security\KeyRing;
 
    $protector = EnvelopeProtector::forProfile(SecurityProfile::MODERN);
-   $ring = new KeyRing(['legacy' => $legacyMasterKey, 'current' => $currentMasterKey], 'current');
+   $ring = new KeyRing(['previous' => $previousMasterKey, 'current' => $currentMasterKey], 'current');
    $result = $protector->decryptWithAnyKeyResult($encoded, $ring);
-   $migrated = $protector->reencryptWithAnyKey($encoded, $ring, $currentMasterKey);
-   $plain = $protector->decrypt($migrated, $currentMasterKey);
+   $rotatedEnvelope = $protector->reencryptWithAnyKey($encoded, $ring, $currentMasterKey);
+   $plain = $protector->decrypt($rotatedEnvelope, $currentMasterKey);
 
 File Re-Encryption
 ------------------
 
 .. code-block:: php
 
-   use Infocyph\Epicrypt\DataProtection\FileMigrationResult;
    use Infocyph\Epicrypt\DataProtection\FileProtector;
    use Infocyph\Epicrypt\Security\KeyRing;
    use Infocyph\Epicrypt\Security\Policy\SecurityProfile;
 
-   $ring = new KeyRing(['legacy' => $legacyFileKey, 'current' => $currentFileKey], 'current');
+   $ring = new KeyRing(['previous' => $previousFileKey, 'current' => $currentFileKey], 'current');
    $result = FileProtector::forProfile(SecurityProfile::MODERN)->reencryptWithAnyKey(
        '/tmp/input.txt.epc',
        '/tmp/input.txt.new.epc',
@@ -113,10 +111,3 @@ File Protector
    $file = FileProtector::forProfile(SecurityProfile::MODERN);
    $file->encrypt('/tmp/input.txt', '/tmp/input.txt.epc', $key);
    $file->decrypt('/tmp/input.txt.epc', '/tmp/input.dec.txt', $key);
-
-OpenSSL Interoperability Helper
--------------------------------
-
-``DataProtection\\OpenSSL\\InteroperabilityCryptoHelper`` provides a compatibility-oriented string encryption format using OpenSSL + HMAC.
-
-Prefer it only for compatibility or migration boundaries, not for new storage formats.

@@ -37,7 +37,7 @@ it('derives keys using hkdf, password derivation, and deterministic subkeys', fu
     ]);
 
     $passwordKey = $deriver->deriveFromPassword('MyStrongPassword!2026', $salt, 32, [
-        'profile' => SecurityProfile::COMPATIBILITY,
+        'profile' => SecurityProfile::MODERN,
     ]);
 
     $rootKey = $generator->generate(SODIUM_CRYPTO_KDF_KEYBYTES);

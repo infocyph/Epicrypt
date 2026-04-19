@@ -32,12 +32,11 @@ final readonly class SymmetricJwt implements JwtTokenInterface
     public function __construct(
         private SymmetricJwtAlgorithm $algorithm = SymmetricJwtAlgorithm::HS512,
         private ?RegisteredClaims $expectedClaims = null,
-        private SecurityProfile $profile = SecurityProfile::MODERN,
     ) {}
 
     public static function forProfile(SecurityProfile $profile = SecurityProfile::MODERN, ?RegisteredClaims $expectedClaims = null): self
     {
-        return new self($profile->defaultSymmetricJwtAlgorithm(), $expectedClaims, $profile);
+        return new self($profile->defaultSymmetricJwtAlgorithm(), $expectedClaims);
     }
 
     public function decode(string $token, mixed $key): object
@@ -105,7 +104,6 @@ final readonly class SymmetricJwt implements JwtTokenInterface
      */
     public function encode(array $claims, mixed $key, array $headers = []): string
     {
-        $this->assertCanIssue();
         $key = $this->requireSupportedKeyType($key);
 
         $registeredClaims = RegisteredClaims::fromArray($claims);
@@ -194,13 +192,6 @@ final readonly class SymmetricJwt implements JwtTokenInterface
         }
 
         return new KeyVerificationResult(false);
-    }
-
-    private function assertCanIssue(): void
-    {
-        if (!$this->profile->allowsWrites()) {
-            throw new TokenException('JWT issuing is disabled for the legacy-decrypt-only profile.');
-        }
     }
 
     /**
