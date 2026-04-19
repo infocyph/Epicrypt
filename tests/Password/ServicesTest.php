@@ -76,6 +76,11 @@ it('supports wrapped secret rollover and rewrap flows', function () {
         'new' => $newMaster,
     ], 'new');
 
-    $rewrappedFromAny = $manager->rewrapWithAny($wrapped, $keyRing, $newMaster);
-    expect($manager->unwrapWithAny($rewrappedFromAny, $keyRing))->toBe('rotated-secret');
+    $unwrapResult = $manager->unwrapWithAnyKeyResult($wrapped, $keyRing);
+    expect($unwrapResult->plaintext)->toBe('rotated-secret');
+    expect($unwrapResult->matchedKeyId)->toBe('old');
+    expect($unwrapResult->usedFallbackKey)->toBeTrue();
+
+    $rewrappedFromAny = $manager->rewrapWithAnyKey($wrapped, $keyRing, $newMaster);
+    expect($manager->unwrapWithAnyKey($rewrappedFromAny, $keyRing))->toBe('rotated-secret');
 });

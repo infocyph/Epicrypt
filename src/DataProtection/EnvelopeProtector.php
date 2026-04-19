@@ -7,12 +7,14 @@ namespace Infocyph\Epicrypt\DataProtection;
 use Infocyph\Epicrypt\Crypto\SecretBoxCipher;
 use Infocyph\Epicrypt\Exception\Crypto\DecryptionException;
 use Infocyph\Epicrypt\Exception\Crypto\EncryptionException;
+use Infocyph\Epicrypt\Generate\KeyMaterial\Enum\KeyPurpose;
 use Infocyph\Epicrypt\Generate\KeyMaterial\KeyMaterialGenerator;
 use Infocyph\Epicrypt\Internal\Enum\EnvelopeAlgorithm;
 use Infocyph\Epicrypt\Internal\Enum\EnvelopeVersion;
 use Infocyph\Epicrypt\Internal\Json;
 use Infocyph\Epicrypt\Internal\KeyCandidates;
 use Infocyph\Epicrypt\Security\KeyRing;
+use Infocyph\Epicrypt\Security\Policy\SecurityProfile;
 use Throwable;
 
 final readonly class EnvelopeProtector
@@ -20,7 +22,13 @@ final readonly class EnvelopeProtector
     public function __construct(
         private SecretBoxCipher $cipher = new SecretBoxCipher(),
         private KeyMaterialGenerator $keyGenerator = new KeyMaterialGenerator(),
+        private SecurityProfile $profile = SecurityProfile::MODERN,
     ) {}
+
+    public static function forProfile(SecurityProfile $profile = SecurityProfile::MODERN): self
+    {
+        return new self(profile: $profile);
+    }
 
     public function decrypt(string $encodedEnvelope, string $masterKey): string
     {
@@ -58,12 +66,24 @@ final readonly class EnvelopeProtector
     /**
      * @param iterable<string, string>|KeyRing $masterKeys
      */
-    public function decryptWithAny(string $encodedEnvelope, iterable|KeyRing $masterKeys): string
+    public function decryptWithAnyKey(string $encodedEnvelope, iterable|KeyRing $masterKeys): string
+    {
+        return $this->decryptWithAnyKeyResult($encodedEnvelope, $masterKeys)->plaintext;
+    }
+
+    /**
+     * @param iterable<string, string>|KeyRing $masterKeys
+     */
+    public function decryptWithAnyKeyResult(string $encodedEnvelope, iterable|KeyRing $masterKeys): EnvelopeDecryptResult
     {
         $lastException = null;
-        foreach ($this->orderedKeys($masterKeys) as $masterKey) {
+        foreach ($this->orderedKeyEntries($masterKeys) as $entry) {
             try {
-                return $this->decrypt($encodedEnvelope, $masterKey);
+                return new EnvelopeDecryptResult(
+                    $this->decrypt($encodedEnvelope, $entry['key']),
+                    $entry['id'],
+                    !$entry['active'],
+                );
             } catch (DecryptionException $e) {
                 $lastException = $e;
             }
@@ -89,7 +109,8 @@ final readonly class EnvelopeProtector
     public function encrypt(string $plaintext, string $masterKey): array
     {
         try {
-            $dataKey = $this->keyGenerator->generate();
+            $this->assertCanWrite('Envelope encryption is disabled for the legacy-decrypt-only profile.');
+            $dataKey = $this->keyGenerator->forPurpose(KeyPurpose::SECRETBOX, $this->profile);
 
             return [
                 'v' => EnvelopeVersion::V1->value,
@@ -112,21 +133,28 @@ final readonly class EnvelopeProtector
     /**
      * @param iterable<string, string>|KeyRing $masterKeys
      */
-    public function reencryptWithAny(string $encodedEnvelope, iterable|KeyRing $masterKeys, string $newMasterKey): string
+    public function reencryptWithAnyKey(string $encodedEnvelope, iterable|KeyRing $masterKeys, string $newMasterKey): string
     {
-        $plaintext = $this->decryptWithAny($encodedEnvelope, $masterKeys);
+        $plaintext = $this->decryptWithAnyKeyResult($encodedEnvelope, $masterKeys)->plaintext;
 
         return $this->encodeEnvelope($this->encrypt($plaintext, $newMasterKey));
     }
 
+    private function assertCanWrite(string $message): void
+    {
+        if (!$this->profile->allowsWrites()) {
+            throw new EncryptionException($message);
+        }
+    }
+
     /**
      * @param iterable<string, string>|KeyRing $keys
-     * @return list<string>
+     * @return list<array{id: ?string, key: string, active: bool}>
      */
-    private function orderedKeys(iterable|KeyRing $keys): array
+    private function orderedKeyEntries(iterable|KeyRing $keys): array
     {
         try {
-            return KeyCandidates::ordered(
+            return KeyCandidates::orderedEntries(
                 $keys,
                 'All master key candidates must be non-empty strings.',
                 'At least one master key candidate is required.',

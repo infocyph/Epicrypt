@@ -13,6 +13,8 @@ use Infocyph\Epicrypt\Exception\Token\UnsupportedAlgorithmException;
 use Infocyph\Epicrypt\Internal\Base64Url;
 use Infocyph\Epicrypt\Internal\KeyCandidates;
 use Infocyph\Epicrypt\Security\KeyRing;
+use Infocyph\Epicrypt\Security\KeyVerificationResult;
+use Infocyph\Epicrypt\Security\Policy\SecurityProfile;
 use Infocyph\Epicrypt\Token\Contract\JwtTokenInterface;
 use Infocyph\Epicrypt\Token\Jwt\Enum\SymmetricJwtAlgorithm;
 use Infocyph\Epicrypt\Token\Jwt\Support\JwtToken;
@@ -27,7 +29,16 @@ final readonly class SymmetricJwt implements JwtTokenInterface
      */
     private const array RESERVED_CLAIMS = ['iss', 'aud', 'sub', 'jti', 'iat', 'nbf', 'exp', 'kid'];
 
-    public function __construct(private SymmetricJwtAlgorithm $algorithm = SymmetricJwtAlgorithm::HS512, private ?RegisteredClaims $expectedClaims = null) {}
+    public function __construct(
+        private SymmetricJwtAlgorithm $algorithm = SymmetricJwtAlgorithm::HS512,
+        private ?RegisteredClaims $expectedClaims = null,
+        private SecurityProfile $profile = SecurityProfile::MODERN,
+    ) {}
+
+    public static function forProfile(SecurityProfile $profile = SecurityProfile::MODERN, ?RegisteredClaims $expectedClaims = null): self
+    {
+        return new self($profile->defaultSymmetricJwtAlgorithm(), $expectedClaims, $profile);
+    }
 
     public function decode(string $token, mixed $key): object
     {
@@ -94,6 +105,7 @@ final readonly class SymmetricJwt implements JwtTokenInterface
      */
     public function encode(array $claims, mixed $key, array $headers = []): string
     {
+        $this->assertCanIssue();
         $key = $this->requireSupportedKeyType($key);
 
         $registeredClaims = RegisteredClaims::fromArray($claims);
@@ -167,12 +179,27 @@ final readonly class SymmetricJwt implements JwtTokenInterface
      */
     public function verifyWithAnyKey(string $token, iterable|KeyRing $keys): bool
     {
-        try {
-            $this->decodeWithAnyKey($token, $keys);
+        return $this->verifyWithAnyKeyResult($token, $keys)->verified;
+    }
 
-            return true;
-        } catch (Throwable) {
-            return false;
+    /**
+     * @param iterable<string, string>|KeyRing $keys
+     */
+    public function verifyWithAnyKeyResult(string $token, iterable|KeyRing $keys): KeyVerificationResult
+    {
+        foreach ($this->orderedKeyEntries($keys) as $entry) {
+            if ($this->verify($token, $entry['key'])) {
+                return new KeyVerificationResult(true, $entry['id'], !$entry['active']);
+            }
+        }
+
+        return new KeyVerificationResult(false);
+    }
+
+    private function assertCanIssue(): void
+    {
+        if (!$this->profile->allowsWrites()) {
+            throw new TokenException('JWT issuing is disabled for the legacy-decrypt-only profile.');
         }
     }
 
@@ -199,12 +226,12 @@ final readonly class SymmetricJwt implements JwtTokenInterface
 
     /**
      * @param iterable<string, string>|KeyRing $keys
-     * @return list<string>
+     * @return list<array{id: ?string, key: string, active: bool}>
      */
-    private function orderedKeys(iterable|KeyRing $keys): array
+    private function orderedKeyEntries(iterable|KeyRing $keys): array
     {
         try {
-            return KeyCandidates::ordered(
+            return KeyCandidates::orderedEntries(
                 $keys,
                 'All symmetric JWT key candidates must be non-empty strings.',
                 'At least one symmetric JWT key candidate is required.',
@@ -212,6 +239,15 @@ final readonly class SymmetricJwt implements JwtTokenInterface
         } catch (\InvalidArgumentException $e) {
             throw new TokenException($e->getMessage(), 0, $e);
         }
+    }
+
+    /**
+     * @param iterable<string, string>|KeyRing $keys
+     * @return list<string>
+     */
+    private function orderedKeys(iterable|KeyRing $keys): array
+    {
+        return array_column($this->orderedKeyEntries($keys), 'key');
     }
 
     /**

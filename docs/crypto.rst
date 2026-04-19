@@ -17,6 +17,10 @@ Direct cryptographic primitives and operations:
 - stream encryption
 - binary codec
 
+This is the lower-level surface of Epicrypt.
+
+For most new applications, prefer the higher-level ``Password``, ``Token``, ``DataProtection``, and ``Security`` domains first, then drop down into ``Crypto`` only when you truly need primitive-level control.
+
 AEAD Cipher
 -----------
 

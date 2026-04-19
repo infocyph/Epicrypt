@@ -12,22 +12,40 @@ use Infocyph\Epicrypt\Security\KeyRing;
 final class KeyCandidates
 {
     /**
-     * @param iterable<string, string>|KeyRing $keys
+     * @param iterable<array-key, string>|KeyRing $keys
      * @return list<string>
      */
     public static function ordered(iterable|KeyRing $keys, string $emptyCandidateMessage, string $missingCandidateMessage): array
     {
+        return array_column(self::orderedEntries($keys, $emptyCandidateMessage, $missingCandidateMessage), 'key');
+    }
+
+    /**
+     * @param iterable<array-key, string>|KeyRing $keys
+     * @return list<array{id: ?string, key: string, active: bool}>
+     */
+    public static function orderedEntries(iterable|KeyRing $keys, string $emptyCandidateMessage, string $missingCandidateMessage): array
+    {
         if ($keys instanceof KeyRing) {
-            return $keys->orderedKeys();
+            return array_map(
+                static fn(array $entry): array => ['id' => $entry['id'], 'key' => $entry['key'], 'active' => $entry['active']],
+                $keys->orderedEntries(),
+            );
         }
 
         $ordered = [];
-        foreach ($keys as $key) {
+        foreach ($keys as $keyId => $key) {
             if ($key === '') {
                 throw new \InvalidArgumentException($emptyCandidateMessage);
             }
 
-            $ordered[] = $key;
+            $ordered[] = [
+                'id' => is_string($keyId)
+                    ? ($keyId !== '' ? $keyId : null)
+                    : (string) $keyId,
+                'key' => $key,
+                'active' => false,
+            ];
         }
 
         if ($ordered === []) {

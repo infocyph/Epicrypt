@@ -15,14 +15,14 @@ Use this when you want authenticated encryption for short application payloads.
    declare(strict_types=1);
 
    use Infocyph\Epicrypt\Crypto\AeadCipher;
-   use Infocyph\Epicrypt\Crypto\Enum\AeadAlgorithm;
    use Infocyph\Epicrypt\Generate\KeyMaterial\KeyMaterialGenerator;
+   use Infocyph\Epicrypt\Security\Policy\SecurityProfile;
 
    $aeadKey = (new KeyMaterialGenerator())->generate(
-       AeadAlgorithm::XCHACHA20_POLY1305_IETF->keyLength(),
+       SODIUM_CRYPTO_AEAD_XCHACHA20POLY1305_IETF_KEYBYTES,
    );
 
-   $aead = new AeadCipher(AeadAlgorithm::XCHACHA20_POLY1305_IETF);
+   $aead = AeadCipher::forProfile(SecurityProfile::MODERN);
    $aeadCiphertext = $aead->encrypt('aead-message', $aeadKey, ['aad' => 'meta']);
    $aeadPlain = $aead->decrypt($aeadCiphertext, $aeadKey, ['aad' => 'meta']);
 

@@ -8,15 +8,22 @@ use Infocyph\Epicrypt\Crypto\Contract\CipherInterface;
 use Infocyph\Epicrypt\Crypto\Enum\AeadAlgorithm;
 use Infocyph\Epicrypt\Exception\Crypto\CryptoException;
 use Infocyph\Epicrypt\Exception\Crypto\DecryptionException;
+use Infocyph\Epicrypt\Exception\Crypto\EncryptionException;
 use Infocyph\Epicrypt\Exception\Crypto\InvalidKeyException;
 use Infocyph\Epicrypt\Exception\Crypto\InvalidNonceException;
 use Infocyph\Epicrypt\Internal\Base64Url;
 use Infocyph\Epicrypt\Internal\Enum\EncryptedPayloadVersion;
 use Infocyph\Epicrypt\Internal\VersionedPayload;
+use Infocyph\Epicrypt\Security\Policy\SecurityProfile;
 
 final readonly class AeadCipher implements CipherInterface
 {
-    public function __construct(private AeadAlgorithm $algorithm = AeadAlgorithm::XCHACHA20_POLY1305_IETF) {}
+    public function __construct(private AeadAlgorithm $algorithm = AeadAlgorithm::XCHACHA20_POLY1305_IETF, private SecurityProfile $profile = SecurityProfile::MODERN) {}
+
+    public static function forProfile(SecurityProfile $profile = SecurityProfile::MODERN): self
+    {
+        return new self($profile->defaultAeadAlgorithm(), $profile);
+    }
 
     /**
      * @param array<string, mixed> $context
@@ -53,6 +60,10 @@ final readonly class AeadCipher implements CipherInterface
      */
     public function encrypt(string $plaintext, mixed $key, array $context = []): string
     {
+        if (!$this->profile->allowsWrites()) {
+            throw new EncryptionException('AEAD encryption is disabled for the legacy-decrypt-only profile.');
+        }
+
         $this->assertAlgorithmAvailability();
 
         $decodedKey = $this->decodeKey($key, $this->algorithm->keyLength(), $this->boolFromContext($context, 'key_is_binary'), 'Encryption');

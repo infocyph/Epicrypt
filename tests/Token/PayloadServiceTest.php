@@ -17,8 +17,12 @@ it('verifies signed payloads against a key ring', function () {
     ], 'active');
 
     $claims = $payload->decodeWithAnyKey($token, $keyRing);
+    $result = $payload->verifyWithAnyKeyResult($token, $keyRing);
 
     expect($claims['sub'])->toBe('user-1');
     expect($payload->verifyWithAnyKey($token, $keyRing))->toBeTrue();
+    expect($result->verified)->toBeTrue();
+    expect($result->matchedKeyId)->toBe('active');
+    expect($result->usedFallbackKey)->toBeFalse();
     expect($payload->verifyWithAnyKey($token, ['wrong-secret']))->toBeFalse();
 });

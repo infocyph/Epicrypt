@@ -32,8 +32,9 @@ Minimal File Protection Example
 
    use Infocyph\Epicrypt\DataProtection\FileProtector;
    use Infocyph\Epicrypt\Generate\KeyMaterial\KeyMaterialGenerator;
+   use Infocyph\Epicrypt\Security\Policy\SecurityProfile;
 
-   $protector = new FileProtector();
+   $protector = FileProtector::forProfile(SecurityProfile::MODERN);
 
    // Generate a stream-safe key for large file protection.
    $key = (new KeyMaterialGenerator())->generate(SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_KEYBYTES);
