@@ -5,11 +5,12 @@ declare(strict_types=1);
 namespace Infocyph\Epicrypt\Token\Payload;
 
 use Infocyph\Epicrypt\Exception\Token\TokenException;
-use Infocyph\Epicrypt\Internal\KeyCandidates;
 use Infocyph\Epicrypt\Internal\SignedPayloadCodec;
 use Infocyph\Epicrypt\Security\KeyRing;
 use Infocyph\Epicrypt\Security\KeyVerificationResult;
 use Infocyph\Epicrypt\Token\Contract\PayloadTokenInterface;
+use Infocyph\Epicrypt\Token\Support\TokenAnyKey;
+use Infocyph\Epicrypt\Token\Support\TokenKeyCandidates;
 
 final readonly class SignedPayload implements PayloadTokenInterface
 {
@@ -35,16 +36,15 @@ final readonly class SignedPayload implements PayloadTokenInterface
      */
     public function decodeWithAnyKey(string $token, iterable|KeyRing $keys): array
     {
-        $lastException = null;
-        foreach ($this->orderedKeys($keys) as $key) {
-            try {
-                return $this->decode($token, $key);
-            } catch (TokenException $e) {
-                $lastException = $e;
-            }
-        }
-
-        throw new TokenException('Signed payload verification failed for every supplied key.', 0, $lastException);
+        return TokenAnyKey::decode(
+            $this->orderedKeys($keys),
+            fn(string $candidateKey): array => $this->decode($token, $candidateKey),
+            fn(?\Throwable $previous): \Throwable => new TokenException(
+                'Signed payload verification failed for every supplied key.',
+                0,
+                $previous,
+            ),
+        );
     }
 
     /**
@@ -88,13 +88,10 @@ final readonly class SignedPayload implements PayloadTokenInterface
      */
     public function verifyWithAnyKeyResult(string $token, iterable|KeyRing $keys): KeyVerificationResult
     {
-        foreach ($this->orderedKeyEntries($keys) as $entry) {
-            if ($this->verify($token, $entry['key'])) {
-                return new KeyVerificationResult(true, $entry['id'], !$entry['active']);
-            }
-        }
-
-        return new KeyVerificationResult(false);
+        return TokenAnyKey::verifyResult(
+            $this->orderedKeyEntries($keys),
+            fn(string $candidateKey): bool => $this->verify($token, $candidateKey),
+        );
     }
 
     /**
@@ -103,15 +100,11 @@ final readonly class SignedPayload implements PayloadTokenInterface
      */
     private function orderedKeyEntries(iterable|KeyRing $keys): array
     {
-        try {
-            return KeyCandidates::orderedEntries(
-                $keys,
-                'All signed payload key candidates must be non-empty strings.',
-                'At least one signed payload key candidate is required.',
-            );
-        } catch (\InvalidArgumentException $e) {
-            throw new TokenException($e->getMessage(), 0, $e);
-        }
+        return TokenKeyCandidates::orderedEntries(
+            $keys,
+            'All signed payload key candidates must be non-empty strings.',
+            'At least one signed payload key candidate is required.',
+        );
     }
 
     /**
@@ -120,6 +113,10 @@ final readonly class SignedPayload implements PayloadTokenInterface
      */
     private function orderedKeys(iterable|KeyRing $keys): array
     {
-        return array_column($this->orderedKeyEntries($keys), 'key');
+        return TokenKeyCandidates::orderedKeys(
+            $keys,
+            'All signed payload key candidates must be non-empty strings.',
+            'At least one signed payload key candidate is required.',
+        );
     }
 }

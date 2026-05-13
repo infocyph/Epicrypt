@@ -19,27 +19,20 @@ final class SecurityBench
 {
     private ActionToken $actionToken;
 
-    private string $actionTokenValue;
-
     private CsrfTokenManager $csrf;
-
-    private string $csrfToken;
 
     private EmailVerificationToken $emailVerificationToken;
 
-    private string $emailVerificationTokenValue;
-
     private PasswordResetToken $passwordResetToken;
-
-    private string $passwordResetTokenValue;
 
     private RememberToken $rememberToken;
 
-    private string $rememberTokenValue;
-
     private SignedUrl $signedUrl;
 
-    private string $signedUrlValue;
+    /**
+     * @var array<string, string>
+     */
+    private array $state = [];
 
     public function __construct()
     {
@@ -54,22 +47,22 @@ final class SecurityBench
 
     public function setUp(): void
     {
-        $this->signedUrlValue = $this->signedUrl->generate(
+        $this->state['signedUrlValue'] = $this->signedUrl->generate(
             'https://example.com/download',
             ['file' => 'report.csv', 'uid' => 'bench-user'],
             time() + 3600,
         );
-        $this->csrfToken = $this->csrf->issueToken('session-bench');
-        $this->passwordResetTokenValue = $this->passwordResetToken->issue('bench-user');
-        $this->emailVerificationTokenValue = $this->emailVerificationToken->issue('bench-user', 'user@example.com');
-        $this->rememberTokenValue = $this->rememberToken->issue('bench-user', 'device-1');
-        $this->actionTokenValue = $this->actionToken->issue('bench-user', 'delete-account');
+        $this->state['csrfToken'] = $this->csrf->issueToken('session-bench');
+        $this->state['passwordResetTokenValue'] = $this->passwordResetToken->issue('bench-user');
+        $this->state['emailVerificationTokenValue'] = $this->emailVerificationToken->issue('bench-user', 'user@example.com');
+        $this->state['rememberTokenValue'] = $this->rememberToken->issue('bench-user', 'device-1');
+        $this->state['actionTokenValue'] = $this->actionToken->issue('bench-user', 'delete-account');
     }
 
     #[Bench\BeforeMethods('setUp')]
     public function benchActionTokenVerify(): void
     {
-        $this->actionToken->verify($this->actionTokenValue, 'bench-user', 'delete-account');
+        $this->actionToken->verify($this->state['actionTokenValue'], 'bench-user', 'delete-account');
     }
 
     #[Bench\BeforeMethods('setUp')]
@@ -81,25 +74,25 @@ final class SecurityBench
     #[Bench\BeforeMethods('setUp')]
     public function benchCsrfVerify(): void
     {
-        $this->csrf->verifyToken('session-bench', $this->csrfToken);
+        $this->csrf->verifyToken('session-bench', $this->state['csrfToken']);
     }
 
     #[Bench\BeforeMethods('setUp')]
     public function benchEmailVerificationVerify(): void
     {
-        $this->emailVerificationToken->verify($this->emailVerificationTokenValue, 'user@example.com');
+        $this->emailVerificationToken->verify($this->state['emailVerificationTokenValue'], 'user@example.com');
     }
 
     #[Bench\BeforeMethods('setUp')]
     public function benchPasswordResetVerify(): void
     {
-        $this->passwordResetToken->verify($this->passwordResetTokenValue, 'bench-user');
+        $this->passwordResetToken->verify($this->state['passwordResetTokenValue'], 'bench-user');
     }
 
     #[Bench\BeforeMethods('setUp')]
     public function benchRememberTokenVerify(): void
     {
-        $this->rememberToken->verify($this->rememberTokenValue, 'bench-user', 'device-1');
+        $this->rememberToken->verify($this->state['rememberTokenValue'], 'bench-user', 'device-1');
     }
 
     #[Bench\BeforeMethods('setUp')]
@@ -115,6 +108,6 @@ final class SecurityBench
     #[Bench\BeforeMethods('setUp')]
     public function benchSignedUrlVerify(): void
     {
-        $this->signedUrl->verify($this->signedUrlValue);
+        $this->signedUrl->verify($this->state['signedUrlValue']);
     }
 }

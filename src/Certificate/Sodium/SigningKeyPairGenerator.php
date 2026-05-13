@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Infocyph\Epicrypt\Certificate\Sodium;
 
 use Infocyph\Epicrypt\Certificate\Contract\KeyPairGeneratorInterface;
-use Infocyph\Epicrypt\Internal\Base64Url;
+use Infocyph\Epicrypt\Certificate\Sodium\Support\SodiumKeyPairFactory;
 
 final class SigningKeyPairGenerator implements KeyPairGeneratorInterface
 {
@@ -16,14 +16,23 @@ final class SigningKeyPairGenerator implements KeyPairGeneratorInterface
     {
         unset($passphrase);
 
-        $keypair = sodium_crypto_sign_keypair();
-        $private = sodium_crypto_sign_secretkey($keypair);
-        $public = sodium_crypto_sign_publickey($keypair);
+        return SodiumKeyPairFactory::generate(
+            createKeyPair: sodium_crypto_sign_keypair(...),
+            extractPrivate: static function (string $keyPair): string {
+                if ($keyPair === '') {
+                    throw new \RuntimeException('Signing key pair is empty.');
+                }
 
-        if (!$asBase64Url) {
-            return ['private' => $private, 'public' => $public];
-        }
+                return sodium_crypto_sign_secretkey($keyPair);
+            },
+            extractPublic: static function (string $keyPair): string {
+                if ($keyPair === '') {
+                    throw new \RuntimeException('Signing key pair is empty.');
+                }
 
-        return ['private' => Base64Url::encode($private), 'public' => Base64Url::encode($public)];
+                return sodium_crypto_sign_publickey($keyPair);
+            },
+            asBase64Url: $asBase64Url,
+        );
     }
 }

@@ -36,7 +36,7 @@ it('builds and parses self-signed certificates through Certificate domain', func
 it('supports rsa interoperability in Certificate domain', function () {
     $keyPair = KeyPairGenerator::openSsl(bits: OpenSslRsaBits::BITS_2048)->generate();
 
-    $cipher = new RsaCipher();
+    $cipher = new RsaCipher;
     $encrypted = $cipher->encrypt('certificate-rsa-check', $keyPair['public']);
     $decrypted = $cipher->decrypt($encrypted, $keyPair['private']);
 

@@ -8,6 +8,7 @@ use Infocyph\Epicrypt\Crypto\Contract\CipherInterface;
 use Infocyph\Epicrypt\Crypto\Enum\AeadAlgorithm;
 use Infocyph\Epicrypt\Exception\Crypto\CryptoException;
 use Infocyph\Epicrypt\Exception\Crypto\DecryptionException;
+use Infocyph\Epicrypt\Exception\Crypto\EncryptionException;
 use Infocyph\Epicrypt\Exception\Crypto\InvalidKeyException;
 use Infocyph\Epicrypt\Exception\Crypto\InvalidNonceException;
 use Infocyph\Epicrypt\Internal\Base64Url;
@@ -139,21 +140,34 @@ final readonly class AeadCipher implements CipherInterface
 
     private function decryptRaw(string $ciphertext, string $aad, string $nonce, string $key): string|false
     {
-        return match ($this->algorithm) {
-            AeadAlgorithm::AES_256_GCM => sodium_crypto_aead_aes256gcm_decrypt($ciphertext, $aad, $nonce, $key),
-            AeadAlgorithm::CHACHA20_POLY1305 => sodium_crypto_aead_chacha20poly1305_decrypt($ciphertext, $aad, $nonce, $key),
-            AeadAlgorithm::CHACHA20_POLY1305_IETF => sodium_crypto_aead_chacha20poly1305_ietf_decrypt($ciphertext, $aad, $nonce, $key),
-            AeadAlgorithm::XCHACHA20_POLY1305_IETF => sodium_crypto_aead_xchacha20poly1305_ietf_decrypt($ciphertext, $aad, $nonce, $key),
-        };
+        return $this->runRawOperation($ciphertext, $aad, $nonce, $key, true);
     }
 
     private function encryptRaw(string $plaintext, string $aad, string $nonce, string $key): string
     {
+        $result = $this->runRawOperation($plaintext, $aad, $nonce, $key, false);
+        if (!is_string($result)) {
+            throw new EncryptionException('Encryption failed.');
+        }
+
+        return $result;
+    }
+
+    private function runRawOperation(string $input, string $aad, string $nonce, string $key, bool $decrypt): string|false
+    {
         return match ($this->algorithm) {
-            AeadAlgorithm::AES_256_GCM => sodium_crypto_aead_aes256gcm_encrypt($plaintext, $aad, $nonce, $key),
-            AeadAlgorithm::CHACHA20_POLY1305 => sodium_crypto_aead_chacha20poly1305_encrypt($plaintext, $aad, $nonce, $key),
-            AeadAlgorithm::CHACHA20_POLY1305_IETF => sodium_crypto_aead_chacha20poly1305_ietf_encrypt($plaintext, $aad, $nonce, $key),
-            AeadAlgorithm::XCHACHA20_POLY1305_IETF => sodium_crypto_aead_xchacha20poly1305_ietf_encrypt($plaintext, $aad, $nonce, $key),
+            AeadAlgorithm::AES_256_GCM => $decrypt
+                ? sodium_crypto_aead_aes256gcm_decrypt($input, $aad, $nonce, $key)
+                : sodium_crypto_aead_aes256gcm_encrypt($input, $aad, $nonce, $key),
+            AeadAlgorithm::CHACHA20_POLY1305 => $decrypt
+                ? sodium_crypto_aead_chacha20poly1305_decrypt($input, $aad, $nonce, $key)
+                : sodium_crypto_aead_chacha20poly1305_encrypt($input, $aad, $nonce, $key),
+            AeadAlgorithm::CHACHA20_POLY1305_IETF => $decrypt
+                ? sodium_crypto_aead_chacha20poly1305_ietf_decrypt($input, $aad, $nonce, $key)
+                : sodium_crypto_aead_chacha20poly1305_ietf_encrypt($input, $aad, $nonce, $key),
+            AeadAlgorithm::XCHACHA20_POLY1305_IETF => $decrypt
+                ? sodium_crypto_aead_xchacha20poly1305_ietf_decrypt($input, $aad, $nonce, $key)
+                : sodium_crypto_aead_xchacha20poly1305_ietf_encrypt($input, $aad, $nonce, $key),
         };
     }
 }

@@ -13,7 +13,7 @@ use Infocyph\Epicrypt\Internal\KeyCandidates;
 use Infocyph\Epicrypt\Security\KeyRing;
 use Throwable;
 
-final readonly class StringProtector implements EncryptorInterface, DecryptorInterface
+final readonly class StringProtector implements DecryptorInterface, EncryptorInterface
 {
     public function __construct(
         private SecretBoxCipher $cipher = new SecretBoxCipher(),

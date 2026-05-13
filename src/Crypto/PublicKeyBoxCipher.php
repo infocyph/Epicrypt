@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Infocyph\Epicrypt\Crypto;
 
 use Infocyph\Epicrypt\Crypto\Contract\CipherInterface;
+use Infocyph\Epicrypt\Crypto\Support\KeyDecoder;
 use Infocyph\Epicrypt\Exception\Crypto\DecryptionException;
 use Infocyph\Epicrypt\Exception\Crypto\InvalidKeyException;
 use Infocyph\Epicrypt\Internal\Base64Url;
@@ -75,15 +76,11 @@ final class PublicKeyBoxCipher implements CipherInterface
      */
     private function decodeKey(mixed $value, string $name, array $context): string
     {
-        if (!is_string($value) || $value === '') {
-            throw new InvalidKeyException(sprintf('%s must be a non-empty string.', $name));
-        }
-
-        $decoded = (bool) ($context['key_is_binary'] ?? false) ? $value : Base64Url::decode($value);
-        if (strlen($decoded) !== SODIUM_CRYPTO_BOX_PUBLICKEYBYTES) {
-            throw new InvalidKeyException(sprintf('%s has invalid key length.', $name));
-        }
-
-        return $decoded;
+        return KeyDecoder::decode(
+            $value,
+            (bool) ($context['key_is_binary'] ?? false),
+            SODIUM_CRYPTO_BOX_PUBLICKEYBYTES,
+            $name,
+        );
     }
 }

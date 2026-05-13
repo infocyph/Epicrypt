@@ -26,15 +26,7 @@ final readonly class SignedUrl implements SignedUrlGeneratorInterface, SignedUrl
      */
     public function generate(string $url, array $parameters = [], ?int $expiresAt = null): string
     {
-        $parts = parse_url($url);
-        if (!is_array($parts)) {
-            throw new ConfigurationException('Invalid URL provided for signing.');
-        }
-
-        $existing = [];
-        if (isset($parts['query'])) {
-            parse_str($parts['query'], $existing);
-        }
+        [$parts, $existing] = $this->parseUrlWithQueryOrFail($url);
 
         $merged = array_merge($existing, $parameters);
         $merged[$this->versionParam] = SignedUrlVersion::V1->value;
@@ -42,11 +34,8 @@ final readonly class SignedUrl implements SignedUrlGeneratorInterface, SignedUrl
             $merged[$this->expiresParam] = $expiresAt;
         }
 
-        ksort($merged);
         $basePath = $this->buildBasePath($parts);
-        $query = http_build_query($merged);
-
-        $signature = Base64Url::encode(hash_hmac('sha256', $basePath . '?' . $query, $this->secret, true));
+        $signature = $this->computeSignature($basePath, $merged);
         $merged[$this->signatureParam] = $signature;
 
         return $basePath . '?' . http_build_query($merged);
@@ -54,13 +43,11 @@ final readonly class SignedUrl implements SignedUrlGeneratorInterface, SignedUrl
 
     public function verify(string $signedUrl): bool
     {
-        $parts = parse_url($signedUrl);
-        if (!is_array($parts)) {
+        $parsed = $this->parseUrlWithQuery($signedUrl);
+        if ($parsed === null) {
             return false;
         }
-
-        $query = [];
-        parse_str((string) ($parts['query'] ?? ''), $query);
+        [$parts, $query] = $parsed;
 
         $givenSignature = $query[$this->signatureParam] ?? null;
         if (!is_string($givenSignature) || $givenSignature === '') {
@@ -78,10 +65,8 @@ final readonly class SignedUrl implements SignedUrlGeneratorInterface, SignedUrl
             return false;
         }
 
-        ksort($query);
         $basePath = $this->buildBasePath($parts);
-        $normalized = http_build_query($query);
-        $computed = Base64Url::encode(hash_hmac('sha256', $basePath . '?' . $normalized, $this->secret, true));
+        $computed = $this->computeSignature($basePath, $query);
 
         return SecureCompare::equals($computed, $givenSignature);
     }
@@ -99,5 +84,68 @@ final readonly class SignedUrl implements SignedUrlGeneratorInterface, SignedUrl
         $path = isset($parts['path']) && is_string($parts['path']) && $parts['path'] !== '' ? $parts['path'] : '/';
 
         return $scheme . '://' . $host . $port . $path;
+    }
+
+    /**
+     * @param array<string, scalar|null> $query
+     */
+    private function computeSignature(string $basePath, array $query): string
+    {
+        $query = array_filter($query, static fn(mixed $value): bool => $value !== null);
+        ksort($query);
+
+        return Base64Url::encode(hash_hmac('sha256', $basePath . '?' . http_build_query($query), $this->secret, true));
+    }
+
+    /**
+     * @param array<mixed> $query
+     * @return array<string, scalar>
+     */
+    private function normalizeQuery(array $query): array
+    {
+        $normalized = [];
+
+        foreach ($query as $key => $value) {
+            if (!is_string($key) || $key === '') {
+                continue;
+            }
+
+            if (is_scalar($value)) {
+                $normalized[$key] = $value;
+            }
+        }
+
+        return $normalized;
+    }
+
+    /**
+     * @return array{array{scheme?: mixed, host?: mixed, port?: mixed, path?: mixed}, array<string, scalar>}|null
+     */
+    private function parseUrlWithQuery(string $url): ?array
+    {
+        $parts = parse_url($url);
+        if (!is_array($parts)) {
+            return null;
+        }
+
+        $query = [];
+        if (isset($parts['query'])) {
+            parse_str($parts['query'], $query);
+        }
+
+        return [$parts, $this->normalizeQuery($query)];
+    }
+
+    /**
+     * @return array{array{scheme?: mixed, host?: mixed, port?: mixed, path?: mixed}, array<string, scalar>}
+     */
+    private function parseUrlWithQueryOrFail(string $url): array
+    {
+        $parsed = $this->parseUrlWithQuery($url);
+        if ($parsed === null) {
+            throw new ConfigurationException('Invalid URL provided for signing.');
+        }
+
+        return $parsed;
     }
 }

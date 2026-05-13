@@ -71,20 +71,11 @@ final readonly class SecretStream
                 throw new RuntimeException('Invalid nonce length.');
             }
 
-            $chunkIterator = $fileReader->binary($chunkSize);
-
-            foreach ($chunkIterator as $chunk) {
-                if ($chunk === null || $chunk === '') {
-                    continue;
-                }
-                if (!is_string($chunk)) {
-                    throw new RuntimeException('Invalid plaintext chunk encountered.');
-                }
-
+            $this->forEachChunk($fileReader, $chunkSize, 'plaintext', function (string $chunk) use ($fileWriter, &$nonce): void {
                 $decryptedChunk = sodium_crypto_stream_xchacha20_xor($chunk, $nonce, $this->key);
                 $this->writeBinary($fileWriter, $decryptedChunk);
                 $nonce = $this->incrementNonce($nonce);
-            }
+            });
         } finally {
             $fileReader->releaseLock();
         }
@@ -107,11 +98,9 @@ final readonly class SecretStream
             $chunkIterator = $fileReader->binary($cipherChunkSize);
 
             foreach ($chunkIterator as $chunk) {
-                if ($chunk === null || $chunk === '') {
+                $chunk = $this->normalizeChunk($chunk, 'ciphertext');
+                if ($chunk === null) {
                     continue;
-                }
-                if (!is_string($chunk)) {
-                    throw new RuntimeException('Invalid ciphertext chunk encountered.');
                 }
 
                 $decryptedFrame = sodium_crypto_secretstream_xchacha20poly1305_pull(
@@ -156,22 +145,14 @@ final readonly class SecretStream
         $fileReader = new SafeFileReader($inputPath);
 
         try {
-            $chunkIterator = $fileReader->binary($chunkSize);
             $writeChunkSize = 0;
 
-            foreach ($chunkIterator as $chunk) {
-                if ($chunk === null || $chunk === '') {
-                    continue;
-                }
-                if (!is_string($chunk)) {
-                    throw new RuntimeException('Invalid plaintext chunk encountered.');
-                }
-
+            $this->forEachChunk($fileReader, $chunkSize, 'plaintext', function (string $chunk) use ($fileWriter, &$nonce, &$writeChunkSize): void {
                 $encryptedChunk = sodium_crypto_stream_xchacha20_xor($chunk, $nonce, $this->key);
                 $this->writeBinary($fileWriter, $encryptedChunk);
                 $writeChunkSize = strlen($encryptedChunk);
                 $nonce = $this->incrementNonce($nonce);
-            }
+            });
 
             return $writeChunkSize;
         } finally {
@@ -197,11 +178,9 @@ final readonly class SecretStream
             $bufferedChunk = null;
 
             foreach ($chunkIterator as $chunk) {
-                if ($chunk === null || $chunk === '') {
+                $chunk = $this->normalizeChunk($chunk, 'plaintext');
+                if ($chunk === null) {
                     continue;
-                }
-                if (!is_string($chunk)) {
-                    throw new RuntimeException('Invalid plaintext chunk encountered.');
                 }
 
                 if ($bufferedChunk === null) {
@@ -239,6 +218,18 @@ final readonly class SecretStream
         }
     }
 
+    private function forEachChunk(SafeFileReader $fileReader, int $chunkSize, string $kind, callable $consumer): void
+    {
+        foreach ($fileReader->binary($chunkSize) as $chunk) {
+            $chunk = $this->normalizeChunk($chunk, $kind);
+            if ($chunk === null) {
+                continue;
+            }
+
+            $consumer($chunk);
+        }
+    }
+
     private function incrementNonce(string $nonce): string
     {
         $length = strlen($nonce);
@@ -248,8 +239,8 @@ final readonly class SecretStream
 
         $bytes = str_split($nonce);
 
-        for ($index = $length - 1; $index >= 0; --$index) {
-            $next = (ord($bytes[$index]) + 1) & 0xff;
+        for ($index = $length - 1; $index >= 0; $index--) {
+            $next = (ord($bytes[$index]) + 1) & 0xFF;
             $bytes[$index] = chr($next);
 
             if ($next !== 0) {
@@ -258,6 +249,19 @@ final readonly class SecretStream
         }
 
         return implode('', $bytes);
+    }
+
+    private function normalizeChunk(mixed $chunk, string $kind): ?string
+    {
+        if ($chunk === null || $chunk === '') {
+            return null;
+        }
+
+        if (!is_string($chunk)) {
+            throw new RuntimeException(sprintf('Invalid %s chunk encountered.', $kind));
+        }
+
+        return $chunk;
     }
 
     private function writeBinary(SafeFileWriter $fileWriter, string $data): void

@@ -1,8 +1,8 @@
 <?php
 
-use Infocyph\Epicrypt\Generate\KeyMaterial\KeyMaterialGenerator;
-use Infocyph\Epicrypt\Generate\KeyMaterial\KeyDeriver;
 use Infocyph\Epicrypt\Generate\KeyMaterial\Enum\KeyPurpose;
+use Infocyph\Epicrypt\Generate\KeyMaterial\KeyDeriver;
+use Infocyph\Epicrypt\Generate\KeyMaterial\KeyMaterialGenerator;
 use Infocyph\Epicrypt\Generate\KeyMaterial\TokenMaterialGenerator;
 use Infocyph\Epicrypt\Generate\NonceGenerator;
 use Infocyph\Epicrypt\Generate\RandomBytesGenerator;
@@ -10,11 +10,11 @@ use Infocyph\Epicrypt\Generate\SaltGenerator;
 use Infocyph\Epicrypt\Security\Policy\SecurityProfile;
 
 it('generates secure random values for all generators', function () {
-    $random = new RandomBytesGenerator();
-    $salt = new SaltGenerator();
-    $nonce = new NonceGenerator();
-    $keyMaterial = new KeyMaterialGenerator();
-    $tokenMaterial = new TokenMaterialGenerator();
+    $random = new RandomBytesGenerator;
+    $salt = new SaltGenerator;
+    $nonce = new NonceGenerator;
+    $keyMaterial = new KeyMaterialGenerator;
+    $tokenMaterial = new TokenMaterialGenerator;
 
     expect(strlen($random->bytes(32)))->toBe(32);
     expect($random->string(40))->toHaveLength(40);
@@ -27,9 +27,9 @@ it('generates secure random values for all generators', function () {
 });
 
 it('derives keys using hkdf, password derivation, and deterministic subkeys', function () {
-    $deriver = new KeyDeriver();
-    $generator = new KeyMaterialGenerator();
-    $salt = (new SaltGenerator())->generate(SODIUM_CRYPTO_PWHASH_SALTBYTES);
+    $deriver = new KeyDeriver;
+    $generator = new KeyMaterialGenerator;
+    $salt = (new SaltGenerator)->generate(SODIUM_CRYPTO_PWHASH_SALTBYTES);
 
     $hkdf = $deriver->hkdf($generator->generate(32), 32, [
         'info' => 'epicrypt:test',

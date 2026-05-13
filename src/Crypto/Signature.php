@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Infocyph\Epicrypt\Crypto;
 
 use Infocyph\Epicrypt\Crypto\Contract\SignatureInterface;
-use Infocyph\Epicrypt\Exception\Crypto\InvalidKeyException;
+use Infocyph\Epicrypt\Crypto\Support\KeyDecoder;
 use Infocyph\Epicrypt\Exception\Crypto\SignatureException;
 use Infocyph\Epicrypt\Internal\Base64Url;
 
@@ -16,14 +16,12 @@ final class Signature implements SignatureInterface
      */
     public function sign(string $message, mixed $key, array $context = []): string
     {
-        if (!is_string($key) || $key === '') {
-            throw new InvalidKeyException('Private key must be a non-empty string.');
-        }
-
-        $privateKey = (bool) ($context['key_is_binary'] ?? false) ? $key : Base64Url::decode($key);
-        if (strlen($privateKey) !== SODIUM_CRYPTO_SIGN_SECRETKEYBYTES) {
-            throw new InvalidKeyException('Private key has invalid length.');
-        }
+        $privateKey = KeyDecoder::decode(
+            $key,
+            (bool) ($context['key_is_binary'] ?? false),
+            SODIUM_CRYPTO_SIGN_SECRETKEYBYTES,
+            'Private key',
+        );
 
         $signature = sodium_crypto_sign_detached($message, $privateKey);
 
@@ -35,14 +33,12 @@ final class Signature implements SignatureInterface
      */
     public function verify(string $message, string $signature, mixed $key, array $context = []): bool
     {
-        if (!is_string($key) || $key === '') {
-            throw new InvalidKeyException('Public key must be a non-empty string.');
-        }
-
-        $publicKey = (bool) ($context['key_is_binary'] ?? false) ? $key : Base64Url::decode($key);
-        if (strlen($publicKey) !== SODIUM_CRYPTO_SIGN_PUBLICKEYBYTES) {
-            throw new InvalidKeyException('Public key has invalid length.');
-        }
+        $publicKey = KeyDecoder::decode(
+            $key,
+            (bool) ($context['key_is_binary'] ?? false),
+            SODIUM_CRYPTO_SIGN_PUBLICKEYBYTES,
+            'Public key',
+        );
 
         $decodedSignature = Base64Url::decode($signature);
         if ($decodedSignature === '') {

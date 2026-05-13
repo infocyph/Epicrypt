@@ -8,9 +8,9 @@ use Infocyph\Epicrypt\Security\KeyRing;
 use Infocyph\Epicrypt\Security\Policy\SecurityProfile;
 
 it('encrypts and decrypts string data safely', function () {
-    $key = (new KeyMaterialGenerator())->generate(SODIUM_CRYPTO_SECRETBOX_KEYBYTES);
+    $key = (new KeyMaterialGenerator)->generate(SODIUM_CRYPTO_SECRETBOX_KEYBYTES);
 
-    $protector = new StringProtector();
+    $protector = new StringProtector;
     $ciphertext = $protector->encrypt('protected data', $key);
     $plaintext = $protector->decrypt($ciphertext, $key);
 
@@ -19,7 +19,7 @@ it('encrypts and decrypts string data safely', function () {
 });
 
 it('supports key-ring decrypt and re-encryption for protected strings', function () {
-    $generator = new KeyMaterialGenerator();
+    $generator = new KeyMaterialGenerator;
     $previousKey = $generator->forSecretBox();
     $currentKey = $generator->forSecretBox();
 
@@ -42,9 +42,9 @@ it('supports key-ring decrypt and re-encryption for protected strings', function
 });
 
 it('encrypts and decrypts versioned envelopes', function () {
-    $masterKey = (new KeyMaterialGenerator())->generate(SODIUM_CRYPTO_SECRETBOX_KEYBYTES);
+    $masterKey = (new KeyMaterialGenerator)->generate(SODIUM_CRYPTO_SECRETBOX_KEYBYTES);
 
-    $protector = new EnvelopeProtector();
+    $protector = new EnvelopeProtector;
     $envelope = $protector->encrypt('enveloped data', $masterKey);
     $encoded = $protector->encodeEnvelope($envelope);
     $plaintext = $protector->decrypt($encoded, $masterKey);
@@ -55,7 +55,7 @@ it('encrypts and decrypts versioned envelopes', function () {
 });
 
 it('supports envelope re-encryption across key rotation', function () {
-    $generator = new KeyMaterialGenerator();
+    $generator = new KeyMaterialGenerator;
     $previousMaster = $generator->forSecretBox();
     $currentMaster = $generator->forSecretBox();
 
@@ -72,17 +72,17 @@ it('supports envelope re-encryption across key rotation', function () {
 });
 
 it('supports file key rotation and re-encryption', function () {
-    $generator = new KeyMaterialGenerator();
+    $generator = new KeyMaterialGenerator;
     $previousKey = $generator->forSecretStream();
     $currentKey = $generator->forSecretStream();
 
-    $tempDir = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'epicrypt-' . bin2hex(random_bytes(6));
+    $tempDir = sys_get_temp_dir().DIRECTORY_SEPARATOR.'epicrypt-'.bin2hex(random_bytes(6));
     mkdir($tempDir);
 
-    $plain = $tempDir . DIRECTORY_SEPARATOR . 'plain.txt';
-    $previousEncrypted = $tempDir . DIRECTORY_SEPARATOR . 'plain.txt.epc';
-    $rotatedEncrypted = $tempDir . DIRECTORY_SEPARATOR . 'plain.txt.rotated.epc';
-    $decrypted = $tempDir . DIRECTORY_SEPARATOR . 'plain.dec.txt';
+    $plain = $tempDir.DIRECTORY_SEPARATOR.'plain.txt';
+    $previousEncrypted = $tempDir.DIRECTORY_SEPARATOR.'plain.txt.epc';
+    $rotatedEncrypted = $tempDir.DIRECTORY_SEPARATOR.'plain.txt.rotated.epc';
+    $decrypted = $tempDir.DIRECTORY_SEPARATOR.'plain.dec.txt';
 
     file_put_contents($plain, 'file rotation payload');
 
@@ -111,6 +111,7 @@ it('supports file key rotation and re-encryption', function () {
     foreach ($iterator as $entry) {
         if ($entry->isDir()) {
             rmdir($entry->getPathname());
+
             continue;
         }
 

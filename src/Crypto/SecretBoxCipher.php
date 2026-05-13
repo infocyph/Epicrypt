@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Infocyph\Epicrypt\Crypto;
 
 use Infocyph\Epicrypt\Crypto\Contract\CipherInterface;
+use Infocyph\Epicrypt\Crypto\Support\KeyDecoder;
 use Infocyph\Epicrypt\Exception\Crypto\DecryptionException;
 use Infocyph\Epicrypt\Exception\Crypto\InvalidKeyException;
 use Infocyph\Epicrypt\Internal\Base64Url;
@@ -61,15 +62,15 @@ final class SecretBoxCipher implements CipherInterface
      */
     private function decodeKey(mixed $key, array $context, string $operation): string
     {
-        if (!is_string($key) || $key === '') {
-            throw new InvalidKeyException(sprintf('%s key must be a non-empty string.', $operation));
+        try {
+            return KeyDecoder::decode(
+                $key,
+                (bool) ($context['key_is_binary'] ?? false),
+                SODIUM_CRYPTO_SECRETBOX_KEYBYTES,
+                sprintf('%s key', $operation),
+            );
+        } catch (InvalidKeyException $e) {
+            throw new InvalidKeyException(sprintf('%s key must be 32 bytes.', $operation), 0, $e);
         }
-
-        $decodedKey = (bool) ($context['key_is_binary'] ?? false) ? $key : Base64Url::decode($key);
-        if (strlen($decodedKey) !== SODIUM_CRYPTO_SECRETBOX_KEYBYTES) {
-            throw new InvalidKeyException(sprintf('%s key must be 32 bytes.', $operation));
-        }
-
-        return $decodedKey;
     }
 }

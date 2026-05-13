@@ -4,4 +4,4 @@ declare(strict_types=1);
 
 namespace Infocyph\Epicrypt\Crypto\Contract;
 
-interface CipherInterface extends EncryptorInterface, DecryptorInterface {}
+interface CipherInterface extends DecryptorInterface, EncryptorInterface {}

@@ -7,9 +7,9 @@ use Infocyph\Epicrypt\Crypto\Signature;
 use Infocyph\Epicrypt\Generate\KeyMaterial\KeyMaterialGenerator;
 
 it('encrypts and decrypts with AEAD services', function () {
-    $key = (new KeyMaterialGenerator())->generate(SODIUM_CRYPTO_AEAD_XCHACHA20POLY1305_IETF_KEYBYTES);
+    $key = (new KeyMaterialGenerator)->generate(SODIUM_CRYPTO_AEAD_XCHACHA20POLY1305_IETF_KEYBYTES);
 
-    $cipher = new AeadCipher();
+    $cipher = new AeadCipher;
 
     $ciphertext = $cipher->encrypt('epicrypt-aead', $key, ['aad' => 'meta']);
     $plaintext = $cipher->decrypt($ciphertext, $key, ['aad' => 'meta']);
@@ -21,7 +21,7 @@ it('encrypts and decrypts with AEAD services', function () {
 it('signs and verifies detached signatures', function () {
     $keys = KeyPairGenerator::sodiumSign()->generate(asBase64Url: true);
 
-    $signatureService = new Signature();
+    $signatureService = new Signature;
     $signature = $signatureService->sign('epicrypt-signature', $keys['private']);
 
     expect($signatureService->verify('epicrypt-signature', $signature, $keys['public']))->toBeTrue();
@@ -29,7 +29,7 @@ it('signs and verifies detached signatures', function () {
 });
 
 it('generates and verifies mac tags', function () {
-    $macService = new Mac();
+    $macService = new Mac;
     $key = $macService->generateKey();
     $mac = $macService->generate('epicrypt-mac', $key);
 

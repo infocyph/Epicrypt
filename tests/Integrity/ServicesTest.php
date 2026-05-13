@@ -23,7 +23,7 @@ it('hashes and verifies strings and files', function () {
 });
 
 it('creates stable content fingerprints', function () {
-    $fingerprinter = new ContentFingerprinter();
+    $fingerprinter = new ContentFingerprinter;
 
     $fingerprintA = $fingerprinter->fingerprint('payload', ['b' => '2', 'a' => '1']);
     $fingerprintB = $fingerprinter->fingerprint('payload', ['a' => '1', 'b' => '2']);

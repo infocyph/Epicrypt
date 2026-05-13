@@ -1,9 +1,9 @@
 <?php
 
+use Infocyph\Epicrypt\Security\KeyRing;
 use Infocyph\Epicrypt\Token\Jwt\AsymmetricJwt;
 use Infocyph\Epicrypt\Token\Jwt\Enum\AsymmetricJwtAlgorithm;
 use Infocyph\Epicrypt\Token\Jwt\Validation\RegisteredClaims;
-use Infocyph\Epicrypt\Security\KeyRing;
 
 beforeEach(function () {
     $resource = openssl_pkey_new([
