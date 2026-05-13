@@ -4,6 +4,7 @@ use Infocyph\Epicrypt\Generate\KeyMaterial\Enum\KeyPurpose;
 use Infocyph\Epicrypt\Generate\KeyMaterial\KeyDeriver;
 use Infocyph\Epicrypt\Generate\KeyMaterial\KeyMaterialGenerator;
 use Infocyph\Epicrypt\Generate\KeyMaterial\TokenMaterialGenerator;
+use Infocyph\Epicrypt\Exception\ConfigurationException;
 use Infocyph\Epicrypt\Generate\NonceGenerator;
 use Infocyph\Epicrypt\Generate\RandomBytesGenerator;
 use Infocyph\Epicrypt\Generate\SaltGenerator;
@@ -49,4 +50,12 @@ it('derives keys using hkdf, password derivation, and deterministic subkeys', fu
     expect($passwordKey)->not->toBe('');
     expect($subkeyA)->toBe($subkeyB);
     expect($subkeyA)->not->toBe($subkeyC);
+});
+
+it('rejects unsupported hkdf hash algorithms', function () {
+    $deriver = new KeyDeriver;
+    $ikm = (new KeyMaterialGenerator)->generate(32);
+
+    expect(fn() => $deriver->hkdf($ikm, 32, ['algorithm' => 'definitely-not-valid']))
+        ->toThrow(ConfigurationException::class);
 });

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Infocyph\Epicrypt\Security;
 
+use Infocyph\Epicrypt\Internal\Clock\ClockInterface;
+use Infocyph\Epicrypt\Internal\Clock\SystemClock;
 use Infocyph\Epicrypt\Security\Enum\SecurityTokenPurpose;
 use Infocyph\Epicrypt\Security\Support\AbstractPurposeToken;
 
@@ -12,8 +14,9 @@ final readonly class RememberToken extends AbstractPurposeToken
     public function __construct(
         string $secret,
         int $ttlSeconds = 1209600,
+        ClockInterface $clock = new SystemClock(),
     ) {
-        parent::__construct($secret, $ttlSeconds);
+        parent::__construct($secret, $ttlSeconds, $clock);
     }
 
     public function issue(string $userId, string $deviceId): string

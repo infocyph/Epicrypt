@@ -32,6 +32,8 @@ Documentation Map
    :maxdepth: 2
    :caption: Getting Started
 
+   installation
+   quickstart
    getting-started
    architecture
    security-recommendations
@@ -41,6 +43,13 @@ Documentation Map
    :maxdepth: 2
    :caption: Capability Guides
 
+   passwords
+   tokens
+   jwt
+   file-encryption
+   certificates
+   security-model
+   migration
    certificate
    crypto
    token

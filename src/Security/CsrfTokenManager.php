@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Infocyph\Epicrypt\Security;
 
 use Infocyph\Epicrypt\Exception\Token\TokenException;
+use Infocyph\Epicrypt\Internal\Clock\ClockInterface;
+use Infocyph\Epicrypt\Internal\Clock\SystemClock;
 use Infocyph\Epicrypt\Internal\SignedPayloadCodec;
 use Infocyph\Epicrypt\Security\Contract\CsrfTokenManagerInterface;
 use Infocyph\Epicrypt\Security\Enum\SecurityTokenPurpose;
@@ -16,8 +18,9 @@ final readonly class CsrfTokenManager implements CsrfTokenManagerInterface
     public function __construct(
         string $secret,
         private int $ttlSeconds = 3600,
+        private ClockInterface $clock = new SystemClock(),
     ) {
-        $this->codec = new SignedPayloadCodec($secret);
+        $this->codec = new SignedPayloadCodec($secret, clock: $this->clock);
     }
 
     public function issueToken(string $sessionId): string
@@ -27,7 +30,7 @@ final readonly class CsrfTokenManager implements CsrfTokenManagerInterface
         return $this->codec->issue([
             'sid' => $sessionId,
             'nonce' => bin2hex(random_bytes(16)),
-        ], time() + $this->ttlSeconds, $purpose);
+        ], $this->clock->now() + $this->ttlSeconds, $purpose);
     }
 
     public function verifyToken(string $sessionId, string $token): bool

@@ -5,10 +5,11 @@ declare(strict_types=1);
 namespace Infocyph\Epicrypt\Crypto;
 
 use Infocyph\Epicrypt\Crypto\Contract\CipherInterface;
-use Infocyph\Epicrypt\Crypto\Support\KeyDecoder;
 use Infocyph\Epicrypt\Exception\Crypto\DecryptionException;
+use Infocyph\Epicrypt\Exception\Crypto\EncryptionException;
 use Infocyph\Epicrypt\Exception\Crypto\InvalidKeyException;
 use Infocyph\Epicrypt\Internal\Base64Url;
+use Infocyph\Epicrypt\Internal\BinaryKey;
 use Infocyph\Epicrypt\Internal\Enum\EncryptedPayloadVersion;
 use Infocyph\Epicrypt\Internal\VersionedPayload;
 
@@ -23,18 +24,21 @@ final class PublicKeyBoxCipher implements CipherInterface
             throw new InvalidKeyException('Key must include sender_public and recipient_private entries.');
         }
 
-        $senderPublic = $this->decodeKey($key['sender_public'] ?? null, 'sender_public', $context);
-        $recipientPrivate = $this->decodeKey($key['recipient_private'] ?? null, 'recipient_private', $context);
+        try {
+            $senderPublic = BinaryKey::boxPublicKey($key['sender_public'] ?? null, (bool) ($context['key_is_binary'] ?? false), 'sender_public');
+            $recipientPrivate = BinaryKey::boxSecretKey($key['recipient_private'] ?? null, (bool) ($context['key_is_binary'] ?? false), 'recipient_private');
+        } catch (InvalidKeyException $e) {
+            throw new DecryptionException('Public key-box decryption key material is invalid.', 0, $e);
+        }
 
         $parsedPayload = VersionedPayload::parse($ciphertext, EncryptedPayloadVersion::V1->value, 2);
         if ($parsedPayload === null) {
             throw new DecryptionException('Invalid ciphertext format.');
         }
-        [, $parts] = $parsedPayload;
 
         $plaintext = sodium_crypto_box_open(
-            Base64Url::decode($parts[1]),
-            Base64Url::decode($parts[0]),
+            Base64Url::decode($parsedPayload->parts[1]),
+            Base64Url::decode($parsedPayload->parts[0]),
             sodium_crypto_box_keypair_from_secretkey_and_publickey($recipientPrivate, $senderPublic),
         );
 
@@ -54,8 +58,12 @@ final class PublicKeyBoxCipher implements CipherInterface
             throw new InvalidKeyException('Key must include recipient_public and sender_private entries.');
         }
 
-        $recipientPublic = $this->decodeKey($key['recipient_public'] ?? null, 'recipient_public', $context);
-        $senderPrivate = $this->decodeKey($key['sender_private'] ?? null, 'sender_private', $context);
+        try {
+            $recipientPublic = BinaryKey::boxPublicKey($key['recipient_public'] ?? null, (bool) ($context['key_is_binary'] ?? false), 'recipient_public');
+            $senderPrivate = BinaryKey::boxSecretKey($key['sender_private'] ?? null, (bool) ($context['key_is_binary'] ?? false), 'sender_private');
+        } catch (InvalidKeyException $e) {
+            throw new EncryptionException('Public key-box encryption key material is invalid.', 0, $e);
+        }
         $nonce = random_bytes(SODIUM_CRYPTO_BOX_NONCEBYTES);
 
         $ciphertext = sodium_crypto_box(
@@ -68,19 +76,6 @@ final class PublicKeyBoxCipher implements CipherInterface
             EncryptedPayloadVersion::V1->value,
             Base64Url::encode($nonce),
             Base64Url::encode($ciphertext),
-        );
-    }
-
-    /**
-     * @param array<string, mixed> $context
-     */
-    private function decodeKey(mixed $value, string $name, array $context): string
-    {
-        return KeyDecoder::decode(
-            $value,
-            (bool) ($context['key_is_binary'] ?? false),
-            SODIUM_CRYPTO_BOX_PUBLICKEYBYTES,
-            $name,
         );
     }
 }

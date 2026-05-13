@@ -20,8 +20,8 @@ final readonly class CsrBuilder implements CsrBuilderInterface
     /**
      * @param array<string, string> $distinguishedName
      */
-    public function build(array $distinguishedName, string $privateKey, ?string $passphrase = null): string
+    public function build(array $distinguishedName, string $privateKey, ?string $passphrase = null, ?CertificateOptions $options = null): string
     {
-        return $this->backend->build($distinguishedName, $privateKey, $passphrase);
+        return $this->backend->build($distinguishedName, $privateKey, $passphrase, $options);
     }
 }

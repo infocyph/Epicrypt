@@ -118,11 +118,26 @@ final class PasswordHasher implements PasswordHasherInterface
 
         return [
             $algorithm,
-            [
-                'memory_cost' => $this->intOption($mergedOptions, 'memory_cost', SecurityPolicy::PASSWORD_DEFAULT_MEMORY_COST),
-                'time_cost' => $this->intOption($mergedOptions, 'time_cost', SecurityPolicy::PASSWORD_DEFAULT_TIME_COST),
-                'threads' => $this->intOption($mergedOptions, 'threads', SecurityPolicy::PASSWORD_DEFAULT_THREADS),
-            ],
+            $this->resolveHashOptions($algorithm, $mergedOptions),
         ];
+    }
+
+    /**
+     * @param array<string, mixed> $options
+     * @return array<string, int>
+     */
+    private function resolveHashOptions(PasswordHashAlgorithm $algorithm, array $options): array
+    {
+        return match ($algorithm) {
+            PasswordHashAlgorithm::BCRYPT => [
+                'cost' => $this->intOption($options, 'cost', 12),
+            ],
+            PasswordHashAlgorithm::ARGON2I,
+            PasswordHashAlgorithm::ARGON2ID => [
+                'memory_cost' => $this->intOption($options, 'memory_cost', SecurityPolicy::PASSWORD_DEFAULT_MEMORY_COST),
+                'time_cost' => $this->intOption($options, 'time_cost', SecurityPolicy::PASSWORD_DEFAULT_TIME_COST),
+                'threads' => $this->intOption($options, 'threads', SecurityPolicy::PASSWORD_DEFAULT_THREADS),
+            ],
+        };
     }
 }

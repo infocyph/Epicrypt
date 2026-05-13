@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace Infocyph\Epicrypt\Crypto;
 
 use Infocyph\Epicrypt\Crypto\Contract\CipherInterface;
-use Infocyph\Epicrypt\Crypto\Support\KeyDecoder;
 use Infocyph\Epicrypt\Exception\Crypto\DecryptionException;
+use Infocyph\Epicrypt\Exception\Crypto\EncryptionException;
+use Infocyph\Epicrypt\Exception\Crypto\InvalidKeyException;
 use Infocyph\Epicrypt\Internal\Base64Url;
+use Infocyph\Epicrypt\Internal\BinaryKey;
 use Infocyph\Epicrypt\Internal\Enum\EncryptedPayloadVersion;
 use Infocyph\Epicrypt\Internal\VersionedPayload;
 
@@ -18,20 +20,18 @@ final class SealedBoxCipher implements CipherInterface
      */
     public function decrypt(string $ciphertext, mixed $key, array $context = []): string
     {
-        $keypair = KeyDecoder::decode(
-            $key,
-            (bool) ($context['key_is_binary'] ?? false),
-            SODIUM_CRYPTO_BOX_KEYPAIRBYTES,
-            'Recipient keypair',
-        );
+        try {
+            $keypair = BinaryKey::boxKeypair($key, (bool) ($context['key_is_binary'] ?? false), 'Recipient keypair');
+        } catch (InvalidKeyException $e) {
+            throw new DecryptionException('Recipient keypair must be valid.', 0, $e);
+        }
 
         $parsedPayload = VersionedPayload::parse($ciphertext, EncryptedPayloadVersion::V1->value, 1);
         if ($parsedPayload === null) {
             throw new DecryptionException('Invalid ciphertext format.');
         }
-        [, $parts] = $parsedPayload;
 
-        $plaintext = sodium_crypto_box_seal_open(Base64Url::decode($parts[0]), $keypair);
+        $plaintext = sodium_crypto_box_seal_open(Base64Url::decode($parsedPayload->parts[0]), $keypair);
         if (!is_string($plaintext)) {
             throw new DecryptionException('Sealed-box decryption failed.');
         }
@@ -44,12 +44,11 @@ final class SealedBoxCipher implements CipherInterface
      */
     public function encrypt(string $plaintext, mixed $key, array $context = []): string
     {
-        $publicKey = KeyDecoder::decode(
-            $key,
-            (bool) ($context['key_is_binary'] ?? false),
-            SODIUM_CRYPTO_BOX_PUBLICKEYBYTES,
-            'Recipient public key',
-        );
+        try {
+            $publicKey = BinaryKey::boxPublicKey($key, (bool) ($context['key_is_binary'] ?? false), 'Recipient public key');
+        } catch (InvalidKeyException $e) {
+            throw new EncryptionException('Recipient public key must be valid.', 0, $e);
+        }
 
         $ciphertext = sodium_crypto_box_seal($plaintext, $publicKey);
 

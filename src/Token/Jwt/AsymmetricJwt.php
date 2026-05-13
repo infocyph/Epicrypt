@@ -7,10 +7,14 @@ namespace Infocyph\Epicrypt\Token\Jwt;
 use Infocyph\Epicrypt\Exception\Token\InvalidTokenException;
 use Infocyph\Epicrypt\Exception\Token\TokenException;
 use Infocyph\Epicrypt\Exception\Token\UnsupportedAlgorithmException;
+use Infocyph\Epicrypt\Internal\Clock\ClockInterface;
+use Infocyph\Epicrypt\Internal\Clock\SystemClock;
 use Infocyph\Epicrypt\Internal\EcdsaSignatureConverter;
 use Infocyph\Epicrypt\Security\Policy\SecurityProfile;
 use Infocyph\Epicrypt\Token\Jwt\Enum\AsymmetricJwtAlgorithm;
 use Infocyph\Epicrypt\Token\Jwt\Support\AbstractJwt;
+use Infocyph\Epicrypt\Token\Jwt\Validation\ExpectedJwtClaims;
+use Infocyph\Epicrypt\Token\Jwt\Validation\JwtValidationOptions;
 use Infocyph\Epicrypt\Token\Jwt\Validation\RegisteredClaims;
 
 final readonly class AsymmetricJwt extends AbstractJwt
@@ -18,14 +22,17 @@ final readonly class AsymmetricJwt extends AbstractJwt
     public function __construct(
         private ?string $passphrase = null,
         private AsymmetricJwtAlgorithm $algorithm = AsymmetricJwtAlgorithm::RS512,
-        ?RegisteredClaims $expectedClaims = null,
+        RegisteredClaims|ExpectedJwtClaims|null $expectedClaims = null,
+        ?JwtValidationOptions $validationOptions = null,
+        ?ClockInterface $clock = null,
+        private EcdsaSignatureConverter $ecdsaSignatureConverter = new EcdsaSignatureConverter(),
     ) {
-        parent::__construct('asymmetric', $expectedClaims);
+        parent::__construct('asymmetric', $expectedClaims, $validationOptions ?? new JwtValidationOptions(), $clock ?? new SystemClock());
     }
 
-    public static function forProfile(SecurityProfile $profile = SecurityProfile::MODERN, ?RegisteredClaims $expectedClaims = null, ?string $passphrase = null): self
+    public static function forProfile(SecurityProfile $profile = SecurityProfile::MODERN, RegisteredClaims|ExpectedJwtClaims|null $expectedClaims = null, ?string $passphrase = null, ?JwtValidationOptions $validationOptions = null, ?ClockInterface $clock = null): self
     {
-        return new self($passphrase, $profile->defaultAsymmetricJwtAlgorithm(), $expectedClaims);
+        return new self($passphrase, $profile->defaultAsymmetricJwtAlgorithm(), $expectedClaims, $validationOptions, $clock, new EcdsaSignatureConverter());
     }
 
     protected function algorithmHeaderValue(mixed $algorithm): string
@@ -61,7 +68,7 @@ final readonly class AsymmetricJwt extends AbstractJwt
 
         $ecdsaLength = $this->algorithm->ecdsaSignatureLength();
         if ($ecdsaLength !== null) {
-            $signature = new EcdsaSignatureConverter()->fromAsn1($signature, $ecdsaLength);
+            $signature = $this->ecdsaSignatureConverter->fromAsn1($signature, $ecdsaLength);
         }
 
         return $signature;
@@ -80,7 +87,7 @@ final readonly class AsymmetricJwt extends AbstractJwt
 
         $ecdsaLength = $algorithm->ecdsaSignatureLength();
         if ($ecdsaLength !== null) {
-            $signature = new EcdsaSignatureConverter()->toAsn1($signature, $ecdsaLength);
+            $signature = $this->ecdsaSignatureConverter->toAsn1($signature, $ecdsaLength);
         }
 
         return openssl_verify(

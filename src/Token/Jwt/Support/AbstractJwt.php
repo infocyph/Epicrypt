@@ -4,16 +4,23 @@ declare(strict_types=1);
 
 namespace Infocyph\Epicrypt\Token\Jwt\Support;
 
+use Infocyph\Epicrypt\Exception\Token\ExpiredTokenException;
 use Infocyph\Epicrypt\Exception\Token\InvalidClaimException;
 use Infocyph\Epicrypt\Exception\Token\InvalidTokenException;
 use Infocyph\Epicrypt\Exception\Token\KeyResolutionException;
 use Infocyph\Epicrypt\Exception\Token\TokenException;
 use Infocyph\Epicrypt\Exception\Token\UnsupportedAlgorithmException;
 use Infocyph\Epicrypt\Internal\Base64Url;
+use Infocyph\Epicrypt\Internal\Clock\ClockInterface;
+use Infocyph\Epicrypt\Internal\Clock\SystemClock;
 use Infocyph\Epicrypt\Security\KeyRing;
 use Infocyph\Epicrypt\Security\KeyVerificationResult;
 use Infocyph\Epicrypt\Token\Contract\JwtTokenInterface;
+use Infocyph\Epicrypt\Token\Jwt\JwtVerificationResult;
 use Infocyph\Epicrypt\Token\Jwt\KeyResolver;
+use Infocyph\Epicrypt\Token\Jwt\Validation\ExpectedJwtClaims;
+use Infocyph\Epicrypt\Token\Jwt\Validation\JwtIssueClaims;
+use Infocyph\Epicrypt\Token\Jwt\Validation\JwtValidationOptions;
 use Infocyph\Epicrypt\Token\Jwt\Validation\JwtValidator;
 use Infocyph\Epicrypt\Token\Jwt\Validation\RegisteredClaims;
 use Infocyph\Epicrypt\Token\Support\TokenAnyKey;
@@ -23,10 +30,44 @@ abstract readonly class AbstractJwt implements JwtTokenInterface
 {
     use JwtCommon;
 
+    private ?ExpectedJwtClaims $normalizedExpectedClaims;
+
+    private ?JwtValidator $validator;
+
     public function __construct(
         private string $keyFamily,
-        private ?RegisteredClaims $expectedClaims,
-    ) {}
+        private RegisteredClaims|ExpectedJwtClaims|null $expectedClaims,
+        private JwtValidationOptions $validationOptions = new JwtValidationOptions(),
+        private ClockInterface $clock = new SystemClock(),
+    ) {
+        if ($this->expectedClaims === null) {
+            $this->normalizedExpectedClaims = null;
+            $this->validator = null;
+
+            return;
+        }
+
+        $this->normalizedExpectedClaims = $this->expectedClaims instanceof RegisteredClaims
+            ? ExpectedJwtClaims::fromRegistered($this->expectedClaims)
+            : $this->expectedClaims;
+
+        $validatorOptions = new JwtValidationOptions(
+            strictTyp: $this->validationOptions->strictTyp,
+            requiredTyp: $this->validationOptions->requiredTyp,
+            rejectCriticalHeaders: $this->validationOptions->rejectCriticalHeaders,
+            rejectNoneAlgorithm: $this->validationOptions->rejectNoneAlgorithm,
+            leewaySeconds: $this->normalizedExpectedClaims->leewaySeconds !== 0
+                ? $this->normalizedExpectedClaims->leewaySeconds
+                : $this->validationOptions->leewaySeconds,
+            maxTokenAgeSeconds: $this->normalizedExpectedClaims->maxTokenAgeSeconds ?? $this->validationOptions->maxTokenAgeSeconds,
+        );
+
+        $this->validator = new JwtValidator(
+            $this->normalizedExpectedClaims,
+            options: $validatorOptions,
+            clock: $this->clock,
+        );
+    }
 
     abstract protected function algorithmHeaderValue(mixed $algorithm): string;
 
@@ -40,6 +81,16 @@ abstract readonly class AbstractJwt implements JwtTokenInterface
 
     final public function decode(string $token, mixed $key): object
     {
+        $result = $this->decodeResult($token, $key);
+        if (!$result->verified) {
+            throw new InvalidTokenException('JWT verification failed.');
+        }
+
+        return (object) $result->claims;
+    }
+
+    final public function decodeResult(string $token, mixed $key): JwtVerificationResult
+    {
         $key = $this->requireSupportedKeyType($key);
 
         if ($this->expectedClaims === null) {
@@ -48,6 +99,7 @@ abstract readonly class AbstractJwt implements JwtTokenInterface
 
         try {
             [$encodedHeader, $encodedPayload, $signature, $header, $payload] = JwtToken::parse($token);
+            $this->validateHeader($header);
 
             $algorithm = $this->algorithmFromHeader($header);
             $resolvedKey = KeyResolver::resolve($key, $header['kid'] ?? null);
@@ -56,11 +108,24 @@ abstract readonly class AbstractJwt implements JwtTokenInterface
                 throw new InvalidTokenException('Signature verification failed.');
             }
 
-            new JwtValidator($this->expectedClaims)->validate($payload);
+            $this->requireValidator()->validate($payload);
 
-            return (object) $payload;
-        } catch (UnsupportedAlgorithmException|KeyResolutionException|InvalidTokenException $e) {
-            throw $e;
+            return new JwtVerificationResult(
+                verified: true,
+                claims: $payload,
+                headers: $header,
+                matchedKeyId: is_string($header['kid'] ?? null) ? $header['kid'] : null,
+                usedFallbackKey: false,
+                algorithm: is_string($header['alg'] ?? null) ? $header['alg'] : null,
+            );
+        } catch (ExpiredTokenException) {
+            return new JwtVerificationResult(false, expired: true);
+        } catch (InvalidClaimException $e) {
+            $isNbfViolation = str_contains(strtolower($e->getMessage()), 'not active');
+
+            return new JwtVerificationResult(false, notBeforeViolation: $isNbfViolation);
+        } catch (UnsupportedAlgorithmException|KeyResolutionException|InvalidTokenException) {
+            return new JwtVerificationResult(false);
         } catch (Throwable $e) {
             throw new InvalidTokenException($e->getMessage(), 0, $e);
         }
@@ -71,19 +136,43 @@ abstract readonly class AbstractJwt implements JwtTokenInterface
      */
     final public function decodeWithAnyKey(string $token, iterable|KeyRing $keys): object
     {
-        return TokenAnyKey::decode(
-            $this->orderedKeys(
-                $keys,
-                sprintf('All %s JWT key candidates must be non-empty strings.', $this->keyFamily),
-                sprintf('At least one %s JWT key candidate is required.', $this->keyFamily),
-            ),
-            fn(string $candidateKey): object => $this->decode($token, $candidateKey),
-            fn(?Throwable $previous): Throwable => new InvalidTokenException(
-                sprintf('JWT verification failed for every supplied %s key.', $this->keyFamily),
-                0,
-                $previous,
-            ),
-        );
+        $result = $this->decodeWithAnyKeyResult($token, $keys);
+        if (!$result->verified) {
+            throw new InvalidTokenException(sprintf('JWT verification failed for every supplied %s key.', $this->keyFamily));
+        }
+
+        return (object) $result->claims;
+    }
+
+    /**
+     * @param iterable<string, string>|KeyRing $keys
+     */
+    final public function decodeWithAnyKeyResult(string $token, iterable|KeyRing $keys): JwtVerificationResult
+    {
+        $lastResult = new JwtVerificationResult(false);
+
+        foreach ($this->orderedKeyEntries(
+            $keys,
+            sprintf('All %s JWT key candidates must be non-empty strings.', $this->keyFamily),
+            sprintf('At least one %s JWT key candidate is required.', $this->keyFamily),
+        ) as $entry) {
+            $result = $this->decodeResult($token, $entry['key']);
+            if ($result->verified) {
+                return new JwtVerificationResult(
+                    true,
+                    $result->claims,
+                    $result->headers,
+                    $entry['id'],
+                    !$entry['active'],
+                    $result->expired,
+                    $result->notBeforeViolation,
+                    $result->algorithm,
+                );
+            }
+            $lastResult = $result;
+        }
+
+        return $lastResult;
     }
 
     /**
@@ -94,8 +183,7 @@ abstract readonly class AbstractJwt implements JwtTokenInterface
     {
         $key = $this->requireSupportedKeyType($key);
 
-        $registeredClaims = RegisteredClaims::fromArray($claims);
-        [$notBefore, $expiresAt] = $this->extractTemporalClaims($claims);
+        $issueClaims = JwtIssueClaims::fromArray($claims);
         $keyId = $claims['kid'] ?? null;
 
         try {
@@ -103,7 +191,7 @@ abstract readonly class AbstractJwt implements JwtTokenInterface
 
             [$encodedHeader, $encodedPayload] = JwtToken::encodeSegments(
                 $this->buildHeader($keyId, $headers),
-                $this->buildPayload($registeredClaims, $notBefore, $expiresAt, $claims),
+                $this->buildPayload($issueClaims, $claims),
             );
 
             $signature = $this->sign($encodedHeader . '.' . $encodedPayload, $resolvedKey);
@@ -118,13 +206,12 @@ abstract readonly class AbstractJwt implements JwtTokenInterface
 
     final public function verify(string $token, mixed $key): bool
     {
-        try {
-            $this->decode($token, $key);
+        return $this->verifyResult($token, $key)->verified;
+    }
 
-            return true;
-        } catch (Throwable) {
-            return false;
-        }
+    final public function verifyResult(string $token, mixed $key): JwtVerificationResult
+    {
+        return $this->decodeResult($token, $key);
     }
 
     /**
@@ -195,21 +282,57 @@ abstract readonly class AbstractJwt implements JwtTokenInterface
      * @param array<string, mixed> $claims
      * @return array<string, mixed>
      */
-    private function buildPayload(RegisteredClaims $registeredClaims, int $notBefore, int $expiresAt, array $claims): array
+    private function buildPayload(JwtIssueClaims $issueClaims, array $claims): array
     {
-        $payload = [
-            'iss' => $registeredClaims->issuer,
-            'aud' => $registeredClaims->audience,
-            'sub' => $registeredClaims->subject,
-            'iat' => time(),
-            'nbf' => $notBefore,
-            'exp' => $expiresAt,
-        ];
-
-        if ($registeredClaims->jwtId !== null) {
-            $payload['jti'] = $registeredClaims->jwtId;
-        }
+        $payload = array_filter([
+            'iss' => $issueClaims->issuer,
+            'aud' => $issueClaims->audience,
+            'sub' => $issueClaims->subject,
+            'iat' => $this->clock->now(),
+            'nbf' => $issueClaims->notBefore,
+            'exp' => $issueClaims->expiresAt,
+            'jti' => $issueClaims->jwtId,
+        ], static fn(mixed $value): bool => $value !== null);
 
         return $payload + $this->removeReservedClaims($claims);
+    }
+
+    private function requireValidator(): JwtValidator
+    {
+        if ($this->validator === null) {
+            throw new TokenException('Expected claims are required for JWT decoding.');
+        }
+
+        return $this->validator;
+    }
+
+    /**
+     * @param array<string, mixed> $header
+     */
+    private function validateHeader(array $header): void
+    {
+        $alg = $header['alg'] ?? null;
+        if (!is_string($alg) || $alg === '') {
+            throw new UnsupportedAlgorithmException('Invalid or unsupported algorithm.');
+        }
+
+        if ($this->validationOptions->rejectNoneAlgorithm && strtolower($alg) === 'none') {
+            throw new UnsupportedAlgorithmException('Algorithm "none" is not supported.');
+        }
+
+        if ($this->validationOptions->strictTyp) {
+            $typ = $header['typ'] ?? null;
+            if (!is_string($typ) || strtoupper($typ) !== strtoupper($this->validationOptions->requiredTyp)) {
+                throw new InvalidTokenException('Invalid JWT typ header.');
+            }
+        }
+
+        if ($this->validationOptions->rejectCriticalHeaders && array_key_exists('crit', $header)) {
+            throw new InvalidTokenException('Unsupported JWT critical headers.');
+        }
+
+        if (array_key_exists('kid', $header) && (!is_string($header['kid']) || $header['kid'] === '')) {
+            throw new InvalidTokenException('Invalid JWT kid header.');
+        }
     }
 }

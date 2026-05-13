@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace Infocyph\Epicrypt\Crypto;
 
 use Infocyph\Epicrypt\Crypto\Enum\StreamAlgorithm;
+use Infocyph\Epicrypt\Exception\ConfigurationException;
 use Infocyph\Epicrypt\Exception\Crypto\DecryptionException;
 use Infocyph\Epicrypt\Exception\Crypto\EncryptionException;
+use Infocyph\Epicrypt\Exception\Crypto\InvalidKeyException;
 use Infocyph\Epicrypt\Exception\FileAccessException;
 use Infocyph\Pathwise\FileManager\SafeFileReader;
 use Infocyph\Pathwise\FileManager\SafeFileWriter;
@@ -14,7 +16,20 @@ use RuntimeException;
 
 final readonly class SecretStream
 {
-    public function __construct(private string $key, private StreamAlgorithm $algorithm = StreamAlgorithm::XCHACHA20POLY1305, private string $additionalData = '') {}
+    public function __construct(
+        private string $key,
+        private StreamAlgorithm $algorithm = StreamAlgorithm::XCHACHA20POLY1305,
+        private string $additionalData = '',
+        private bool $allowUnauthenticatedStream = false,
+    ) {
+        if (strlen($this->key) !== $this->algorithm->keyLength()) {
+            throw new InvalidKeyException(sprintf('Stream key must be %d bytes.', $this->algorithm->keyLength()));
+        }
+
+        if ($this->algorithm === StreamAlgorithm::UNAUTHENTICATED_XCHACHA20 && !$this->allowUnauthenticatedStream) {
+            throw new ConfigurationException('Unauthenticated stream encryption must be explicitly enabled.');
+        }
+    }
 
     public function decrypt(string $inputPath, string $outputPath, int $chunkSize = 8192): void
     {
@@ -140,21 +155,18 @@ final readonly class SecretStream
     private function encryptUsingCryptoStream(string $inputPath, SafeFileWriter $fileWriter, int $chunkSize): int
     {
         $nonce = random_bytes($this->algorithm->prefixLength());
-        $this->writeBinary($fileWriter, $nonce);
+        $bytesWritten = $this->writeBinary($fileWriter, $nonce);
 
         $fileReader = new SafeFileReader($inputPath);
 
         try {
-            $writeChunkSize = 0;
-
-            $this->forEachChunk($fileReader, $chunkSize, 'plaintext', function (string $chunk) use ($fileWriter, &$nonce, &$writeChunkSize): void {
+            $this->forEachChunk($fileReader, $chunkSize, 'plaintext', function (string $chunk) use ($fileWriter, &$nonce, &$bytesWritten): void {
                 $encryptedChunk = sodium_crypto_stream_xchacha20_xor($chunk, $nonce, $this->key);
-                $this->writeBinary($fileWriter, $encryptedChunk);
-                $writeChunkSize = strlen($encryptedChunk);
+                $bytesWritten += $this->writeBinary($fileWriter, $encryptedChunk);
                 $nonce = $this->incrementNonce($nonce);
             });
 
-            return $writeChunkSize;
+            return $bytesWritten;
         } finally {
             $fileReader->releaseLock();
         }
@@ -167,13 +179,12 @@ final readonly class SecretStream
             throw new RuntimeException('Unable to initialize secret stream push state.');
         }
 
-        $this->writeBinary($fileWriter, $header);
+        $bytesWritten = $this->writeBinary($fileWriter, $header);
 
         $fileReader = new SafeFileReader($inputPath);
 
         try {
             $chunkIterator = $fileReader->binary($chunkSize);
-            $writeChunkSize = 0;
             /** @var string|null $bufferedChunk */
             $bufferedChunk = null;
 
@@ -196,8 +207,7 @@ final readonly class SecretStream
                     SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_TAG_MESSAGE,
                 );
 
-                $this->writeBinary($fileWriter, $encryptedChunk);
-                $writeChunkSize = strlen($encryptedChunk);
+                $bytesWritten += $this->writeBinary($fileWriter, $encryptedChunk);
                 $bufferedChunk = $chunk;
             }
 
@@ -208,11 +218,10 @@ final readonly class SecretStream
                 SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_TAG_FINAL,
             );
 
-            $this->writeBinary($fileWriter, $finalChunk);
-            $writeChunkSize = strlen($finalChunk);
+            $bytesWritten += $this->writeBinary($fileWriter, $finalChunk);
             sodium_memzero($state);
 
-            return $writeChunkSize;
+            return $bytesWritten;
         } finally {
             $fileReader->releaseLock();
         }
@@ -264,11 +273,13 @@ final readonly class SecretStream
         return $chunk;
     }
 
-    private function writeBinary(SafeFileWriter $fileWriter, string $data): void
+    private function writeBinary(SafeFileWriter $fileWriter, string $data): int
     {
         $written = $fileWriter->__call('binary', [$data]);
         if ($written === false) {
             throw new RuntimeException('Failed to write output chunk.');
         }
+
+        return strlen($data);
     }
 }

@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Infocyph\Epicrypt\Security\Support;
 
 use Infocyph\Epicrypt\Exception\Token\TokenException;
+use Infocyph\Epicrypt\Internal\Clock\ClockInterface;
+use Infocyph\Epicrypt\Internal\Clock\SystemClock;
 use Infocyph\Epicrypt\Internal\SignedPayloadCodec;
 use Infocyph\Epicrypt\Security\Enum\SecurityTokenPurpose;
 
@@ -15,8 +17,9 @@ abstract readonly class AbstractPurposeToken
     public function __construct(
         string $secret,
         protected int $ttlSeconds,
+        protected ClockInterface $clock = new SystemClock(),
     ) {
-        $this->codec = new SignedPayloadCodec($secret);
+        $this->codec = new SignedPayloadCodec($secret, clock: $this->clock);
     }
 
     /**
@@ -28,7 +31,7 @@ abstract readonly class AbstractPurposeToken
 
         return $this->codec->issue(
             ['purpose' => $purposeValue] + $claims,
-            time() + $this->ttlSeconds,
+            $this->clock->now() + $this->ttlSeconds,
             $purposeValue,
         );
     }

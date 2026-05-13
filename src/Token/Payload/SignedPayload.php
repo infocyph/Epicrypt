@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 namespace Infocyph\Epicrypt\Token\Payload;
 
+use Infocyph\Epicrypt\Exception\Token\ExpiredTokenException;
 use Infocyph\Epicrypt\Exception\Token\TokenException;
+use Infocyph\Epicrypt\Internal\Clock\ClockInterface;
+use Infocyph\Epicrypt\Internal\Clock\SystemClock;
 use Infocyph\Epicrypt\Internal\SignedPayloadCodec;
 use Infocyph\Epicrypt\Security\KeyRing;
 use Infocyph\Epicrypt\Security\KeyVerificationResult;
@@ -16,6 +19,7 @@ final readonly class SignedPayload implements PayloadTokenInterface
 {
     public function __construct(
         private ?string $context = null,
+        private ClockInterface $clock = new SystemClock(),
     ) {}
 
     /**
@@ -27,7 +31,7 @@ final readonly class SignedPayload implements PayloadTokenInterface
             throw new TokenException('Signed payload key must be a non-empty string.');
         }
 
-        return new SignedPayloadCodec($key)->verify($token, $this->context);
+        return new SignedPayloadCodec($key, clock: $this->clock)->verify($token, $this->context);
     }
 
     /**
@@ -57,7 +61,7 @@ final readonly class SignedPayload implements PayloadTokenInterface
             throw new TokenException('Signed payload key must be a non-empty string.');
         }
 
-        return new SignedPayloadCodec($key)->issue(
+        return new SignedPayloadCodec($key, clock: $this->clock)->issue(
             $claims,
             isset($headers['exp']) && is_numeric($headers['exp']) ? (int) $headers['exp'] : null,
             $this->context,
@@ -66,12 +70,19 @@ final readonly class SignedPayload implements PayloadTokenInterface
 
     public function verify(string $token, mixed $key): bool
     {
-        try {
-            $this->decode($token, $key);
+        return $this->verifyResult($token, $key)->verified;
+    }
 
-            return true;
+    public function verifyResult(string $token, mixed $key): SignedPayloadVerificationResult
+    {
+        try {
+            $claims = $this->decode($token, $key);
+
+            return new SignedPayloadVerificationResult(true, $claims);
+        } catch (ExpiredTokenException) {
+            return new SignedPayloadVerificationResult(false, expired: true);
         } catch (TokenException) {
-            return false;
+            return new SignedPayloadVerificationResult(false);
         }
     }
 
@@ -80,7 +91,30 @@ final readonly class SignedPayload implements PayloadTokenInterface
      */
     public function verifyWithAnyKey(string $token, iterable|KeyRing $keys): bool
     {
-        return $this->verifyWithAnyKeyResult($token, $keys)->verified;
+        return $this->verifyWithAnyKeyDetailedResult($token, $keys)->verified;
+    }
+
+    /**
+     * @param iterable<string, string>|KeyRing $keys
+     */
+    public function verifyWithAnyKeyDetailedResult(string $token, iterable|KeyRing $keys): SignedPayloadVerificationResult
+    {
+        $lastResult = new SignedPayloadVerificationResult(false);
+        foreach ($this->orderedKeyEntries($keys) as $entry) {
+            $result = $this->verifyResult($token, $entry['key']);
+            if ($result->verified) {
+                return new SignedPayloadVerificationResult(
+                    true,
+                    $result->claims,
+                    $entry['id'],
+                    !$entry['active'],
+                    $result->expired,
+                );
+            }
+            $lastResult = $result;
+        }
+
+        return $lastResult;
     }
 
     /**

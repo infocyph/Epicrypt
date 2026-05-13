@@ -8,7 +8,7 @@ use Infocyph\Epicrypt\Crypto\Enum\StreamAlgorithm;
 use Infocyph\Epicrypt\Crypto\SecretStream;
 use Infocyph\Epicrypt\Exception\Crypto\InvalidKeyException;
 use Infocyph\Epicrypt\Exception\FileAccessException;
-use Infocyph\Epicrypt\Internal\Base64Url;
+use Infocyph\Epicrypt\Internal\BinaryKey;
 use Infocyph\Epicrypt\Internal\KeyCandidates;
 use Infocyph\Epicrypt\Security\KeyRing;
 use Infocyph\Epicrypt\Security\Policy\SecurityProfile;
@@ -18,6 +18,8 @@ final readonly class FileProtector
 {
     public function __construct(
         private StreamAlgorithm $algorithm = StreamAlgorithm::XCHACHA20POLY1305,
+        private bool $allowUnauthenticatedStream = false,
+        private ?\Closure $renameOperation = null,
     ) {}
 
     public static function forProfile(SecurityProfile $profile = SecurityProfile::MODERN): self
@@ -33,7 +35,7 @@ final readonly class FileProtector
         bool $keyIsBinary = false,
     ): void {
         $this->assertReadableFile($inputPath);
-        $stream = new SecretStream($this->decodeKey($key, $keyIsBinary), $this->algorithm, '');
+        $stream = new SecretStream($this->decodeKey($key, $keyIsBinary), $this->algorithm, '', $this->allowUnauthenticatedStream);
         $stream->decrypt($inputPath, $outputPath, $chunkSize);
     }
 
@@ -70,7 +72,7 @@ final readonly class FileProtector
         bool $keyIsBinary = false,
     ): int {
         $this->assertReadableFile($inputPath);
-        $stream = new SecretStream($this->decodeKey($key, $keyIsBinary), $this->algorithm, '');
+        $stream = new SecretStream($this->decodeKey($key, $keyIsBinary), $this->algorithm, '', $this->allowUnauthenticatedStream);
 
         return $stream->encrypt($inputPath, $outputPath, $chunkSize);
     }
@@ -109,17 +111,16 @@ final readonly class FileProtector
     ): FileMigrationResult {
         $outputPath = $this->temporaryPathFor($path . '.rotated');
         $result = $this->reencryptWithAnyKey($path, $outputPath, $keys, $newKey, $chunkSize, $keysAreBinary, $newKeyIsBinary);
+        $backupPath = $this->temporaryPathFor($path . '.backup');
+        $backupCreated = false;
 
-        if (file_exists($path) && !unlink($path)) {
-            $this->deleteIfExists($outputPath);
-
-            throw new FileAccessException('Unable to replace original file during in-place rotation: ' . $path);
-        }
-
-        if (!rename($outputPath, $path)) {
-            $this->deleteIfExists($outputPath);
-
-            throw new FileAccessException('Unable to finalize in-place rotation for file: ' . $path);
+        try {
+            $backupCreated = $this->createBackupIfPresent($path, $backupPath);
+            $this->finalizeRotation($outputPath, $path);
+        } catch (Throwable $e) {
+            $this->rollbackRotation($path, $outputPath, $backupPath, $backupCreated, $e);
+        } finally {
+            $this->cleanupBackupAfterSuccess($backupPath, $backupCreated, $path);
         }
 
         return new FileMigrationResult($path, $result->matchedKeyId, $result->usedFallbackKey);
@@ -156,20 +157,46 @@ final readonly class FileProtector
         }
     }
 
-    private function decodeKey(string $key, bool $keyIsBinary): string
+    private function cleanupBackupAfterSuccess(string $backupPath, bool $backupCreated, string $path): void
     {
-        $decodedKey = $keyIsBinary ? $key : Base64Url::decode($key);
-        if (strlen($decodedKey) !== SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_KEYBYTES) {
-            throw new InvalidKeyException('Stream key must be 32 bytes.');
+        if ($backupCreated && file_exists($backupPath) && is_file($path)) {
+            $this->deleteIfExists($backupPath);
+        }
+    }
+
+    private function createBackupIfPresent(string $path, string $backupPath): bool
+    {
+        if (!file_exists($path)) {
+            return false;
         }
 
-        return $decodedKey;
+        if (!$this->renamePath($path, $backupPath)) {
+            throw new FileAccessException('Unable to create backup during in-place rotation: ' . $path);
+        }
+
+        return true;
+    }
+
+    private function decodeKey(string $key, bool $keyIsBinary): string
+    {
+        try {
+            return BinaryKey::aeadKey($key, $keyIsBinary, $this->algorithm->keyLength(), 'Stream key');
+        } catch (InvalidKeyException $e) {
+            throw new InvalidKeyException(sprintf('Stream key must be %d bytes.', $this->algorithm->keyLength()), 0, $e);
+        }
     }
 
     private function deleteIfExists(string $path): void
     {
         if (file_exists($path) && !unlink($path) && file_exists($path)) {
             throw new FileAccessException('Unable to delete temporary file: ' . $path);
+        }
+    }
+
+    private function finalizeRotation(string $outputPath, string $path): void
+    {
+        if (!$this->renamePath($outputPath, $path)) {
+            throw new FileAccessException('Unable to finalize in-place rotation for file: ' . $path);
         }
     }
 
@@ -188,6 +215,45 @@ final readonly class FileProtector
         } catch (\InvalidArgumentException $e) {
             throw new FileAccessException($e->getMessage(), 0, $e);
         }
+    }
+
+    private function removePathForRollback(string $path): bool
+    {
+        if (is_file($path)) {
+            return unlink($path);
+        }
+
+        if (is_dir($path)) {
+            return rmdir($path);
+        }
+
+        return !file_exists($path);
+    }
+
+    private function renamePath(string $from, string $to): bool
+    {
+        if ($this->renameOperation instanceof \Closure) {
+            return (bool) ($this->renameOperation)($from, $to);
+        }
+
+        return rename($from, $to);
+    }
+
+    private function rollbackRotation(string $path, string $outputPath, string $backupPath, bool $backupCreated, Throwable $cause): never
+    {
+        $this->deleteIfExists($outputPath);
+
+        if ($backupCreated && file_exists($backupPath)) {
+            if (file_exists($path) && !$this->removePathForRollback($path)) {
+                throw new FileAccessException('Rollback failed while preparing path restoration: ' . $path, 0, $cause);
+            }
+
+            if (!file_exists($path) && !$this->renamePath($backupPath, $path)) {
+                throw new FileAccessException('Rollback failed while restoring backup: ' . $path, 0, $cause);
+            }
+        }
+
+        throw new FileAccessException('Unable to complete in-place file rotation.', 0, $cause);
     }
 
     private function temporaryPathFor(string $targetPath): string

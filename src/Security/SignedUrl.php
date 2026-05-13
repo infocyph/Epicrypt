@@ -6,102 +6,222 @@ namespace Infocyph\Epicrypt\Security;
 
 use Infocyph\Epicrypt\Exception\ConfigurationException;
 use Infocyph\Epicrypt\Internal\Base64Url;
+use Infocyph\Epicrypt\Internal\Clock\ClockInterface;
+use Infocyph\Epicrypt\Internal\Clock\SystemClock;
 use Infocyph\Epicrypt\Internal\Enum\SignedUrlVersion;
 use Infocyph\Epicrypt\Internal\SecureCompare;
 use Infocyph\Epicrypt\Internal\SecurityPolicy;
 use Infocyph\Epicrypt\Security\Contract\SignedUrlGeneratorInterface;
 use Infocyph\Epicrypt\Security\Contract\SignedUrlVerifierInterface;
+use Infocyph\Epicrypt\Security\Support\SignedUrlGuard;
 
+/**
+ * @phpstan-type QueryScalar bool|float|int|string
+ * @phpstan-type QueryArray array<array-key, QueryScalar>
+ * @phpstan-type QueryMap array<string, QueryScalar|QueryArray>
+ */
 final readonly class SignedUrl implements SignedUrlGeneratorInterface, SignedUrlVerifierInterface
 {
+    private const string METHOD_PARAM = 'ep_m';
+
     public function __construct(
         private string $secret,
         private string $signatureParam = 'ep_sig',
         private string $expiresParam = 'ep_exp',
         private string $versionParam = SecurityPolicy::SIGNED_URL_VERSION_PARAM,
+        private ClockInterface $clock = new SystemClock(),
+        private SignedUrlOptions $defaultOptions = new SignedUrlOptions(),
     ) {}
 
     /**
      * @param array<string, scalar|null> $parameters
      */
-    public function generate(string $url, array $parameters = [], ?int $expiresAt = null): string
+    public function generate(string $url, array $parameters = [], ?int $expiresAt = null, ?SignedUrlOptions $options = null): string
     {
+        $options ??= $this->defaultOptions;
+
         [$parts, $existing] = $this->parseUrlWithQueryOrFail($url);
+        $this->assertUrlPolicy($parts, $options, throwOnFailure: true);
 
         $merged = array_merge($existing, $parameters);
+        $normalized = $this->normalizeQuery($merged, $options->allowArrayParameters);
+        if ($normalized === null) {
+            throw new ConfigurationException('Signed URL query parameters contain unsupported values.');
+        }
+
+        $merged = $normalized;
         $merged[$this->versionParam] = SignedUrlVersion::V1->value;
         if ($expiresAt !== null) {
             $merged[$this->expiresParam] = $expiresAt;
         }
+        if ($options->method !== null) {
+            $merged[self::METHOD_PARAM] = $options->method;
+        }
 
-        $basePath = $this->buildBasePath($parts);
-        $signature = $this->computeSignature($basePath, $merged);
+        $merged = $this->normalizeQuery($merged, $options->allowArrayParameters);
+        if ($merged === null) {
+            throw new ConfigurationException('Signed URL query parameters contain unsupported values.');
+        }
+
+        $signatureBasePath = $this->buildSignatureBasePath($parts, $options);
+        $signature = $this->computeSignature($signatureBasePath, $merged);
         $merged[$this->signatureParam] = $signature;
 
-        return $basePath . '?' . http_build_query($merged);
+        return $this->buildDisplayBasePath($parts) . '?' . $this->buildQueryString($merged);
     }
 
-    public function verify(string $signedUrl): bool
+    public function verify(string $signedUrl, ?SignedUrlOptions $options = null): bool
     {
+        return $this->verifyResult($signedUrl, $options)->verified;
+    }
+
+    public function verifyResult(string $signedUrl, ?SignedUrlOptions $options = null): SignedUrlVerificationResult
+    {
+        $options ??= $this->defaultOptions;
+
         $parsed = $this->parseUrlWithQuery($signedUrl);
         if ($parsed === null) {
-            return false;
+            return SignedUrlGuard::invalidSignatureResult();
         }
         [$parts, $query] = $parsed;
-
-        $givenSignature = $query[$this->signatureParam] ?? null;
-        if (!is_string($givenSignature) || $givenSignature === '') {
-            return false;
+        if (!$this->assertUrlPolicy($parts, $options, throwOnFailure: false)) {
+            return SignedUrlGuard::invalidSignatureResult();
         }
 
-        if (isset($query[$this->versionParam])) {
-            if (!is_numeric($query[$this->versionParam]) || (int) $query[$this->versionParam] !== SignedUrlVersion::V1->value) {
-                return false;
-            }
+        $signatureData = SignedUrlGuard::extractSignatureData($query, $this->signatureParam, $this->versionParam);
+        if ($signatureData === null) {
+            return SignedUrlGuard::invalidSignatureResult();
         }
+        $givenSignature = $signatureData['signature'];
+        $version = $signatureData['version'];
 
         unset($query[$this->signatureParam]);
-        if (isset($query[$this->expiresParam]) && time() > (int) $query[$this->expiresParam]) {
-            return false;
+        $expiration = SignedUrlGuard::validateExpirationFromQuery($query, $this->expiresParam, $this->clock->now(), $version);
+        if ($expiration !== null) {
+            return $expiration;
+        }
+        $expiresAt = SignedUrlGuard::expiresAtFromQuery($query, $this->expiresParam);
+
+        $methodValidation = SignedUrlGuard::validateMethodFromQuery($query, self::METHOD_PARAM, $options, $expiresAt, $version);
+        if ($methodValidation !== null) {
+            return $methodValidation;
         }
 
-        $basePath = $this->buildBasePath($parts);
-        $computed = $this->computeSignature($basePath, $query);
+        $normalized = $this->normalizeQuery($query, $options->allowArrayParameters);
+        if ($normalized === null) {
+            return SignedUrlGuard::invalidSignatureResult($expiresAt, $version);
+        }
 
-        return SecureCompare::equals($computed, $givenSignature);
+        $signatureBasePath = $this->buildSignatureBasePath($parts, $options);
+        $computed = $this->computeSignature($signatureBasePath, $normalized);
+
+        $verified = SecureCompare::equals($computed, $givenSignature);
+
+        return new SignedUrlVerificationResult(
+            verified: $verified,
+            invalidSignature: !$verified,
+            expiresAt: $expiresAt,
+            version: $version,
+        );
     }
 
     /**
      * @param array{scheme?: mixed, host?: mixed, port?: mixed, path?: mixed} $parts
      */
-    private function buildBasePath(array $parts): string
+    private function assertUrlPolicy(array $parts, SignedUrlOptions $options, bool $throwOnFailure): bool
     {
-        $scheme = isset($parts['scheme']) && is_string($parts['scheme']) && $parts['scheme'] !== ''
-            ? $parts['scheme']
-            : 'https';
-        $host = isset($parts['host']) && is_string($parts['host']) ? $parts['host'] : '';
+        return SignedUrlGuard::assertUrlPolicy($parts, $options, $throwOnFailure);
+    }
+
+    /**
+     * @param array{scheme?: mixed, host?: mixed, port?: mixed, path?: mixed} $parts
+     */
+    private function buildDisplayBasePath(array $parts): string
+    {
+        $path = $this->pathFromParts($parts);
+        $host = isset($parts['host']) && is_string($parts['host']) ? strtolower($parts['host']) : '';
+        $scheme = isset($parts['scheme']) && is_string($parts['scheme']) ? strtolower($parts['scheme']) : '';
         $port = isset($parts['port']) && is_int($parts['port']) ? ':' . $parts['port'] : '';
-        $path = isset($parts['path']) && is_string($parts['path']) && $parts['path'] !== '' ? $parts['path'] : '/';
+
+        if ($host === '' && $scheme === '') {
+            return $path;
+        }
+
+        if ($scheme === '') {
+            return '//' . $host . $port . $path;
+        }
 
         return $scheme . '://' . $host . $port . $path;
     }
 
     /**
-     * @param array<string, scalar|null> $query
+     * @param QueryMap $query
      */
-    private function computeSignature(string $basePath, array $query): string
+    private function buildQueryString(array $query): string
     {
-        $query = array_filter($query, static fn(mixed $value): bool => $value !== null);
-        ksort($query);
-
-        return Base64Url::encode(hash_hmac('sha256', $basePath . '?' . http_build_query($query), $this->secret, true));
+        return http_build_query($query, '', '&', PHP_QUERY_RFC3986);
     }
 
     /**
-     * @param array<mixed> $query
-     * @return array<string, scalar>
+     * @param array{scheme?: mixed, host?: mixed, port?: mixed, path?: mixed} $parts
      */
-    private function normalizeQuery(array $query): array
+    private function buildSignatureBasePath(array $parts, SignedUrlOptions $options): string
+    {
+        $path = $this->pathFromParts($parts);
+        $host = isset($parts['host']) && is_string($parts['host']) ? strtolower($parts['host']) : '';
+        $scheme = isset($parts['scheme']) && is_string($parts['scheme']) ? strtolower($parts['scheme']) : '';
+        $port = isset($parts['port']) && is_int($parts['port']) ? ':' . $parts['port'] : '';
+
+        if (!$options->bindHost && !$options->bindScheme) {
+            return $path;
+        }
+
+        if (!$options->bindHost && $options->bindScheme) {
+            return $scheme . '://' . $path;
+        }
+
+        if ($options->bindHost && !$options->bindScheme) {
+            return '//' . $host . $port . $path;
+        }
+
+        return $scheme . '://' . $host . $port . $path;
+    }
+
+    /**
+     * @param QueryMap $query
+     */
+    private function computeSignature(string $basePath, array $query): string
+    {
+        return Base64Url::encode(hash_hmac('sha256', $basePath . '?' . $this->buildQueryString($query), $this->secret, true));
+    }
+
+    /**
+     * @param array<array-key, mixed> $value
+     * @return array<array-key, scalar>|null
+     */
+    private function normalizeArrayValue(array $value): ?array
+    {
+        $normalized = [];
+        foreach ($value as $key => $item) {
+            if (is_scalar($item)) {
+                $normalized[$key] = $item;
+
+                continue;
+            }
+
+            return null;
+        }
+
+        ksort($normalized);
+
+        return $normalized;
+    }
+
+    /**
+     * @param array<array-key, mixed> $query
+     * @return QueryMap|null
+     */
+    private function normalizeQuery(array $query, bool $allowArrays): ?array
     {
         $normalized = [];
 
@@ -112,14 +232,33 @@ final readonly class SignedUrl implements SignedUrlGeneratorInterface, SignedUrl
 
             if (is_scalar($value)) {
                 $normalized[$key] = $value;
+
+                continue;
             }
+
+            if ($value === null) {
+                continue;
+            }
+
+            if (!$allowArrays || !is_array($value)) {
+                return null;
+            }
+
+            $normalizedArray = $this->normalizeArrayValue($value);
+            if ($normalizedArray === null) {
+                return null;
+            }
+
+            $normalized[$key] = $normalizedArray;
         }
+
+        ksort($normalized);
 
         return $normalized;
     }
 
     /**
-     * @return array{array{scheme?: mixed, host?: mixed, port?: mixed, path?: mixed}, array<string, scalar>}|null
+     * @return array{array{scheme?: mixed, host?: mixed, port?: mixed, path?: mixed}, QueryMap}|null
      */
     private function parseUrlWithQuery(string $url): ?array
     {
@@ -133,11 +272,16 @@ final readonly class SignedUrl implements SignedUrlGeneratorInterface, SignedUrl
             parse_str($parts['query'], $query);
         }
 
-        return [$parts, $this->normalizeQuery($query)];
+        $normalizedQuery = $this->normalizeQuery($query, allowArrays: true);
+        if ($normalizedQuery === null) {
+            return null;
+        }
+
+        return [$parts, $normalizedQuery];
     }
 
     /**
-     * @return array{array{scheme?: mixed, host?: mixed, port?: mixed, path?: mixed}, array<string, scalar>}
+     * @return array{array{scheme?: mixed, host?: mixed, port?: mixed, path?: mixed}, QueryMap}
      */
     private function parseUrlWithQueryOrFail(string $url): array
     {
@@ -147,5 +291,13 @@ final readonly class SignedUrl implements SignedUrlGeneratorInterface, SignedUrl
         }
 
         return $parsed;
+    }
+
+    /**
+     * @param array{scheme?: mixed, host?: mixed, port?: mixed, path?: mixed} $parts
+     */
+    private function pathFromParts(array $parts): string
+    {
+        return isset($parts['path']) && is_string($parts['path']) && $parts['path'] !== '' ? $parts['path'] : '/';
     }
 }
