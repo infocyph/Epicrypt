@@ -33,7 +33,7 @@ it('rejects tampered aead payload algorithm identifiers', function () {
     $segments[1] = 'unknown-algorithm';
     $tamperedCiphertext = implode('.', $segments);
 
-    expect(fn() => $cipher->decrypt($tamperedCiphertext, $key, ['aad' => 'meta']))
+    expect(fn () => $cipher->decrypt($tamperedCiphertext, $key, ['aad' => 'meta']))
         ->toThrow(DecryptionException::class);
 });
 
@@ -45,7 +45,7 @@ it('rejects payload algorithms that do not match secretbox', function () {
     $segments[1] = 'xchacha20-poly1305-ietf';
     $tamperedCiphertext = implode('.', $segments);
 
-    expect(fn() => $cipher->decrypt($tamperedCiphertext, $key))
+    expect(fn () => $cipher->decrypt($tamperedCiphertext, $key))
         ->toThrow(DecryptionException::class);
 });
 
@@ -62,9 +62,9 @@ it('signs and verifies detached signatures', function () {
 it('rejects invalid signature key material', function () {
     $signatureService = new Signature;
 
-    expect(fn() => $signatureService->sign('epicrypt-signature', 'short-key'))
+    expect(fn () => $signatureService->sign('epicrypt-signature', 'short-key'))
         ->toThrow(SignatureException::class);
-    expect(fn() => $signatureService->verify('epicrypt-signature', 'invalid-sig', 'short-key'))
+    expect(fn () => $signatureService->verify('epicrypt-signature', 'invalid-sig', 'short-key'))
         ->toThrow(SignatureException::class);
 });
 

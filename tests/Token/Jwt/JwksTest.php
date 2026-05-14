@@ -30,7 +30,7 @@ it('exports rsa and ec public keys to jwk and resolves by kid', function () {
     expect($rsaDetails)->toBeArray();
     expect($ecDetails)->toBeArray();
 
-    $jwks = new Jwks();
+    $jwks = new Jwks;
     $ring = new KeyRing([
         'rsa-key' => $rsaDetails['key'],
         'ec-key' => $ecDetails['key'],
@@ -65,7 +65,7 @@ it('imports jwk to pem and verifies jwt using jwks kid resolution', function () 
     $publicPem = $details['key'] ?? null;
     expect($publicPem)->toBeString();
 
-    $jwks = new Jwks();
+    $jwks = new Jwks;
     $jwk = $jwks->exportPublicKeyToJwk($publicPem, 'rsa-signing');
     $importedPem = $jwks->importPublicKeyFromJwk($jwk);
     expect(openssl_pkey_get_public($importedPem))->not->toBeFalse();
@@ -81,7 +81,7 @@ it('imports jwk to pem and verifies jwt using jwks kid resolution', function () 
         'kid' => 'rsa-signing',
     ];
 
-    $issuer = new AsymmetricJwt();
+    $issuer = new AsymmetricJwt;
     $token = $issuer->encode($claims, $privatePem);
 
     $verifier = new AsymmetricJwt(

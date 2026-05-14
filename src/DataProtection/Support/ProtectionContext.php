@@ -5,51 +5,48 @@ declare(strict_types=1);
 namespace Infocyph\Epicrypt\DataProtection\Support;
 
 use Infocyph\Epicrypt\Exception\ConfigurationException;
+use Infocyph\Epicrypt\Internal\BaseProtectionContext;
+use Infocyph\Epicrypt\Internal\ContextValue;
 
 /**
  * @internal
  */
-final readonly class ProtectionContext
+final readonly class ProtectionContext extends BaseProtectionContext
 {
     public function __construct(
-        public bool $keyIsBinary = false,
-        public bool $nonceIsBinary = false,
-        public string $aad = '',
-        public ?string $keyId = null,
         public ?string $purpose = null,
-    ) {}
+        bool $keyIsBinary = false,
+        bool $nonceIsBinary = false,
+        string $aad = '',
+        ?string $keyId = null,
+    ) {
+        parent::__construct($keyIsBinary, $nonceIsBinary, $aad, $keyId);
+    }
 
     /**
      * @param array<string, mixed> $context
      */
     public static function fromArray(array $context): self
     {
-        $keyIsBinary = $context['key_is_binary'] ?? false;
-        if (!is_bool($keyIsBinary)) {
-            throw new ConfigurationException('Protection context key_is_binary must be a boolean.');
-        }
+        $baseFields = ContextValue::baseProtectionFields(
+            $context,
+            fn(string $key): ConfigurationException => new ConfigurationException(sprintf('Protection context %s must be a boolean.', $key)),
+            fn(string $key): ConfigurationException => new ConfigurationException(sprintf('Protection context %s must be a string.', $key)),
+            fn(string $key): ConfigurationException => new ConfigurationException(sprintf('Protection context %s must be a non-empty string when provided.', $key)),
+        );
+        $purpose = ContextValue::optionalNonEmptyString(
+            $context,
+            'purpose',
+            fn(string $key): ConfigurationException => new ConfigurationException(sprintf('Protection context %s must be a non-empty string when provided.', $key)),
+        );
 
-        $nonceIsBinary = $context['nonce_is_binary'] ?? false;
-        if (!is_bool($nonceIsBinary)) {
-            throw new ConfigurationException('Protection context nonce_is_binary must be a boolean.');
-        }
-
-        $aad = $context['aad'] ?? '';
-        if (!is_string($aad)) {
-            throw new ConfigurationException('Protection context aad must be a string.');
-        }
-
-        $keyId = $context['key_id'] ?? null;
-        if ($keyId !== null && (!is_string($keyId) || $keyId === '')) {
-            throw new ConfigurationException('Protection context key_id must be a non-empty string when provided.');
-        }
-
-        $purpose = $context['purpose'] ?? null;
-        if ($purpose !== null && (!is_string($purpose) || $purpose === '')) {
-            throw new ConfigurationException('Protection context purpose must be a non-empty string when provided.');
-        }
-
-        return new self($keyIsBinary, $nonceIsBinary, $aad, $keyId, $purpose);
+        return new self(
+            purpose: $purpose,
+            keyIsBinary: $baseFields['key_is_binary'],
+            nonceIsBinary: $baseFields['nonce_is_binary'],
+            aad: $baseFields['aad'],
+            keyId: $baseFields['key_id'],
+        );
     }
 
     /**

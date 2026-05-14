@@ -76,7 +76,7 @@ it('builds csr and certificate with SAN options', function () {
 it('supports rsa interoperability in Certificate domain', function () {
     $keyPair = KeyPairGenerator::openSsl(bits: OpenSslRsaBits::BITS_2048)->generate();
 
-    $cipher = new RsaCipher();
+    $cipher = new RsaCipher;
     $encrypted = $cipher->encrypt('certificate-rsa-check', $keyPair['public']);
     $decrypted = $cipher->decrypt($encrypted, $keyPair['private']);
 
@@ -104,7 +104,7 @@ it('supports enum based key exchange backend selection', function () {
 it('rejects invalid sodium key exchange key material', function () {
     $exchange = KeyExchange::sodium();
 
-    expect(fn() => $exchange->derive('short-private', 'short-public'))
+    expect(fn () => $exchange->derive('short-private', 'short-public'))
         ->toThrow(InvalidKeyException::class);
 });
 
@@ -138,12 +138,12 @@ it('signs csr using a certificate authority and validates certificate utilities'
     $leafCsr = CsrBuilder::openSsl()->build($leafDn, $leafKeyPair['private'], options: $leafOptions);
     $leafCertificate = CertificateAuthority::openSsl()->signCsr($leafCsr, $caCertificate, $caKeyPair['private'], $leafOptions);
 
-    $fingerprint = (new CertificateFingerprint())->fingerprint($leafCertificate);
-    $expiresAt = (new CertificateExpiry())->expiresAt($leafCertificate);
-    $notExpired = (new CertificateExpiry())->isExpired($leafCertificate) === false;
-    $matches = (new CertificateKeyMatcher())->privateKeyMatches($leafCertificate, $leafKeyPair['private']);
-    $chainValid = (new CertificateChainVerifier())->verify($leafCertificate, [$caCertificate]);
-    $normalized = (new PemNormalizer())->normalize($leafCertificate);
+    $fingerprint = (new CertificateFingerprint)->fingerprint($leafCertificate);
+    $expiresAt = (new CertificateExpiry)->expiresAt($leafCertificate);
+    $notExpired = (new CertificateExpiry)->isExpired($leafCertificate) === false;
+    $matches = (new CertificateKeyMatcher)->privateKeyMatches($leafCertificate, $leafKeyPair['private']);
+    $chainValid = (new CertificateChainVerifier)->verify($leafCertificate, [$caCertificate]);
+    $normalized = (new PemNormalizer)->normalize($leafCertificate);
 
     expect($leafCertificate)->toContain('BEGIN CERTIFICATE');
     expect($fingerprint)->toHaveLength(64);
@@ -155,7 +155,7 @@ it('signs csr using a certificate authority and validates certificate utilities'
 });
 
 it('rejects curve selection for RSA key pair generation', function () {
-    expect(fn() => KeyPairGenerator::openSsl(
+    expect(fn () => KeyPairGenerator::openSsl(
         bits: OpenSslRsaBits::BITS_2048,
         curveName: OpenSslCurveName::PRIME256V1,
     ))->toThrow(ConfigurationException::class);
@@ -184,7 +184,7 @@ it('exports and imports pkcs12 bundles', function () {
     ];
     $certificate = CertificateBuilder::openSsl()->selfSign($dn, $keyPair['private'], 365);
 
-    $manager = new Pkcs12();
+    $manager = new Pkcs12;
     $bundle = $manager->export($certificate, $keyPair['private'], 'changeit');
     $imported = $manager->import($bundle, 'changeit');
 

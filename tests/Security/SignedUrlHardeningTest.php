@@ -16,7 +16,7 @@ it('supports method-bound signed urls', function () {
 it('enforces array query parameter policy', function () {
     $signedUrl = new SignedUrl('url-secret');
 
-    expect(fn() => $signedUrl->generate('https://example.com/download?tag[]=a'))
+    expect(fn () => $signedUrl->generate('https://example.com/download?tag[]=a'))
         ->toThrow(ConfigurationException::class);
 
     $arrayOptions = new SignedUrlOptions(allowArrayParameters: true);
@@ -50,4 +50,3 @@ it('enforces absolute/relative and allowed-host policies', function () {
     expect($signedUrl->verify($signedAbsolute, $hostBound))->toBeTrue();
     expect($signedUrl->verify($signedAbsolute, new SignedUrlOptions(allowedHosts: ['api.example.com'])))->toBeFalse();
 });
-

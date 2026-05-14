@@ -14,8 +14,8 @@ final class SessionKeyExchange implements KeyExchangeInterface
     public function derive(string $privateKey, string $publicKey, bool $keysAreBinary = false): string
     {
         try {
-            $private = BinaryKey::boxSecretKey($privateKey, $keysAreBinary, 'Private key');
-            $public = BinaryKey::boxPublicKey($publicKey, $keysAreBinary, 'Public key');
+            $private = BinaryKey::fixedLength($privateKey, $keysAreBinary, SODIUM_CRYPTO_BOX_SECRETKEYBYTES, 'Private key');
+            $public = BinaryKey::fixedLength($publicKey, $keysAreBinary, SODIUM_CRYPTO_BOX_PUBLICKEYBYTES, 'Public key');
         } catch (InvalidKeyException $e) {
             throw new InvalidKeyException('Sodium key exchange requires valid curve25519 private/public keys.', 0, $e);
         }

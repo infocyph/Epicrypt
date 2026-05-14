@@ -91,6 +91,15 @@ final class Jwks
         return $this->importPublicKeyFromJwk($this->resolveByKid($jwks, $kid));
     }
 
+    private function byte(int $value): string
+    {
+        if ($value < 0 || $value > 255) {
+            throw new KeyResolutionException('Invalid ASN.1 byte value.');
+        }
+
+        return chr($value);
+    }
+
     private function derBitString(string $value): string
     {
         return "\x03" . $this->derLength(strlen($value) + 1) . "\x00" . $value;
@@ -113,16 +122,16 @@ final class Jwks
     private function derLength(int $length): string
     {
         if ($length < 128) {
-            return chr($length);
+            return $this->byte($length);
         }
 
         $result = '';
         while ($length > 0) {
-            $result = chr($length & 0xFF) . $result;
+            $result = $this->byte($length & 0xFF) . $result;
             $length >>= 8;
         }
 
-        return chr(0x80 | strlen($result)) . $result;
+        return $this->byte(0x80 | strlen($result)) . $result;
     }
 
     private function derOid(string $oid): string
@@ -134,7 +143,7 @@ final class Jwks
 
         $first = (int) $parts[0];
         $second = (int) $parts[1];
-        $encoded = chr(($first * 40) + $second);
+        $encoded = $this->byte(($first * 40) + $second);
 
         for ($i = 2; $i < count($parts); $i++) {
             $value = (int) $parts[$i];
@@ -142,11 +151,11 @@ final class Jwks
                 throw new KeyResolutionException(sprintf('Invalid OID "%s".', $oid));
             }
 
-            $segment = chr($value & 0x7F);
+            $segment = $this->byte($value & 0x7F);
             $value >>= 7;
 
             while ($value > 0) {
-                $segment = chr(($value & 0x7F) | 0x80) . $segment;
+                $segment = $this->byte(($value & 0x7F) | 0x80) . $segment;
                 $value >>= 7;
             }
 

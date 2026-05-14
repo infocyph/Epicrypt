@@ -21,9 +21,9 @@ it('encrypts and decrypts empty, small, multi-chunk and large files', function (
 
     try {
         foreach ($cases as $name => $content) {
-            $plain = $root . DIRECTORY_SEPARATOR . $name . '.plain.bin';
-            $encrypted = $root . DIRECTORY_SEPARATOR . $name . '.enc.bin';
-            $decrypted = $root . DIRECTORY_SEPARATOR . $name . '.dec.bin';
+            $plain = $root.DIRECTORY_SEPARATOR.$name.'.plain.bin';
+            $encrypted = $root.DIRECTORY_SEPARATOR.$name.'.enc.bin';
+            $decrypted = $root.DIRECTORY_SEPARATOR.$name.'.dec.bin';
 
             file_put_contents($plain, $content);
 
@@ -44,9 +44,9 @@ it('fails file decryption with wrong key', function () {
     $wrongKey = $generator->forSecretStream();
 
     $root = makeMatrixTempDirectory();
-    $plain = $root . DIRECTORY_SEPARATOR . 'payload.txt';
-    $encrypted = $root . DIRECTORY_SEPARATOR . 'payload.enc';
-    $decrypted = $root . DIRECTORY_SEPARATOR . 'payload.dec';
+    $plain = $root.DIRECTORY_SEPARATOR.'payload.txt';
+    $encrypted = $root.DIRECTORY_SEPARATOR.'payload.enc';
+    $decrypted = $root.DIRECTORY_SEPARATOR.'payload.dec';
     file_put_contents($plain, 'file-protection payload');
 
     $protector = FileProtector::forProfile(SecurityProfile::MODERN);
@@ -54,7 +54,7 @@ it('fails file decryption with wrong key', function () {
     try {
         $protector->encrypt($plain, $encrypted, $correctKey);
 
-        expect(fn() => $protector->decrypt($encrypted, $decrypted, $wrongKey))
+        expect(fn () => $protector->decrypt($encrypted, $decrypted, $wrongKey))
             ->toThrow(DecryptionException::class);
     } finally {
         removeMatrixTempDirectory($root);
@@ -66,9 +66,9 @@ it('fails file decryption when ciphertext is tampered', function () {
     $key = $generator->forSecretStream();
 
     $root = makeMatrixTempDirectory();
-    $plain = $root . DIRECTORY_SEPARATOR . 'payload.txt';
-    $encrypted = $root . DIRECTORY_SEPARATOR . 'payload.enc';
-    $decrypted = $root . DIRECTORY_SEPARATOR . 'payload.dec';
+    $plain = $root.DIRECTORY_SEPARATOR.'payload.txt';
+    $encrypted = $root.DIRECTORY_SEPARATOR.'payload.enc';
+    $decrypted = $root.DIRECTORY_SEPARATOR.'payload.dec';
     file_put_contents($plain, str_repeat('tamper-check-', 2_000));
 
     $protector = FileProtector::forProfile(SecurityProfile::MODERN);
@@ -78,7 +78,7 @@ it('fails file decryption when ciphertext is tampered', function () {
         $ciphertext = (string) file_get_contents($encrypted);
         file_put_contents($encrypted, substr($ciphertext, 0, max(0, strlen($ciphertext) - 5)));
 
-        expect(fn() => $protector->decrypt($encrypted, $decrypted, $key, 256))
+        expect(fn () => $protector->decrypt($encrypted, $decrypted, $key, 256))
             ->toThrow(DecryptionException::class);
     } finally {
         removeMatrixTempDirectory($root);
@@ -88,9 +88,9 @@ it('fails file decryption when ciphertext is tampered', function () {
 it('supports file protection with binary stream keys', function () {
     $key = (new KeyMaterialGenerator)->forSecretStream(asBase64Url: false);
     $root = makeMatrixTempDirectory();
-    $plain = $root . DIRECTORY_SEPARATOR . 'payload.txt';
-    $encrypted = $root . DIRECTORY_SEPARATOR . 'payload.enc';
-    $decrypted = $root . DIRECTORY_SEPARATOR . 'payload.dec';
+    $plain = $root.DIRECTORY_SEPARATOR.'payload.txt';
+    $encrypted = $root.DIRECTORY_SEPARATOR.'payload.enc';
+    $decrypted = $root.DIRECTORY_SEPARATOR.'payload.dec';
     file_put_contents($plain, 'binary-stream-key payload');
 
     $protector = FileProtector::forProfile(SecurityProfile::MODERN);
@@ -107,7 +107,7 @@ it('supports file protection with binary stream keys', function () {
 
 function makeMatrixTempDirectory(): string
 {
-    $path = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'epicrypt-file-matrix-' . bin2hex(random_bytes(6));
+    $path = sys_get_temp_dir().DIRECTORY_SEPARATOR.'epicrypt-file-matrix-'.bin2hex(random_bytes(6));
     mkdir($path);
 
     return $path;
@@ -116,7 +116,7 @@ function makeMatrixTempDirectory(): string
 function removeMatrixTempDirectory(string $path): void
 {
     $rootPath = $path;
-    if (!is_dir($rootPath)) {
+    if (! is_dir($rootPath)) {
         return;
     }
 

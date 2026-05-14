@@ -9,6 +9,5 @@ it('issues opaque tokens and verifies digests', function () {
 
     expect($token)->toHaveLength(48);
     expect($opaque->verify($token, $digest))->toBeTrue();
-    expect($opaque->verify($token . 'x', $digest))->toBeFalse();
+    expect($opaque->verify($token.'x', $digest))->toBeFalse();
 });
-

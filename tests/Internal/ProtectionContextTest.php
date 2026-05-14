@@ -27,10 +27,10 @@ it('normalizes protection context through readonly value object', function () {
 });
 
 it('rejects invalid typed protection context inputs', function () {
-    expect(fn() => ProtectionContext::fromArray(['key_is_binary' => 'yes']))
+    expect(fn () => ProtectionContext::fromArray(['key_is_binary' => 'yes']))
         ->toThrow(ConfigurationException::class);
-    expect(fn() => ProtectionContext::fromArray(['key_id' => '']))
+    expect(fn () => ProtectionContext::fromArray(['key_id' => '']))
         ->toThrow(ConfigurationException::class);
-    expect(fn() => ProtectionContext::fromArray(['purpose' => '']))
+    expect(fn () => ProtectionContext::fromArray(['purpose' => '']))
         ->toThrow(ConfigurationException::class);
 });

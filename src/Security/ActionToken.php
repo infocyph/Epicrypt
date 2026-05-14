@@ -4,20 +4,12 @@ declare(strict_types=1);
 
 namespace Infocyph\Epicrypt\Security;
 
-use Infocyph\Epicrypt\Internal\Clock\ClockInterface;
-use Infocyph\Epicrypt\Internal\Clock\SystemClock;
 use Infocyph\Epicrypt\Security\Enum\SecurityTokenPurpose;
 use Infocyph\Epicrypt\Security\Support\AbstractPurposeToken;
 
 final readonly class ActionToken extends AbstractPurposeToken
 {
-    public function __construct(
-        string $secret,
-        int $ttlSeconds = 900,
-        ClockInterface $clock = new SystemClock(),
-    ) {
-        parent::__construct($secret, $ttlSeconds, $clock);
-    }
+    protected const int DEFAULT_TTL_SECONDS = 900;
 
     /**
      * @param array<string, scalar> $context

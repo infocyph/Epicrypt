@@ -22,8 +22,8 @@ it('rejects malformed compact payload parts', function () {
 });
 
 it('rejects invalid compact key id values for encoding', function () {
-    expect(fn() => VersionedPayload::encodeCompact('epc1', 'secretbox', '_', 'nonce', 'ciphertext'))
+    expect(fn () => VersionedPayload::encodeCompact('epc1', 'secretbox', '_', 'nonce', 'ciphertext'))
         ->toThrow(InvalidArgumentException::class);
-    expect(fn() => VersionedPayload::encodeCompact('epc1', 'secretbox', 'bad.key', 'nonce', 'ciphertext'))
+    expect(fn () => VersionedPayload::encodeCompact('epc1', 'secretbox', 'bad.key', 'nonce', 'ciphertext'))
         ->toThrow(InvalidArgumentException::class);
 });

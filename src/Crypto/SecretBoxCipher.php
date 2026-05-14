@@ -73,9 +73,10 @@ final class SecretBoxCipher implements CipherInterface
     private function decodeKey(mixed $key, array $context, string $operation): string
     {
         try {
-            return BinaryKey::secretBoxKey(
+            return BinaryKey::fixedLength(
                 $key,
                 (bool) ($context['key_is_binary'] ?? false),
+                SODIUM_CRYPTO_SECRETBOX_KEYBYTES,
                 sprintf('%s key', $operation),
             );
         } catch (InvalidKeyException $e) {

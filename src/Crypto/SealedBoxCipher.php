@@ -21,7 +21,7 @@ final class SealedBoxCipher implements CipherInterface
     public function decrypt(string $ciphertext, mixed $key, array $context = []): string
     {
         try {
-            $keypair = BinaryKey::boxKeypair($key, (bool) ($context['key_is_binary'] ?? false), 'Recipient keypair');
+            $keypair = BinaryKey::fixedLength($key, (bool) ($context['key_is_binary'] ?? false), SODIUM_CRYPTO_BOX_KEYPAIRBYTES, 'Recipient keypair');
         } catch (InvalidKeyException $e) {
             throw new DecryptionException('Recipient keypair must be valid.', 0, $e);
         }
@@ -45,7 +45,7 @@ final class SealedBoxCipher implements CipherInterface
     public function encrypt(string $plaintext, mixed $key, array $context = []): string
     {
         try {
-            $publicKey = BinaryKey::boxPublicKey($key, (bool) ($context['key_is_binary'] ?? false), 'Recipient public key');
+            $publicKey = BinaryKey::fixedLength($key, (bool) ($context['key_is_binary'] ?? false), SODIUM_CRYPTO_BOX_PUBLICKEYBYTES, 'Recipient public key');
         } catch (InvalidKeyException $e) {
             throw new EncryptionException('Recipient public key must be valid.', 0, $e);
         }

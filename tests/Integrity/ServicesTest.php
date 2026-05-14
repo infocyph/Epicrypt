@@ -1,8 +1,8 @@
 <?php
 
+use Infocyph\Epicrypt\Exception\Integrity\HashingException;
 use Infocyph\Epicrypt\Integrity\FileHasher;
 use Infocyph\Epicrypt\Integrity\StringHasher;
-use Infocyph\Epicrypt\Exception\Integrity\HashingException;
 use Infocyph\Epicrypt\Integrity\Support\ContentFingerprinter;
 
 it('hashes and verifies strings and files', function () {
@@ -37,9 +37,9 @@ it('rejects unsupported hash algorithms for integrity services', function () {
     file_put_contents($tmpPath, 'file-content');
 
     try {
-        expect(fn() => (new StringHasher('definitely-not-valid'))->hash('payload'))
+        expect(fn () => (new StringHasher('definitely-not-valid'))->hash('payload'))
             ->toThrow(HashingException::class);
-        expect(fn() => (new FileHasher('definitely-not-valid'))->hash($tmpPath))
+        expect(fn () => (new FileHasher('definitely-not-valid'))->hash($tmpPath))
             ->toThrow(HashingException::class);
     } finally {
         unlink($tmpPath);

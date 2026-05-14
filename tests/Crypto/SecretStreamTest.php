@@ -6,14 +6,14 @@ use Infocyph\Epicrypt\Exception\ConfigurationException;
 use Infocyph\Epicrypt\Exception\Crypto\InvalidKeyException;
 
 it('rejects direct secret stream construction with invalid key length', function () {
-    expect(fn() => new SecretStream('short-key'))->toThrow(InvalidKeyException::class);
+    expect(fn () => new SecretStream('short-key'))->toThrow(InvalidKeyException::class);
 });
 
 it('requires explicit opt-in for unauthenticated stream mode', function () {
     $key = random_bytes(SODIUM_CRYPTO_STREAM_XCHACHA20_KEYBYTES);
 
     expect(
-        fn() => new SecretStream($key, StreamAlgorithm::UNAUTHENTICATED_XCHACHA20),
+        fn () => new SecretStream($key, StreamAlgorithm::UNAUTHENTICATED_XCHACHA20),
     )->toThrow(ConfigurationException::class);
 
     expect(
@@ -66,7 +66,7 @@ it('returns total bytes written for multi-chunk secret stream encryption', funct
 
 function cleanupSecretStreamTempDirectory(string $directory): void
 {
-    if (!is_dir($directory)) {
+    if (! is_dir($directory)) {
         return;
     }
 

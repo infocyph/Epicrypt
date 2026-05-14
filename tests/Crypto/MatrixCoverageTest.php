@@ -15,7 +15,7 @@ it('roundtrips AEAD encryption for each supported algorithm', function () {
     $generator = new KeyMaterialGenerator;
 
     foreach (AeadAlgorithm::cases() as $algorithm) {
-        if (!$algorithm->isAvailable()) {
+        if (! $algorithm->isAvailable()) {
             continue;
         }
 
@@ -64,10 +64,10 @@ it('rejects wrong and invalid keys for secret box payloads', function () {
     $cipher = new SecretBoxCipher;
     $ciphertext = $cipher->encrypt('secret-box payload', $correctKey);
 
-    expect(fn() => $cipher->decrypt($ciphertext, $wrongKey))
+    expect(fn () => $cipher->decrypt($ciphertext, $wrongKey))
         ->toThrow(DecryptionException::class);
 
-    expect(fn() => $cipher->encrypt('secret-box payload', 'short'))
+    expect(fn () => $cipher->encrypt('secret-box payload', 'short'))
         ->toThrow(InvalidKeyException::class);
 });
 
@@ -81,12 +81,12 @@ it('rejects tampered nonce, tampered ciphertext and invalid base64url', function
 
     $tamperedNonce = $parts;
     $tamperedNonce[3] = 'not_base64url***';
-    expect(fn() => $cipher->decrypt(implode('.', $tamperedNonce), $key))
+    expect(fn () => $cipher->decrypt(implode('.', $tamperedNonce), $key))
         ->toThrow(ConfigurationException::class);
 
     $tamperedCiphertext = $parts;
     $tamperedCiphertext[4] = 'not_base64url***';
-    expect(fn() => $cipher->decrypt(implode('.', $tamperedCiphertext), $key))
+    expect(fn () => $cipher->decrypt(implode('.', $tamperedCiphertext), $key))
         ->toThrow(ConfigurationException::class);
 });
 

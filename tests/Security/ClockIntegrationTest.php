@@ -1,5 +1,6 @@
 <?php
 
+use Infocyph\Epicrypt\Exception\Token\ExpiredTokenException;
 use Infocyph\Epicrypt\Internal\Clock\ClockInterface;
 use Infocyph\Epicrypt\Internal\SignedPayloadCodec;
 use Infocyph\Epicrypt\Security\CsrfTokenManager;
@@ -28,7 +29,7 @@ it('uses injected clock for signed payload issuance and verification', function 
     expect($claims['iat'])->toBe(1_000);
 
     $verifier = new SignedPayloadCodec('clock-secret', clock: $verifyClock);
-    expect(fn() => $verifier->verify($token))->toThrow(\Infocyph\Epicrypt\Exception\Token\ExpiredTokenException::class);
+    expect(fn () => $verifier->verify($token))->toThrow(ExpiredTokenException::class);
 });
 
 it('uses injected clock for csrf token expiration claims', function () {

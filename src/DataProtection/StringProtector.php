@@ -55,21 +55,8 @@ final readonly class StringProtector implements DecryptorInterface, EncryptorInt
         }
 
         $normalized = ProtectionContext::fromArray($context)->toArray();
-        $lastException = null;
 
-        foreach ($this->orderedKeyEntries($keys) as $entry) {
-            try {
-                return new StringUnprotectResult(
-                    $this->decrypt($ciphertext, $entry['key'], $normalized),
-                    $entry['id'],
-                    !$entry['active'],
-                );
-            } catch (Throwable $e) {
-                $lastException = $e;
-            }
-        }
-
-        throw new DecryptionException('Unable to decrypt protected string with any supplied key.', 0, $lastException);
+        return $this->decryptWithOrderedEntries($ciphertext, $normalized, $this->orderedKeyEntries($keys));
     }
 
     /**
@@ -105,20 +92,7 @@ final readonly class StringProtector implements DecryptorInterface, EncryptorInt
             }
         }
 
-        $lastException = null;
-        foreach ($this->orderedKeyEntries($keyRing) as $entry) {
-            try {
-                return new StringUnprotectResult(
-                    $this->decrypt($ciphertext, $entry['key'], $normalized),
-                    $entry['id'],
-                    !$entry['active'],
-                );
-            } catch (Throwable $e) {
-                $lastException = $e;
-            }
-        }
-
-        throw new DecryptionException('Unable to decrypt protected string with any supplied key.', 0, $lastException);
+        return $this->decryptWithOrderedEntries($ciphertext, $normalized, $this->orderedKeyEntries($keyRing));
     }
 
     /**
@@ -202,6 +176,29 @@ final readonly class StringProtector implements DecryptorInterface, EncryptorInt
         $plaintext = $this->decryptWithAnyKeyResult($ciphertext, $sourceKeys, $sourceContext)->plaintext;
 
         return $this->encrypt($plaintext, $newKey, $currentContext);
+    }
+
+    /**
+     * @param array<string, mixed> $context
+     * @param list<array{id: ?string, key: string, active: bool}> $entries
+     */
+    private function decryptWithOrderedEntries(string $ciphertext, array $context, array $entries): StringUnprotectResult
+    {
+        $lastException = null;
+
+        foreach ($entries as $entry) {
+            try {
+                return new StringUnprotectResult(
+                    $this->decrypt($ciphertext, $entry['key'], $context),
+                    $entry['id'],
+                    !$entry['active'],
+                );
+            } catch (Throwable $e) {
+                $lastException = $e;
+            }
+        }
+
+        throw new DecryptionException('Unable to decrypt protected string with any supplied key.', 0, $lastException);
     }
 
     /**

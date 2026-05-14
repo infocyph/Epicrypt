@@ -92,7 +92,7 @@ it('roundtrips asymmetric jwt for ES256 ES384 and ES512 when supported', functio
 
         openssl_pkey_export($resource, $privateKey);
         $details = openssl_pkey_get_details($resource);
-        if (!is_array($details) || !isset($details['key']) || !is_string($details['key'])) {
+        if (! is_array($details) || ! isset($details['key']) || ! is_string($details['key'])) {
             continue;
         }
 
@@ -103,7 +103,7 @@ it('roundtrips asymmetric jwt for ES256 ES384 and ES512 when supported', functio
         expect($jwt->verify($token, $details['key']))->toBeTrue();
     }
 
-    if (!$asserted) {
+    if (! $asserted) {
         expect(true)->toBeTrue();
     }
 });

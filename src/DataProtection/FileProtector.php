@@ -180,7 +180,7 @@ final readonly class FileProtector
     private function decodeKey(string $key, bool $keyIsBinary): string
     {
         try {
-            return BinaryKey::aeadKey($key, $keyIsBinary, $this->algorithm->keyLength(), 'Stream key');
+            return BinaryKey::fixedLength($key, $keyIsBinary, $this->algorithm->keyLength(), 'Stream key');
         } catch (InvalidKeyException $e) {
             throw new InvalidKeyException(sprintf('Stream key must be %d bytes.', $this->algorithm->keyLength()), 0, $e);
         }

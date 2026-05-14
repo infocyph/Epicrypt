@@ -4,12 +4,12 @@ use Infocyph\Epicrypt\Internal\Base64Url;
 use Infocyph\Epicrypt\Internal\Clock\ClockInterface;
 use Infocyph\Epicrypt\Internal\Json;
 use Infocyph\Epicrypt\Security\SignedUrl;
-use Infocyph\Epicrypt\Token\Jwt\Validation\ExpectedJwtClaims;
 use Infocyph\Epicrypt\Token\Jwt\Enum\SymmetricJwtAlgorithm;
 use Infocyph\Epicrypt\Token\Jwt\SymmetricJwt;
+use Infocyph\Epicrypt\Token\Jwt\Validation\ExpectedJwtClaims;
 use Infocyph\Epicrypt\Token\Jwt\Validation\JwtValidationOptions;
-use Infocyph\Epicrypt\Token\Jwt\Validation\RequiredJwtClaims;
 use Infocyph\Epicrypt\Token\Jwt\Validation\RegisteredClaims;
+use Infocyph\Epicrypt\Token\Jwt\Validation\RequiredJwtClaims;
 use Infocyph\Epicrypt\Token\Payload\SignedPayload;
 
 it('exposes jwt decode result metadata', function () {
@@ -45,7 +45,7 @@ it('rejects missing typ, crit header, none alg and non-string kid in strict mode
         'exp' => $now + 600,
     ];
     $token = (new SymmetricJwt(SymmetricJwtAlgorithm::HS512))->encode($claims, 'super-secret-key');
-    [$h, $p, ] = explode('.', $token, 3);
+    [$h, $p] = explode('.', $token, 3);
     $payload = Json::decodeToArray(Base64Url::decode($p));
 
     $strictJwt = new SymmetricJwt(

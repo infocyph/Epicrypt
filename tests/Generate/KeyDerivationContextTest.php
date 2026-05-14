@@ -23,7 +23,7 @@ it('derives keys using typed key derivation context objects', function () {
 
     $password = $deriver->deriveFromPassword(
         'MyStrongPassword!2026',
-        (new SaltGenerator())->generate(SODIUM_CRYPTO_PWHASH_SALTBYTES),
+        (new SaltGenerator)->generate(SODIUM_CRYPTO_PWHASH_SALTBYTES),
         32,
         new KeyDerivationContext(profile: SecurityProfile::MODERN),
     );
@@ -42,12 +42,11 @@ it('derives keys using typed key derivation context objects', function () {
 });
 
 it('validates typed key derivation context input values', function () {
-    expect(fn() => KeyDerivationContext::fromArray([
+    expect(fn () => KeyDerivationContext::fromArray([
         'salt_is_binary' => 'yes',
     ]))->toThrow(ConfigurationException::class);
 
-    expect(fn() => KeyDerivationContext::fromArray([
+    expect(fn () => KeyDerivationContext::fromArray([
         'profile' => 'modern',
     ]))->toThrow(ConfigurationException::class);
 });
-

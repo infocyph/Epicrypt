@@ -41,7 +41,7 @@ final class Mac implements MacInterface
     private function decodeKey(string $key, bool $isBinary): string
     {
         try {
-            return BinaryKey::macKey($key, $isBinary, 'MAC key');
+            return BinaryKey::fixedLength($key, $isBinary, SODIUM_CRYPTO_AUTH_KEYBYTES, 'MAC key');
         } catch (InvalidKeyException $e) {
             throw new InvalidKeyException('MAC key must be 32 bytes.', 0, $e);
         }

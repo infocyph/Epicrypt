@@ -20,13 +20,15 @@ final class PublicKeyBoxCipher implements CipherInterface
      */
     public function decrypt(string $ciphertext, mixed $key, array $context = []): string
     {
-        if (!is_array($key)) {
-            throw new InvalidKeyException('Key must include sender_public and recipient_private entries.');
-        }
+        $key = $this->normalizeKeyMaterial($key, 'Key must include sender_public and recipient_private entries.');
 
         try {
-            $senderPublic = BinaryKey::boxPublicKey($key['sender_public'] ?? null, (bool) ($context['key_is_binary'] ?? false), 'sender_public');
-            $recipientPrivate = BinaryKey::boxSecretKey($key['recipient_private'] ?? null, (bool) ($context['key_is_binary'] ?? false), 'recipient_private');
+            [$senderPublic, $recipientPrivate] = $this->resolveBoxKeyPair(
+                $key,
+                (bool) ($context['key_is_binary'] ?? false),
+                'sender_public',
+                'recipient_private',
+            );
         } catch (InvalidKeyException $e) {
             throw new DecryptionException('Public key-box decryption key material is invalid.', 0, $e);
         }
@@ -54,13 +56,15 @@ final class PublicKeyBoxCipher implements CipherInterface
      */
     public function encrypt(string $plaintext, mixed $key, array $context = []): string
     {
-        if (!is_array($key)) {
-            throw new InvalidKeyException('Key must include recipient_public and sender_private entries.');
-        }
+        $key = $this->normalizeKeyMaterial($key, 'Key must include recipient_public and sender_private entries.');
 
         try {
-            $recipientPublic = BinaryKey::boxPublicKey($key['recipient_public'] ?? null, (bool) ($context['key_is_binary'] ?? false), 'recipient_public');
-            $senderPrivate = BinaryKey::boxSecretKey($key['sender_private'] ?? null, (bool) ($context['key_is_binary'] ?? false), 'sender_private');
+            [$recipientPublic, $senderPrivate] = $this->resolveBoxKeyPair(
+                $key,
+                (bool) ($context['key_is_binary'] ?? false),
+                'recipient_public',
+                'sender_private',
+            );
         } catch (InvalidKeyException $e) {
             throw new EncryptionException('Public key-box encryption key material is invalid.', 0, $e);
         }
@@ -77,5 +81,38 @@ final class PublicKeyBoxCipher implements CipherInterface
             Base64Url::encode($nonce),
             Base64Url::encode($ciphertext),
         );
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function normalizeKeyMaterial(mixed $key, string $invalidMessage): array
+    {
+        if (!is_array($key)) {
+            throw new InvalidKeyException($invalidMessage);
+        }
+
+        $normalized = [];
+        foreach ($key as $entryKey => $entryValue) {
+            if (!is_string($entryKey)) {
+                throw new InvalidKeyException($invalidMessage);
+            }
+
+            $normalized[$entryKey] = $entryValue;
+        }
+
+        return $normalized;
+    }
+
+    /**
+     * @param array<string, mixed> $key
+     * @return array{0: string, 1: string}
+     */
+    private function resolveBoxKeyPair(array $key, bool $keyIsBinary, string $publicKeyField, string $secretKeyField): array
+    {
+        return [
+            BinaryKey::fixedLength($key[$publicKeyField] ?? null, $keyIsBinary, SODIUM_CRYPTO_BOX_PUBLICKEYBYTES, $publicKeyField),
+            BinaryKey::fixedLength($key[$secretKeyField] ?? null, $keyIsBinary, SODIUM_CRYPTO_BOX_SECRETKEYBYTES, $secretKeyField),
+        ];
     }
 }

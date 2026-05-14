@@ -12,13 +12,18 @@ use Infocyph\Epicrypt\Security\Enum\SecurityTokenPurpose;
 
 abstract readonly class AbstractPurposeToken
 {
+    protected const int DEFAULT_TTL_SECONDS = 3600;
+
+    protected int $ttlSeconds;
+
     private SignedPayloadCodec $codec;
 
     public function __construct(
         string $secret,
-        protected int $ttlSeconds,
+        ?int $ttlSeconds = null,
         protected ClockInterface $clock = new SystemClock(),
     ) {
+        $this->ttlSeconds = $ttlSeconds ?? static::DEFAULT_TTL_SECONDS;
         $this->codec = new SignedPayloadCodec($secret, clock: $this->clock);
     }
 

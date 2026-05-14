@@ -123,7 +123,7 @@ final readonly class PasswordGenerator implements PasswordGeneratorInterface
      */
     private function secureShuffle(array $items): array
     {
-        for ($index = count($items) - 1; $index > 0; --$index) {
+        for ($index = count($items) - 1; $index > 0; $index--) {
             $swapIndex = random_int(0, $index);
             [$items[$index], $items[$swapIndex]] = [$items[$swapIndex], $items[$index]];
         }

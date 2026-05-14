@@ -79,7 +79,7 @@ it('fails protected string key-ring decrypt when payload key id is missing', fun
         'current' => $currentKey,
     ], 'current');
 
-    expect(fn() => StringProtector::forProfile()->decryptWithKeyRingResult($ciphertext, $keyRing))
+    expect(fn () => StringProtector::forProfile()->decryptWithKeyRingResult($ciphertext, $keyRing))
         ->toThrow(DecryptionException::class);
 });
 
@@ -95,7 +95,7 @@ it('does not fallback for protected strings when key id is present but key is wr
 
     $ciphertext = StringProtector::forProfile()->encrypt('rotating data', $previousKey, ['key_id' => 'current']);
 
-    expect(fn() => StringProtector::forProfile()->decryptWithKeyRingResult($ciphertext, $keyRing))
+    expect(fn () => StringProtector::forProfile()->decryptWithKeyRingResult($ciphertext, $keyRing))
         ->toThrow(DecryptionException::class);
 });
 
@@ -169,7 +169,7 @@ it('does not fallback for envelopes when key id is present but key is wrong', fu
     $envelope['kid'] = 'current';
     $encoded = $protector->encodeEnvelope($envelope);
 
-    expect(fn() => $protector->decryptWithKeyRingResult($encoded, $keyRing))
+    expect(fn () => $protector->decryptWithKeyRingResult($encoded, $keyRing))
         ->toThrow(DecryptionException::class);
 });
 
@@ -274,7 +274,7 @@ it('rolls back in-place file key rotation when final rename fails', function () 
         },
     );
 
-    expect(fn() => $failingProtector->reencryptInPlaceWithAnyKey(
+    expect(fn () => $failingProtector->reencryptInPlaceWithAnyKey(
         $encryptedPath,
         new KeyRing(['previous' => $previousKey, 'current' => $currentKey], 'current'),
         $currentKey,
@@ -328,7 +328,7 @@ it('supports inspect and rotation helper methods', function () {
 
 function cleanupServicesTempDirectory(string $path): void
 {
-    if (!is_dir($path)) {
+    if (! is_dir($path)) {
         return;
     }
 

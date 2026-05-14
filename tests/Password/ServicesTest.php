@@ -1,5 +1,6 @@
 <?php
 
+use Infocyph\Epicrypt\Exception\Password\SecretProtectionException;
 use Infocyph\Epicrypt\Password\Enum\PasswordHashAlgorithm;
 use Infocyph\Epicrypt\Password\Generator\PasswordGenerator;
 use Infocyph\Epicrypt\Password\Generator\PasswordPolicy;
@@ -7,7 +8,6 @@ use Infocyph\Epicrypt\Password\NullCompromisedPasswordChecker;
 use Infocyph\Epicrypt\Password\PasswordHasher;
 use Infocyph\Epicrypt\Password\PasswordPolicyValidator;
 use Infocyph\Epicrypt\Password\PasswordStrength;
-use Infocyph\Epicrypt\Exception\Password\SecretProtectionException;
 use Infocyph\Epicrypt\Password\Secret\MasterSecretGenerator;
 use Infocyph\Epicrypt\Password\Secret\WrappedSecretManager;
 use Infocyph\Epicrypt\Security\KeyRing;
@@ -122,7 +122,7 @@ it('does not fallback for wrapped secrets when key id is present but key is wron
     $manager = new WrappedSecretManager;
     $wrapped = $manager->wrap('rotated-secret', $oldMaster, false, 'new');
 
-    expect(fn() => $manager->unwrapWithKeyRingResult($wrapped, $keyRing))
+    expect(fn () => $manager->unwrapWithKeyRingResult($wrapped, $keyRing))
         ->toThrow(SecretProtectionException::class);
 });
 

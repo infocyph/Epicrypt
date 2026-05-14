@@ -18,7 +18,7 @@ final class Signature implements SignatureInterface
     public function sign(string $message, mixed $key, array $context = []): string
     {
         try {
-            $privateKey = BinaryKey::signSecretKey($key, (bool) ($context['key_is_binary'] ?? false), 'Private key');
+            $privateKey = BinaryKey::fixedLength($key, (bool) ($context['key_is_binary'] ?? false), SODIUM_CRYPTO_SIGN_SECRETKEYBYTES, 'Private key');
         } catch (InvalidKeyException $e) {
             throw new SignatureException('Private key must be a valid signing secret key.', 0, $e);
         }
@@ -34,7 +34,7 @@ final class Signature implements SignatureInterface
     public function verify(string $message, string $signature, mixed $key, array $context = []): bool
     {
         try {
-            $publicKey = BinaryKey::signPublicKey($key, (bool) ($context['key_is_binary'] ?? false), 'Public key');
+            $publicKey = BinaryKey::fixedLength($key, (bool) ($context['key_is_binary'] ?? false), SODIUM_CRYPTO_SIGN_PUBLICKEYBYTES, 'Public key');
         } catch (InvalidKeyException $e) {
             throw new SignatureException('Public key must be a valid signing public key.', 0, $e);
         }

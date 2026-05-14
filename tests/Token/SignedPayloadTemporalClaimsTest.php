@@ -10,14 +10,14 @@ it('rejects expired signed payloads', function () {
     $codec = new SignedPayloadCodec('signed-payload-secret');
     $token = $codec->issue(['sub' => 'user-1'], time() - 10);
 
-    expect(fn() => $codec->verify($token))->toThrow(ExpiredTokenException::class);
+    expect(fn () => $codec->verify($token))->toThrow(ExpiredTokenException::class);
 });
 
 it('rejects signed payloads with non-numeric exp claims', function () {
     $codec = new SignedPayloadCodec('signed-payload-secret');
     $token = $codec->issue(['sub' => 'user-1', 'exp' => 'not-a-timestamp']);
 
-    expect(fn() => $codec->verify($token))->toThrow(InvalidTokenException::class);
+    expect(fn () => $codec->verify($token))->toThrow(InvalidTokenException::class);
 });
 
 it('rejects signed payloads with non-numeric iat claims', function () {
@@ -28,7 +28,7 @@ it('rejects signed payloads with non-numeric iat claims', function () {
     $token = $header.'.'.$payload.'.'.$signature;
     $codec = new SignedPayloadCodec($secret);
 
-    expect(fn() => $codec->verify($token))->toThrow(InvalidTokenException::class);
+    expect(fn () => $codec->verify($token))->toThrow(InvalidTokenException::class);
 });
 
 it('accepts signed payloads without exp claims', function () {
@@ -57,5 +57,5 @@ it('rejects tampered signed payloads', function () {
     $payload['sub'] = 'user-2';
     $tamperedToken = $encodedHeader.'.'.Base64Url::encode(Json::encode($payload)).'.'.$signature;
 
-    expect(fn() => $codec->verify($tamperedToken))->toThrow(InvalidTokenException::class);
+    expect(fn () => $codec->verify($tamperedToken))->toThrow(InvalidTokenException::class);
 });

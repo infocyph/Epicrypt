@@ -154,7 +154,7 @@ final class WrappedSecretManager
     private function decodeMasterSecret(string $masterSecret, bool $isBinary): string
     {
         try {
-            return BinaryKey::secretBoxKey($masterSecret, $isBinary, 'Master secret');
+            return BinaryKey::fixedLength($masterSecret, $isBinary, SODIUM_CRYPTO_SECRETBOX_KEYBYTES, 'Master secret');
         } catch (\Throwable $e) {
             throw new SecretProtectionException('Master secret must be 32 bytes long.', 0, $e);
         }

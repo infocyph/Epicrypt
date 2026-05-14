@@ -97,7 +97,7 @@ final readonly class AeadCipher implements CipherInterface
     private function decodeKey(mixed $key, int $expectedLength, bool $isBinary, string $operation): string
     {
         try {
-            return BinaryKey::aeadKey($key, $isBinary, $expectedLength, sprintf('%s key', $operation));
+            return BinaryKey::fixedLength($key, $isBinary, $expectedLength, sprintf('%s key', $operation));
         } catch (InvalidKeyException $e) {
             throw new InvalidKeyException(sprintf('%s key must be %d bytes.', $operation, $expectedLength), 0, $e);
         }
