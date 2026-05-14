@@ -19,7 +19,7 @@ final class CsrBuilder implements CsrBuilderInterface
     {
         $privateResource = Pem::requirePrivateKeyResource($privateKey, $passphrase);
         $effectiveOptions = $options ?? new CertificateOptions();
-        $tempConfigPath = OpenSslExtensionConfig::createTempConfig($effectiveOptions);
+        $tempConfigPath = OpenSslExtensionConfig::createTempConfig($effectiveOptions, $distinguishedName);
         $config = ['digest_alg' => $effectiveOptions->digestAlgorithm];
         $config['config'] = $tempConfigPath;
         $config['req_extensions'] = 'v3_req';

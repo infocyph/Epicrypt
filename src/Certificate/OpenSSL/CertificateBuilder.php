@@ -6,6 +6,7 @@ namespace Infocyph\Epicrypt\Certificate\OpenSSL;
 
 use Infocyph\Epicrypt\Certificate\CertificateOptions;
 use Infocyph\Epicrypt\Certificate\Contract\CertificateBuilderInterface;
+use Infocyph\Epicrypt\Certificate\OpenSSL\Support\OpenSslCertificateSigner;
 use Infocyph\Epicrypt\Certificate\OpenSSL\Support\OpenSslExtensionConfig;
 use Infocyph\Epicrypt\Certificate\Support\Pem;
 use Infocyph\Epicrypt\Exception\ConfigurationException;
@@ -25,7 +26,7 @@ final readonly class CertificateBuilder implements CertificateBuilderInterface
         $effectiveOptions = $options ?? new CertificateOptions(days: $days, digestAlgorithm: $this->digestAlgorithm);
         $requestedDays = $effectiveOptions->days;
         $digestAlgorithm = $effectiveOptions->digestAlgorithm;
-        $tempConfigPath = OpenSslExtensionConfig::createTempConfig($effectiveOptions);
+        $tempConfigPath = OpenSslExtensionConfig::createTempConfig($effectiveOptions, $distinguishedName);
         $csrConfig = ['digest_alg' => $digestAlgorithm];
         $signConfig = ['digest_alg' => $digestAlgorithm];
         $csrConfig['config'] = $tempConfigPath;
@@ -41,17 +42,15 @@ final readonly class CertificateBuilder implements CertificateBuilderInterface
 
             $signingPrivateKey = $passphrase === null ? $privateKey : [$privateKey, $passphrase];
 
-            $certificate = openssl_csr_sign($csr, null, $signingPrivateKey, $requestedDays, $signConfig);
-            if ($certificate === false) {
-                throw new ConfigurationException('Certificate signing failed.');
-            }
-
-            $exported = openssl_x509_export($certificate, $certificatePem);
-            if (!$exported || !is_string($certificatePem) || $certificatePem === '') {
-                throw new ConfigurationException('Certificate export failed.');
-            }
-
-            return $certificatePem;
+            return OpenSslCertificateSigner::signAndExport(
+                $csr,
+                null,
+                $signingPrivateKey,
+                $requestedDays,
+                $signConfig,
+                'Certificate signing failed.',
+                'Certificate export failed.',
+            );
         } finally {
             if (file_exists($tempConfigPath)) {
                 unlink($tempConfigPath);

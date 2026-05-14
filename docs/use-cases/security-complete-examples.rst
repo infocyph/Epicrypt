@@ -13,10 +13,13 @@ Generate and Verify a Signed URL
    declare(strict_types=1);
 
    use Infocyph\Epicrypt\Security\SignedUrl;
+   use Infocyph\Epicrypt\Security\SignedUrlOptions;
 
    $signedUrl = new SignedUrl('url-secret');
-   $link = $signedUrl->generate('https://example.com/download', ['file' => 'report.csv'], time() + 300);
-   $linkValid = $signedUrl->verify($link);
+   $options = new SignedUrlOptions(method: 'GET', allowedHosts: ['example.com']);
+   $link = $signedUrl->generate('https://example.com/download', ['file' => 'report.csv'], time() + 300, $options);
+   $linkValid = $signedUrl->verify($link, $options);
+   $verifyResult = $signedUrl->verifyResult($link, $options);
 
 Issue and Verify a CSRF Token
 -----------------------------
@@ -85,3 +88,34 @@ Use this when signatures must be accepted during a key rollover window.
    $signature = $rotation->sign('payload', 'k2', $keys);
    $validWithKid = $rotation->verify('payload', $signature, $keys, 'k2');
    $validAgainstWholeSet = $rotation->verify('payload', $signature, $keys);
+   $verifyResult = $rotation->verifyResult('payload', $signature, $keys);
+
+Use KeyRing Metadata
+--------------------
+
+Use this when key lifetimes or purpose scope must be enforced by the key set.
+
+.. code-block:: php
+
+   <?php
+
+   declare(strict_types=1);
+
+   use Infocyph\Epicrypt\Security\KeyRing;
+
+   $ring = new KeyRing([
+       'k-current' => [
+           'key' => 'active-key',
+           'status' => KeyRing::STATUS_ACTIVE,
+           'not_before' => time() - 60,
+           'not_after' => time() + 86400,
+           'purpose' => 'signed-url',
+       ],
+       'k-previous' => [
+           'key' => 'fallback-key',
+           'status' => KeyRing::STATUS_FALLBACK,
+           'purpose' => 'signed-url',
+       ],
+   ], 'k-current');
+
+   $orderedForPurpose = $ring->orderedEntries('signed-url', time());

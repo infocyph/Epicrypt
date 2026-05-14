@@ -11,6 +11,8 @@ Scope
 - opaque tokens
 - claim validation and key resolution
 - key-ring verification helpers for signed payload and JWT rotation
+- JWKS/JWK export, import, and kid-based verification flows
+- structured verification result objects for safer application decisions
 
 Symmetric JWT
 -------------
@@ -77,13 +79,11 @@ Asymmetric JWT
    use Infocyph\Epicrypt\Token\Jwt\AsymmetricJwt;
    use Infocyph\Epicrypt\Token\Jwt\Validation\RegisteredClaims;
 
-   $resource = openssl_pkey_new([
-       'private_key_type' => OPENSSL_KEYTYPE_RSA,
-       'private_key_bits' => 2048,
-   ]);
-   openssl_pkey_export($resource, $privateKey);
-   $details = openssl_pkey_get_details($resource);
-   $publicKey = $details['key'];
+   use Infocyph\Epicrypt\Certificate\KeyPairGenerator;
+
+   $keys = KeyPairGenerator::openSsl()->generate();
+   $privateKey = $keys['private'];
+   $publicKey = $keys['public'];
 
    $now = time();
    $claims = [
@@ -101,6 +101,41 @@ Asymmetric JWT
        new RegisteredClaims('issuer-service', 'audience-service', 'subject-service', 'token-1'),
    );
    $isValid = $jwt->verify($token, $publicKey);
+
+JWT Result APIs
+---------------
+
+Use result APIs when you need structured verification state instead of only boolean pass/fail.
+
+.. code-block:: php
+
+   use Infocyph\Epicrypt\Token\Jwt\Validation\ExpectedJwtClaims;
+   use Infocyph\Epicrypt\Token\Jwt\Validation\RequiredJwtClaims;
+   use Infocyph\Epicrypt\Token\Jwt\Validation\JwtValidationOptions;
+
+   $jwt = SymmetricJwt::forProfile(
+       SecurityProfile::MODERN,
+       new ExpectedJwtClaims(
+           issuer: 'issuer-service',
+           audience: 'audience-service',
+           subject: 'subject-service',
+           required: new RequiredJwtClaims(issuer: true, audience: true, subject: true),
+       ),
+       new JwtValidationOptions(strictTyp: true, leewaySeconds: 15),
+   );
+
+   $result = $jwt->decodeResult($token, 'super-secret-key');
+   if ($result->verified) {
+       $claims = $result->claims;
+       $headers = $result->headers;
+   }
+
+   // Metadata fields:
+   // $result->matchedKeyId
+   // $result->usedFallbackKey
+   // $result->expired
+   // $result->notBeforeViolation
+   // $result->algorithm
 
 Signed Payload Token
 --------------------
@@ -133,6 +168,22 @@ Signed Payload Key Rings
    $claims = $payload->decodeWithAnyKey($token, $ring);
    $isValid = $payload->verifyWithAnyKey($token, $ring);
    $result = $payload->verifyWithAnyKeyResult($token, $ring);
+   $detailed = $payload->verifyWithAnyKeyDetailedResult($token, $ring);
+
+Signed Payload Result APIs
+--------------------------
+
+.. code-block:: php
+
+   $result = $payload->verifyResult($token, 'payload-secret');
+   if ($result->verified) {
+       $claims = $result->claims;
+   }
+
+   // Metadata fields:
+   // $result->matchedKeyId
+   // $result->usedFallbackKey
+   // $result->expired
 
 Opaque Token
 ------------
@@ -145,3 +196,26 @@ Opaque Token
    $token = $opaque->issue(48);
    $digest = $opaque->hash($token);
    $isValid = $opaque->verify($token, $digest);
+
+JWKS/JWK Interoperability
+-------------------------
+
+Use this for asymmetric JWT interop where verifier keys are distributed in JWKS form.
+
+.. code-block:: php
+
+   use Infocyph\Epicrypt\Security\KeyRing;
+   use Infocyph\Epicrypt\Token\Jwt\AsymmetricJwt;
+   use Infocyph\Epicrypt\Token\Jwt\Jwks;
+
+   $jwksHelper = new Jwks();
+   $publicRing = new KeyRing(['k1' => $publicKey1, 'k2' => $publicKey2], 'k2');
+   $jwks = $jwksHelper->exportFromKeyRing($publicRing);
+
+   // Resolve by kid to PEM:
+   $pem = $jwksHelper->resolvePublicKeyByKid($jwks, 'k2');
+
+   // Verify directly from JWKS:
+   $jwt = AsymmetricJwt::forProfile(SecurityProfile::MODERN, $expectedClaims);
+   $result = $jwt->verifyFromJwksResult($token, $jwks);
+   $isValid = $result->verified;

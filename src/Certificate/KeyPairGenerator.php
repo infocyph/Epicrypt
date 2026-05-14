@@ -20,7 +20,7 @@ final readonly class KeyPairGenerator implements KeyPairGeneratorInterface
 
     public static function forType(
         KeyPairType $type,
-        OpenSslRsaBits $bits = OpenSslRsaBits::BITS_2048,
+        OpenSslRsaBits $bits = OpenSslRsaBits::BITS_3072,
         ?OpenSslCurveName $curveName = null,
     ): self {
         if (!$type->isOpenSsl()) {
@@ -35,7 +35,7 @@ final readonly class KeyPairGenerator implements KeyPairGeneratorInterface
     }
 
     public static function openSsl(
-        OpenSslRsaBits $bits = OpenSslRsaBits::BITS_2048,
+        OpenSslRsaBits $bits = OpenSslRsaBits::BITS_3072,
         OpenSslKeyType $type = OpenSslKeyType::RSA,
         ?OpenSslCurveName $curveName = null,
     ): self {

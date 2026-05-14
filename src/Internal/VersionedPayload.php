@@ -35,7 +35,6 @@ final class VersionedPayload
     public static function parse(string $payload, string $expectedVersion, int $partCount): ?VersionedPayloadResult
     {
         $segments = explode('.', $payload);
-        $firstSegment = $segments[0];
 
         if (count($segments) === ($partCount + 1) && $segments[0] === $expectedVersion) {
             $versionedParts = array_slice($segments, 1);
@@ -44,14 +43,6 @@ final class VersionedPayload
             }
 
             return null;
-        }
-
-        if ($firstSegment === $expectedVersion) {
-            return null;
-        }
-
-        if (count($segments) === $partCount && self::allNonEmpty($segments)) {
-            return new VersionedPayloadResult(false, $segments);
         }
 
         return null;

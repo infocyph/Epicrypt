@@ -183,27 +183,18 @@ final class WrappedSecretManager
     private function parseWrappedPayload(string $wrappedSecret): array
     {
         $compactPayload = VersionedPayload::parseCompact($wrappedSecret, WrappedSecretVersion::V1->value);
-        if ($compactPayload !== null) {
-            if ($compactPayload->algorithm !== self::ALGORITHM_ID) {
-                throw new SecretProtectionException('Unsupported wrapped secret algorithm.');
-            }
-
-            return [
-                'nonce' => $compactPayload->nonce,
-                'ciphertext' => $compactPayload->ciphertext,
-                'key_id' => $compactPayload->keyId,
-            ];
-        }
-
-        $parsedPayload = VersionedPayload::parse($wrappedSecret, WrappedSecretVersion::V1->value, 2);
-        if ($parsedPayload === null) {
+        if ($compactPayload === null) {
             throw new SecretProtectionException('Invalid wrapped secret format.');
         }
 
+        if ($compactPayload->algorithm !== self::ALGORITHM_ID) {
+            throw new SecretProtectionException('Unsupported wrapped secret algorithm.');
+        }
+
         return [
-            'nonce' => $parsedPayload->parts[0],
-            'ciphertext' => $parsedPayload->parts[1],
-            'key_id' => null,
+            'nonce' => $compactPayload->nonce,
+            'ciphertext' => $compactPayload->ciphertext,
+            'key_id' => $compactPayload->keyId,
         ];
     }
 }

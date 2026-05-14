@@ -10,6 +10,10 @@ use Infocyph\Epicrypt\Exception\Crypto\EncryptionException;
 use Infocyph\Epicrypt\Internal\Base64Url;
 use OpenSSLAsymmetricKey;
 
+/**
+ * Compatibility-focused RSA helper.
+ * Use envelope encryption for large payloads and modern data-at-rest flows.
+ */
 final class RsaCipher
 {
     public function decrypt(string $ciphertext, string $privateKey, ?string $passphrase = null): string

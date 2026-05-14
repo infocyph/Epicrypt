@@ -12,8 +12,13 @@ use Infocyph\Epicrypt\Exception\ConfigurationException;
  */
 final class OpenSslExtensionConfig
 {
-    public static function createTempConfig(CertificateOptions $options): string
+    /**
+     * @param array<string, string> $distinguishedName
+     */
+    public static function createTempConfig(CertificateOptions $options, array $distinguishedName = []): string
     {
+        $commonName = self::resolveCommonName($distinguishedName);
+
         $lines = [
             '[req]',
             'distinguished_name=req_distinguished_name',
@@ -22,7 +27,7 @@ final class OpenSslExtensionConfig
             'x509_extensions=v3_req',
             '',
             '[req_distinguished_name]',
-            'CN=localhost',
+            sprintf('CN=%s', $commonName),
             '',
             '[v3_req]',
         ];
@@ -75,5 +80,20 @@ final class OpenSslExtensionConfig
         }
 
         return $tempFile;
+    }
+
+    /**
+     * @param array<string, string> $distinguishedName
+     */
+    private static function resolveCommonName(array $distinguishedName): string
+    {
+        $commonName = $distinguishedName['commonName'] ?? $distinguishedName['CN'] ?? null;
+        if (!is_string($commonName)) {
+            return 'localhost';
+        }
+
+        $trimmed = trim($commonName);
+
+        return $trimmed === '' ? 'localhost' : $trimmed;
     }
 }

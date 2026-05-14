@@ -1,7 +1,9 @@
 <?php
 
-use Infocyph\Epicrypt\Certificate\CertificateBuilder;
+declare(strict_types=1);
+
 use Infocyph\Epicrypt\Certificate\CertificateAuthority;
+use Infocyph\Epicrypt\Certificate\CertificateBuilder;
 use Infocyph\Epicrypt\Certificate\CertificateChainVerifier;
 use Infocyph\Epicrypt\Certificate\CertificateExpiry;
 use Infocyph\Epicrypt\Certificate\CertificateFingerprint;
@@ -14,8 +16,9 @@ use Infocyph\Epicrypt\Certificate\Enum\OpenSslCurveName;
 use Infocyph\Epicrypt\Certificate\Enum\OpenSslRsaBits;
 use Infocyph\Epicrypt\Certificate\KeyExchange;
 use Infocyph\Epicrypt\Certificate\KeyPairGenerator;
-use Infocyph\Epicrypt\Certificate\PemNormalizer;
 use Infocyph\Epicrypt\Certificate\OpenSSL\RsaCipher;
+use Infocyph\Epicrypt\Certificate\PemNormalizer;
+use Infocyph\Epicrypt\Certificate\Pkcs12;
 use Infocyph\Epicrypt\Exception\ConfigurationException;
 use Infocyph\Epicrypt\Exception\Crypto\InvalidKeyException;
 
@@ -73,7 +76,7 @@ it('builds csr and certificate with SAN options', function () {
 it('supports rsa interoperability in Certificate domain', function () {
     $keyPair = KeyPairGenerator::openSsl(bits: OpenSslRsaBits::BITS_2048)->generate();
 
-    $cipher = new RsaCipher;
+    $cipher = new RsaCipher();
     $encrypted = $cipher->encrypt('certificate-rsa-check', $keyPair['public']);
     $decrypted = $cipher->decrypt($encrypted, $keyPair['private']);
 
@@ -152,8 +155,39 @@ it('signs csr using a certificate authority and validates certificate utilities'
 });
 
 it('rejects curve selection for RSA key pair generation', function () {
-    expect(fn () => KeyPairGenerator::openSsl(
+    expect(fn() => KeyPairGenerator::openSsl(
         bits: OpenSslRsaBits::BITS_2048,
         curveName: OpenSslCurveName::PRIME256V1,
     ))->toThrow(ConfigurationException::class);
+});
+
+it('uses RSA 3072 as the default OpenSSL key size', function () {
+    $pair = KeyPairGenerator::openSsl()->generate();
+    $resource = openssl_pkey_get_private($pair['private']);
+    expect($resource)->not->toBeFalse();
+
+    $details = openssl_pkey_get_details($resource);
+    expect($details)->toBeArray();
+    expect($details['bits'] ?? null)->toBe(3072);
+});
+
+it('exports and imports pkcs12 bundles', function () {
+    $keyPair = KeyPairGenerator::openSsl()->generate();
+    $dn = [
+        'countryName' => 'US',
+        'stateOrProvinceName' => 'CA',
+        'localityName' => 'San Francisco',
+        'organizationName' => 'Epicrypt',
+        'organizationalUnitName' => 'Security',
+        'commonName' => 'pkcs12.epicrypt.local',
+        'emailAddress' => 'security@epicrypt.local',
+    ];
+    $certificate = CertificateBuilder::openSsl()->selfSign($dn, $keyPair['private'], 365);
+
+    $manager = new Pkcs12();
+    $bundle = $manager->export($certificate, $keyPair['private'], 'changeit');
+    $imported = $manager->import($bundle, 'changeit');
+
+    expect($imported['certificate'])->toContain('BEGIN CERTIFICATE');
+    expect($imported['private_key'])->toContain('BEGIN PRIVATE KEY');
 });

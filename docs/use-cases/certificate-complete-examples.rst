@@ -21,11 +21,11 @@ Use this when you need OpenSSL or sodium key material for encryption, signatures
    use Infocyph\Epicrypt\Certificate\KeyPairGenerator;
 
    // RSA keys for general PEM-based interoperability.
-   $rsaKeys = KeyPairGenerator::openSsl(OpenSslRsaBits::BITS_2048, OpenSslKeyType::RSA)->generate();
+   $rsaKeys = KeyPairGenerator::openSsl(OpenSslRsaBits::BITS_3072, OpenSslKeyType::RSA)->generate();
 
    // EC keys for OpenSSL elliptic-curve workflows.
    $ecKeys = KeyPairGenerator::openSsl(
-       bits: OpenSslRsaBits::BITS_2048,
+       bits: OpenSslRsaBits::BITS_3072,
        type: OpenSslKeyType::EC,
        curveName: OpenSslCurveName::PRIME256V1,
    )->generate();
@@ -57,7 +57,7 @@ Use this when a service needs a CSR for a CA or a self-signed certificate for lo
    use Infocyph\Epicrypt\Certificate\Enum\OpenSslRsaBits;
    use Infocyph\Epicrypt\Certificate\KeyPairGenerator;
 
-   $rsaKeys = KeyPairGenerator::openSsl(OpenSslRsaBits::BITS_2048, OpenSslKeyType::RSA)->generate();
+   $rsaKeys = KeyPairGenerator::openSsl(OpenSslRsaBits::BITS_3072, OpenSslKeyType::RSA)->generate();
    $dn = [
        'countryName' => 'US',
        'organizationName' => 'Epicrypt',
@@ -113,7 +113,7 @@ Use these only when you need direct access to backend-specific behavior.
    use Infocyph\Epicrypt\Certificate\Sodium\SessionKeyExchange;
    use Infocyph\Epicrypt\Certificate\Sodium\SigningKeyPairGenerator;
 
-   $rsaKeys = KeyPairGenerator::openSsl(OpenSslRsaBits::BITS_2048, OpenSslKeyType::RSA)->generate();
+   $rsaKeys = KeyPairGenerator::openSsl(OpenSslRsaBits::BITS_3072, OpenSslKeyType::RSA)->generate();
    $sodiumDirect = new SessionKeyExchange();
    $opensslDirect = new DiffieHellman();
    $directSignKeys = (new SigningKeyPairGenerator())->generate(asBase64Url: true);
@@ -122,3 +122,59 @@ Use these only when you need direct access to backend-specific behavior.
    $rsaCipher = new RsaCipher();
    $encrypted = $rsaCipher->encrypt('interop-message', $rsaKeys['public']);
    $decrypted = $rsaCipher->decrypt($encrypted, $rsaKeys['private']);
+
+Certificate Utility and PKCS#12 Flows
+-------------------------------------
+
+Use this when you need cert metadata checks, chain verification, and bundle conversion for deployment tooling.
+
+.. code-block:: php
+
+   <?php
+
+   declare(strict_types=1);
+
+   use Infocyph\Epicrypt\Certificate\CertificateChainVerifier;
+   use Infocyph\Epicrypt\Certificate\CertificateExpiry;
+   use Infocyph\Epicrypt\Certificate\CertificateFingerprint;
+   use Infocyph\Epicrypt\Certificate\CertificateKeyMatcher;
+   use Infocyph\Epicrypt\Certificate\PemNormalizer;
+   use Infocyph\Epicrypt\Certificate\Pkcs12;
+
+   $fingerprint = (new CertificateFingerprint())->fingerprint($cert, 'sha256');
+   $expiresAt = (new CertificateExpiry())->expiresAt($cert);
+   $keyMatches = (new CertificateKeyMatcher())->privateKeyMatches($cert, $rsaKeys['private']);
+   $chainOk = (new CertificateChainVerifier())->verify($cert, [$caCertificatePem]);
+   $normalizedPem = (new PemNormalizer())->normalize($cert);
+
+   $pkcs12 = new Pkcs12();
+   $bundle = $pkcs12->export($cert, $rsaKeys['private'], 'changeit');
+   $imported = $pkcs12->import($bundle, 'changeit');
+
+CA Signing with CertificateOptions
+----------------------------------
+
+Use this when issuing non-self-signed certificates from your own CA certificate/private key pair.
+
+.. code-block:: php
+
+   <?php
+
+   declare(strict_types=1);
+
+   use Infocyph\Epicrypt\Certificate\CertificateAuthority;
+   use Infocyph\Epicrypt\Certificate\CertificateOptions;
+
+   $options = new CertificateOptions(
+       days: 365,
+       sanDns: ['api.example.com'],
+       keyUsage: ['digitalSignature', 'keyEncipherment'],
+       extendedKeyUsage: ['serverAuth'],
+   );
+
+   $issued = CertificateAuthority::openSsl()->signCsr(
+       $csr,
+       $caCertificatePem,
+       $caPrivateKeyPem,
+       $options,
+   );

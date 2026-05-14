@@ -64,9 +64,6 @@ it('wraps and unwraps secrets with master secret', function () {
     expect($segments[1])->toBe('secretbox');
     expect($segments[2])->toBe('_');
     expect($manager->unwrap($wrapped, $master))->toBe('sensitive-secret');
-
-    $unversionedWrapped = implode('.', array_slice($segments, 1));
-    expect($manager->unwrap($unversionedWrapped, $master))->toBe('sensitive-secret');
 });
 
 it('supports wrapped secret rollover and rewrap flows', function () {

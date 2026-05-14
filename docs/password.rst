@@ -82,6 +82,32 @@ Password Strength
    $score = (new PasswordStrength())->score('MyStrongPassword!2026');
    // 0..100
 
+Password Policy Validation
+--------------------------
+
+.. code-block:: php
+
+   use Infocyph\Epicrypt\Password\Generator\PasswordPolicy;
+   use Infocyph\Epicrypt\Password\PasswordPolicyValidator;
+
+   $policy = new PasswordPolicy(minLength: 12, requireUpper: true, requireLower: true, requireDigit: true, requireSymbol: true);
+   $result = (new PasswordPolicyValidator())->validate('MyPassword123!', $policy);
+
+   // $result->valid
+   // $result->score
+   // $result->violations
+
+Compromised Password Checker Contract
+-------------------------------------
+
+.. code-block:: php
+
+   use Infocyph\Epicrypt\Password\Contract\CompromisedPasswordCheckerInterface;
+   use Infocyph\Epicrypt\Password\NullCompromisedPasswordChecker;
+
+   $checker = new NullCompromisedPasswordChecker();
+   $isCompromised = $checker->isCompromised('candidate-password');
+
 Master Secret + Wrapped Secret
 ------------------------------
 

@@ -14,16 +14,8 @@ it('encodes compact payloads with reserved empty key id marker', function () {
     expect($parsed?->ciphertext)->toBe('ciphertext');
 });
 
-it('parses unversioned compact payloads', function () {
-    $parsed = VersionedPayload::parseCompact('secretbox.current.nonce.ciphertext', 'epc1');
-
-    expect($parsed)->not->toBeNull();
-    expect($parsed?->versioned)->toBeFalse();
-    expect($parsed?->algorithm)->toBe('secretbox');
-    expect($parsed?->keyId)->toBe('current');
-});
-
 it('rejects malformed compact payload parts', function () {
+    expect(VersionedPayload::parseCompact('secretbox.current.nonce.ciphertext', 'epc1'))->toBeNull();
     expect(VersionedPayload::parseCompact('epc1.secretbox._.nonce', 'epc1'))->toBeNull();
     expect(VersionedPayload::parseCompact('epc1.._.nonce.ciphertext', 'epc1'))->toBeNull();
     expect(VersionedPayload::parseCompact('epc1.secretbox._..ciphertext', 'epc1'))->toBeNull();

@@ -13,6 +13,7 @@ use Infocyph\Epicrypt\Internal\EcdsaSignatureConverter;
 use Infocyph\Epicrypt\Security\Policy\SecurityProfile;
 use Infocyph\Epicrypt\Token\Jwt\Enum\AsymmetricJwtAlgorithm;
 use Infocyph\Epicrypt\Token\Jwt\Support\AbstractJwt;
+use Infocyph\Epicrypt\Token\Jwt\Support\JwtToken;
 use Infocyph\Epicrypt\Token\Jwt\Validation\ExpectedJwtClaims;
 use Infocyph\Epicrypt\Token\Jwt\Validation\JwtValidationOptions;
 use Infocyph\Epicrypt\Token\Jwt\Validation\RegisteredClaims;
@@ -33,6 +34,46 @@ final readonly class AsymmetricJwt extends AbstractJwt
     public static function forProfile(SecurityProfile $profile = SecurityProfile::MODERN, RegisteredClaims|ExpectedJwtClaims|null $expectedClaims = null, ?string $passphrase = null, ?JwtValidationOptions $validationOptions = null, ?ClockInterface $clock = null): self
     {
         return new self($passphrase, $profile->defaultAsymmetricJwtAlgorithm(), $expectedClaims, $validationOptions, $clock, new EcdsaSignatureConverter());
+    }
+
+    /**
+     * @param array<string, mixed> $jwks
+     */
+    public function decodeFromJwks(string $token, array $jwks): object
+    {
+        $result = $this->decodeFromJwksResult($token, $jwks);
+        if (!$result->verified) {
+            throw new InvalidTokenException('JWT verification failed.');
+        }
+
+        return (object) $result->claims;
+    }
+
+    /**
+     * @param array<string, mixed> $jwks
+     */
+    public function decodeFromJwksResult(string $token, array $jwks): JwtVerificationResult
+    {
+        $kid = $this->tokenKid($token);
+        $publicKey = new Jwks()->resolvePublicKeyByKid($jwks, $kid);
+
+        return $this->decodeResult($token, $publicKey);
+    }
+
+    /**
+     * @param array<string, mixed> $jwks
+     */
+    public function verifyFromJwks(string $token, array $jwks): bool
+    {
+        return $this->verifyFromJwksResult($token, $jwks)->verified;
+    }
+
+    /**
+     * @param array<string, mixed> $jwks
+     */
+    public function verifyFromJwksResult(string $token, array $jwks): JwtVerificationResult
+    {
+        return $this->decodeFromJwksResult($token, $jwks);
     }
 
     protected function algorithmHeaderValue(mixed $algorithm): string
@@ -96,5 +137,21 @@ final readonly class AsymmetricJwt extends AbstractJwt
             $resource,
             $algorithm->opensslAlgorithm(),
         ) === 1;
+    }
+
+    private function tokenKid(string $token): string
+    {
+        try {
+            [, , , $header] = JwtToken::parse($token);
+        } catch (\Throwable $e) {
+            throw new InvalidTokenException('Invalid JWT format.', 0, $e);
+        }
+
+        $kid = $header['kid'] ?? null;
+        if (!is_string($kid) || $kid === '') {
+            throw new InvalidTokenException('JWT kid header is required for JWKS verification.');
+        }
+
+        return $kid;
     }
 }

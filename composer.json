@@ -1,6 +1,6 @@
 {
     "name": "infocyph/epicrypt",
-    "description": "A Collection of useful PHP security functions.",
+    "description": "Modern cryptography, token, password and data-protection toolkit for PHP.",
     "license": "MIT",
     "type": "library",
     "authors": [

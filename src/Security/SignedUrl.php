@@ -138,10 +138,7 @@ final readonly class SignedUrl implements SignedUrlGeneratorInterface, SignedUrl
      */
     private function buildDisplayBasePath(array $parts): string
     {
-        $path = $this->pathFromParts($parts);
-        $host = isset($parts['host']) && is_string($parts['host']) ? strtolower($parts['host']) : '';
-        $scheme = isset($parts['scheme']) && is_string($parts['scheme']) ? strtolower($parts['scheme']) : '';
-        $port = isset($parts['port']) && is_int($parts['port']) ? ':' . $parts['port'] : '';
+        [$path, $host, $scheme, $port] = $this->pathComponents($parts);
 
         if ($host === '' && $scheme === '') {
             return $path;
@@ -167,10 +164,7 @@ final readonly class SignedUrl implements SignedUrlGeneratorInterface, SignedUrl
      */
     private function buildSignatureBasePath(array $parts, SignedUrlOptions $options): string
     {
-        $path = $this->pathFromParts($parts);
-        $host = isset($parts['host']) && is_string($parts['host']) ? strtolower($parts['host']) : '';
-        $scheme = isset($parts['scheme']) && is_string($parts['scheme']) ? strtolower($parts['scheme']) : '';
-        $port = isset($parts['port']) && is_int($parts['port']) ? ':' . $parts['port'] : '';
+        [$path, $host, $scheme, $port] = $this->pathComponents($parts);
 
         if (!$options->bindHost && !$options->bindScheme) {
             return $path;
@@ -291,6 +285,20 @@ final readonly class SignedUrl implements SignedUrlGeneratorInterface, SignedUrl
         }
 
         return $parsed;
+    }
+
+    /**
+     * @param array{scheme?: mixed, host?: mixed, port?: mixed, path?: mixed} $parts
+     * @return array{string, string, string, string}
+     */
+    private function pathComponents(array $parts): array
+    {
+        $path = $this->pathFromParts($parts);
+        $host = isset($parts['host']) && is_string($parts['host']) ? strtolower($parts['host']) : '';
+        $scheme = isset($parts['scheme']) && is_string($parts['scheme']) ? strtolower($parts['scheme']) : '';
+        $port = isset($parts['port']) && is_int($parts['port']) ? ':' . $parts['port'] : '';
+
+        return [$path, $host, $scheme, $port];
     }
 
     /**

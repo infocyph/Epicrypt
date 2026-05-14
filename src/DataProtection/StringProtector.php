@@ -152,16 +152,11 @@ final readonly class StringProtector implements DecryptorInterface, EncryptorInt
     public function inspect(string $ciphertext): StringProtectInspectResult
     {
         $payload = VersionedPayload::parseCompact($ciphertext, EncryptedPayloadVersion::V1->value);
-        if ($payload !== null) {
-            return new StringProtectInspectResult(EncryptedPayloadVersion::V1->value, $payload->algorithm, $payload->keyId);
-        }
-
-        $legacy = VersionedPayload::parse($ciphertext, EncryptedPayloadVersion::V1->value, 2);
-        if ($legacy === null) {
+        if ($payload === null) {
             throw new DecryptionException('Invalid protected string format.');
         }
 
-        return new StringProtectInspectResult(EncryptedPayloadVersion::V1->value, SecretBoxCipher::ALGORITHM_ID, null);
+        return new StringProtectInspectResult(EncryptedPayloadVersion::V1->value, $payload->algorithm, $payload->keyId);
     }
 
     public function needsReencrypt(string $ciphertext, ?string $activeKeyId = null): bool

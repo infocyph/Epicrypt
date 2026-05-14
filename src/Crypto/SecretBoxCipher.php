@@ -106,19 +106,14 @@ final class SecretBoxCipher implements CipherInterface
     private function splitPayload(string $ciphertext): array
     {
         $compactPayload = VersionedPayload::parseCompact($ciphertext, EncryptedPayloadVersion::V1->value);
-        if ($compactPayload !== null) {
-            if ($compactPayload->algorithm !== self::ALGORITHM_ID) {
-                throw new DecryptionException('Unsupported payload algorithm.');
-            }
-
-            return [$compactPayload->nonce, $compactPayload->ciphertext];
-        }
-
-        $legacyPayload = VersionedPayload::parse($ciphertext, EncryptedPayloadVersion::V1->value, 2);
-        if ($legacyPayload === null) {
+        if ($compactPayload === null) {
             throw new DecryptionException('Invalid ciphertext format.');
         }
 
-        return [$legacyPayload->parts[0], $legacyPayload->parts[1]];
+        if ($compactPayload->algorithm !== self::ALGORITHM_ID) {
+            throw new DecryptionException('Unsupported payload algorithm.');
+        }
+
+        return [$compactPayload->nonce, $compactPayload->ciphertext];
     }
 }
