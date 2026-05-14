@@ -134,7 +134,7 @@ Use this when a payload is too large for simple in-memory encryption.
 
    $streamKey = random_bytes(SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_KEYBYTES);
    $stream = new SecretStream($streamKey, StreamAlgorithm::XCHACHA20POLY1305, 'aad');
-   $lastChunkSize = $stream->encrypt('/tmp/plain.bin', '/tmp/plain.bin.epc', 8192);
+   $bytesWritten = $stream->encrypt('/tmp/plain.bin', '/tmp/plain.bin.epc', 8192);
    $stream->decrypt('/tmp/plain.bin.epc', '/tmp/plain.dec.bin', 8192);
 
 Encode Binary Safely

@@ -20,8 +20,8 @@ final readonly class CertificateBuilder implements CertificateBuilderInterface
     /**
      * @param array<string, string> $distinguishedName
      */
-    public function selfSign(array $distinguishedName, string $privateKey, int $days = 365, ?string $passphrase = null): string
+    public function selfSign(array $distinguishedName, string $privateKey, int $days = 365, ?string $passphrase = null, ?CertificateOptions $options = null): string
     {
-        return $this->backend->selfSign($distinguishedName, $privateKey, $days, $passphrase);
+        return $this->backend->selfSign($distinguishedName, $privateKey, $days, $passphrase, $options);
     }
 }

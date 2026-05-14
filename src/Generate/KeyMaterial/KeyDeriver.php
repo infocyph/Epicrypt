@@ -7,17 +7,19 @@ namespace Infocyph\Epicrypt\Generate\KeyMaterial;
 use Infocyph\Epicrypt\Exception\ConfigurationException;
 use Infocyph\Epicrypt\Generate\Support\LengthGuard;
 use Infocyph\Epicrypt\Internal\Base64Url;
-use Infocyph\Epicrypt\Security\Policy\SecurityProfile;
+use Infocyph\Epicrypt\Internal\BinaryKey;
+use Infocyph\Epicrypt\Internal\HashAlgorithm;
 
 final class KeyDeriver
 {
     /**
-     * @param array<string, mixed> $context
+     * @param array<string, mixed>|KeyDerivationContext $context
      */
-    public function deriveFromPassword(string $password, string $salt, int $length = 32, array $context = []): string
+    public function deriveFromPassword(string $password, string $salt, int $length = 32, array|KeyDerivationContext $context = []): string
     {
-        $profile = $this->profileFromContext($context);
-        $saltBinary = $this->decodeMaybeBinary($salt, $this->boolFromContext($context, 'salt_is_binary'), 'Salt');
+        $derivationContext = $this->normalizeContext($context);
+        $profile = $derivationContext->profile;
+        $saltBinary = $this->decodeMaybeBinary($salt, $derivationContext->saltIsBinary, 'Salt');
         if (strlen($saltBinary) !== SODIUM_CRYPTO_PWHASH_SALTBYTES) {
             throw new ConfigurationException(sprintf('Salt must be %d bytes.', SODIUM_CRYPTO_PWHASH_SALTBYTES));
         }
@@ -26,62 +28,54 @@ final class KeyDeriver
             LengthGuard::atLeastOne($length, 'Derived key length'),
             $password,
             $saltBinary,
-            $this->intFromContext($context, 'opslimit', $profile->passwordDerivationOpsLimit()),
-            $this->intFromContext($context, 'memlimit', $profile->passwordDerivationMemLimit()),
+            $derivationContext->opslimit ?? $profile->passwordDerivationOpsLimit(),
+            $derivationContext->memlimit ?? $profile->passwordDerivationMemLimit(),
             SODIUM_CRYPTO_PWHASH_ALG_ARGON2ID13,
         );
 
-        return $this->formatOutput($derived, $this->boolFromContext($context, 'as_base64url', true));
+        return $this->formatOutput($derived, $derivationContext->asBase64Url);
     }
 
     /**
-     * @param array<string, mixed> $context
+     * @param array<string, mixed>|KeyDerivationContext $context
      */
-    public function hkdf(string $inputKeyMaterial, int $length = 32, array $context = []): string
+    public function hkdf(string $inputKeyMaterial, int $length = 32, array|KeyDerivationContext $context = []): string
     {
+        $derivationContext = $this->normalizeContext($context);
         $ikmBinary = $this->decodeMaybeBinary(
             $inputKeyMaterial,
-            $this->boolFromContext($context, 'input_key_material_is_binary'),
+            $derivationContext->inputKeyMaterialIsBinary,
             'Input key material',
         );
         $saltBinary = '';
-        if (array_key_exists('salt', $context)) {
-            $salt = $context['salt'];
-            if (!is_string($salt)) {
-                throw new ConfigurationException('HKDF salt must be a string.');
-            }
-
-            $saltBinary = $this->decodeMaybeBinary($salt, $this->boolFromContext($context, 'salt_is_binary'), 'Salt');
-        }
-
-        $info = $context['info'] ?? '';
-        if (!is_string($info)) {
-            throw new ConfigurationException('HKDF info must be a string.');
+        if ($derivationContext->salt !== null) {
+            $saltBinary = $this->decodeMaybeBinary($derivationContext->salt, $derivationContext->saltIsBinary, 'Salt');
         }
 
         $derived = hash_hkdf(
-            $this->normalizeHashAlgorithm($context['algorithm'] ?? 'sha256'),
+            $this->normalizeHashAlgorithm($derivationContext->algorithm),
             $ikmBinary,
             LengthGuard::atLeastOne($length, 'Derived key length'),
-            $info,
+            $derivationContext->info,
             $saltBinary,
         );
 
-        return $this->formatOutput($derived, $this->boolFromContext($context, 'as_base64url', true));
+        return $this->formatOutput($derived, $derivationContext->asBase64Url);
     }
 
     /**
-     * @param array<string, mixed> $context
+     * @param array<string, mixed>|KeyDerivationContext $context
      */
-    public function subkey(string $rootKey, int $subkeyId, int $length = 32, array $context = []): string
+    public function subkey(string $rootKey, int $subkeyId, int $length = 32, array|KeyDerivationContext $context = []): string
     {
-        $rootKeyBinary = $this->decodeMaybeBinary($rootKey, $this->boolFromContext($context, 'root_key_is_binary'), 'Root key');
+        $derivationContext = $this->normalizeContext($context);
+        $rootKeyBinary = $this->decodeMaybeBinary($rootKey, $derivationContext->rootKeyIsBinary, 'Root key');
         if (strlen($rootKeyBinary) !== SODIUM_CRYPTO_KDF_KEYBYTES) {
             throw new ConfigurationException(sprintf('Root key must be %d bytes.', SODIUM_CRYPTO_KDF_KEYBYTES));
         }
 
-        $sodiumContext = $context['context'] ?? 'EPCKDF01';
-        if (!is_string($sodiumContext) || strlen($sodiumContext) !== SODIUM_CRYPTO_KDF_CONTEXTBYTES) {
+        $sodiumContext = $derivationContext->sodiumContext;
+        if (strlen($sodiumContext) !== SODIUM_CRYPTO_KDF_CONTEXTBYTES) {
             throw new ConfigurationException(sprintf('Subkey context must be exactly %d bytes.', SODIUM_CRYPTO_KDF_CONTEXTBYTES));
         }
 
@@ -100,25 +94,17 @@ final class KeyDeriver
 
         $derived = sodium_crypto_kdf_derive_from_key($requestedLength, $subkeyId, $sodiumContext, $rootKeyBinary);
 
-        return $this->formatOutput($derived, $this->boolFromContext($context, 'as_base64url', true));
-    }
-
-    /**
-     * @param array<string, mixed> $context
-     */
-    private function boolFromContext(array $context, string $key, bool $default = false): bool
-    {
-        $value = $context[$key] ?? $default;
-        if (!is_bool($value)) {
-            throw new ConfigurationException(sprintf('Context value "%s" must be boolean.', $key));
-        }
-
-        return $value;
+        return $this->formatOutput($derived, $derivationContext->asBase64Url);
     }
 
     private function decodeMaybeBinary(string $value, bool $isBinary, string $label): string
     {
-        $decoded = $isBinary ? $value : Base64Url::decode($value);
+        try {
+            $decoded = BinaryKey::decodeBase64UrlOrBinary($value, $isBinary, $label);
+        } catch (\Throwable $e) {
+            throw new ConfigurationException(sprintf('%s must be a non-empty string.', $label), 0, $e);
+        }
+
         if ($decoded === '') {
             throw new ConfigurationException(sprintf('%s must not be empty.', $label));
         }
@@ -132,16 +118,11 @@ final class KeyDeriver
     }
 
     /**
-     * @param array<string, mixed> $context
+     * @param array<string, mixed>|KeyDerivationContext $context
      */
-    private function intFromContext(array $context, string $key, int $default): int
+    private function normalizeContext(array|KeyDerivationContext $context): KeyDerivationContext
     {
-        $value = $context[$key] ?? $default;
-        if (!is_int($value) || $value < 1) {
-            throw new ConfigurationException(sprintf('Context value "%s" must be a positive integer.', $key));
-        }
-
-        return $value;
+        return $context instanceof KeyDerivationContext ? $context : KeyDerivationContext::fromArray($context);
     }
 
     /**
@@ -153,19 +134,12 @@ final class KeyDeriver
             throw new ConfigurationException('HKDF algorithm must be a non-empty string.');
         }
 
-        return $algorithm;
-    }
-
-    /**
-     * @param array<string, mixed> $context
-     */
-    private function profileFromContext(array $context): SecurityProfile
-    {
-        $profile = $context['profile'] ?? SecurityProfile::MODERN;
-        if (!$profile instanceof SecurityProfile) {
-            throw new ConfigurationException('Derivation profile must be a SecurityProfile enum.');
+        try {
+            HashAlgorithm::assertSupported($algorithm);
+        } catch (\InvalidArgumentException $e) {
+            throw new ConfigurationException($e->getMessage(), 0, $e);
         }
 
-        return $profile;
+        return $algorithm;
     }
 }

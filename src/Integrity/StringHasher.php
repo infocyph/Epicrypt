@@ -6,6 +6,7 @@ namespace Infocyph\Epicrypt\Integrity;
 
 use Infocyph\Epicrypt\Exception\Integrity\HashingException;
 use Infocyph\Epicrypt\Integrity\Contract\HasherInterface;
+use Infocyph\Epicrypt\Internal\HashAlgorithm;
 use Infocyph\Epicrypt\Internal\SecureCompare;
 
 final readonly class StringHasher implements HasherInterface
@@ -45,8 +46,10 @@ final readonly class StringHasher implements HasherInterface
             return $binary ? $hash : sodium_bin2hex($hash);
         }
 
-        if (!in_array($this->algorithm, hash_algos(), true)) {
-            throw new HashingException('Unsupported hash algorithm: ' . $this->algorithm);
+        try {
+            HashAlgorithm::assertSupported($this->algorithm);
+        } catch (\InvalidArgumentException $e) {
+            throw new HashingException($e->getMessage(), 0, $e);
         }
 
         if ($key === '') {

@@ -4,13 +4,16 @@ declare(strict_types=1);
 
 namespace Infocyph\Epicrypt\Crypto;
 
+use Infocyph\Epicrypt\Crypto\Context\AeadContext;
 use Infocyph\Epicrypt\Crypto\Contract\CipherInterface;
 use Infocyph\Epicrypt\Crypto\Enum\AeadAlgorithm;
 use Infocyph\Epicrypt\Exception\Crypto\CryptoException;
 use Infocyph\Epicrypt\Exception\Crypto\DecryptionException;
+use Infocyph\Epicrypt\Exception\Crypto\EncryptionException;
 use Infocyph\Epicrypt\Exception\Crypto\InvalidKeyException;
 use Infocyph\Epicrypt\Exception\Crypto\InvalidNonceException;
 use Infocyph\Epicrypt\Internal\Base64Url;
+use Infocyph\Epicrypt\Internal\BinaryKey;
 use Infocyph\Epicrypt\Internal\Enum\EncryptedPayloadVersion;
 use Infocyph\Epicrypt\Internal\VersionedPayload;
 use Infocyph\Epicrypt\Security\Policy\SecurityProfile;
@@ -30,22 +33,17 @@ final readonly class AeadCipher implements CipherInterface
     public function decrypt(string $ciphertext, mixed $key, array $context = []): string
     {
         $this->assertAlgorithmAvailability();
+        $aeadContext = AeadContext::fromArray($context);
 
-        $decodedKey = $this->decodeKey($key, $this->algorithm->keyLength(), $this->boolFromContext($context, 'key_is_binary'), 'Decryption');
+        $decodedKey = $this->decodeKey($key, $this->algorithm->keyLength(), $aeadContext->keyIsBinary, 'Decryption');
+        [$encodedNonce, $encodedCiphertext] = $this->splitPayload($ciphertext);
 
-        $parsedPayload = VersionedPayload::parse($ciphertext, EncryptedPayloadVersion::V1->value, 2);
-        if ($parsedPayload === null) {
-            throw new DecryptionException('Invalid ciphertext format.');
-        }
-        [, $parts] = $parsedPayload;
-
-        $nonce = Base64Url::decode($parts[0]);
+        $nonce = Base64Url::decode($encodedNonce);
         if (strlen($nonce) !== $this->algorithm->nonceLength()) {
             throw new InvalidNonceException(sprintf('Nonce must be %d bytes.', $this->algorithm->nonceLength()));
         }
 
-        $aad = $this->aadFromContext($context);
-        $plaintext = $this->decryptRaw(Base64Url::decode($parts[1]), $aad, $nonce, $decodedKey);
+        $plaintext = $this->decryptRaw(Base64Url::decode($encodedCiphertext), $aeadContext->aad, $nonce, $decodedKey);
 
         if (!is_string($plaintext)) {
             throw new DecryptionException('AEAD decryption failed.');
@@ -60,16 +58,14 @@ final readonly class AeadCipher implements CipherInterface
     public function encrypt(string $plaintext, mixed $key, array $context = []): string
     {
         $this->assertAlgorithmAvailability();
+        $aeadContext = AeadContext::fromArray($context);
 
-        $decodedKey = $this->decodeKey($key, $this->algorithm->keyLength(), $this->boolFromContext($context, 'key_is_binary'), 'Encryption');
+        $decodedKey = $this->decodeKey($key, $this->algorithm->keyLength(), $aeadContext->keyIsBinary, 'Encryption');
+        $keyId = $aeadContext->keyId;
 
-        if (array_key_exists('nonce', $context)) {
-            $nonce = $context['nonce'];
-            if (!is_string($nonce) || $nonce === '') {
-                throw new InvalidNonceException('Nonce must be a non-empty string.');
-            }
-
-            if (!$this->boolFromContext($context, 'nonce_is_binary')) {
+        if ($aeadContext->nonce !== null) {
+            $nonce = $aeadContext->nonce;
+            if (!$aeadContext->nonceIsBinary) {
                 $nonce = Base64Url::decode($nonce);
             }
         } else {
@@ -80,27 +76,15 @@ final readonly class AeadCipher implements CipherInterface
             throw new InvalidNonceException(sprintf('Nonce must be %d bytes.', $this->algorithm->nonceLength()));
         }
 
-        $aad = $this->aadFromContext($context);
-        $ciphertext = $this->encryptRaw($plaintext, $aad, $nonce, $decodedKey);
+        $ciphertext = $this->encryptRaw($plaintext, $aeadContext->aad, $nonce, $decodedKey);
 
-        return VersionedPayload::encode(
+        return VersionedPayload::encodeCompact(
             EncryptedPayloadVersion::V1->value,
+            $this->algorithm->value,
+            $keyId,
             Base64Url::encode($nonce),
             Base64Url::encode($ciphertext),
         );
-    }
-
-    /**
-     * @param array<string, mixed> $context
-     */
-    private function aadFromContext(array $context): string
-    {
-        $aad = $context['aad'] ?? '';
-        if (!is_string($aad)) {
-            throw new CryptoException('AAD must be a string.');
-        }
-
-        return $aad;
     }
 
     private function assertAlgorithmAvailability(): void
@@ -110,50 +94,62 @@ final readonly class AeadCipher implements CipherInterface
         }
     }
 
-    /**
-     * @param array<string, mixed> $context
-     */
-    private function boolFromContext(array $context, string $key): bool
-    {
-        $value = $context[$key] ?? false;
-        if (!is_bool($value)) {
-            throw new CryptoException(sprintf('Context value "%s" must be boolean.', $key));
-        }
-
-        return $value;
-    }
-
     private function decodeKey(mixed $key, int $expectedLength, bool $isBinary, string $operation): string
     {
-        if (!is_string($key) || $key === '') {
-            throw new InvalidKeyException(sprintf('%s key must be a non-empty string.', $operation));
+        try {
+            return BinaryKey::fixedLength($key, $isBinary, $expectedLength, sprintf('%s key', $operation));
+        } catch (InvalidKeyException $e) {
+            throw new InvalidKeyException(sprintf('%s key must be %d bytes.', $operation, $expectedLength), 0, $e);
         }
-
-        $decoded = $isBinary ? $key : Base64Url::decode($key);
-        if (strlen($decoded) !== $expectedLength) {
-            throw new InvalidKeyException(sprintf('%s key must be %d bytes.', $operation, $expectedLength));
-        }
-
-        return $decoded;
     }
 
     private function decryptRaw(string $ciphertext, string $aad, string $nonce, string $key): string|false
     {
-        return match ($this->algorithm) {
-            AeadAlgorithm::AES_256_GCM => sodium_crypto_aead_aes256gcm_decrypt($ciphertext, $aad, $nonce, $key),
-            AeadAlgorithm::CHACHA20_POLY1305 => sodium_crypto_aead_chacha20poly1305_decrypt($ciphertext, $aad, $nonce, $key),
-            AeadAlgorithm::CHACHA20_POLY1305_IETF => sodium_crypto_aead_chacha20poly1305_ietf_decrypt($ciphertext, $aad, $nonce, $key),
-            AeadAlgorithm::XCHACHA20_POLY1305_IETF => sodium_crypto_aead_xchacha20poly1305_ietf_decrypt($ciphertext, $aad, $nonce, $key),
-        };
+        return $this->runRawOperation($ciphertext, $aad, $nonce, $key, true);
     }
 
     private function encryptRaw(string $plaintext, string $aad, string $nonce, string $key): string
     {
+        $result = $this->runRawOperation($plaintext, $aad, $nonce, $key, false);
+        if (!is_string($result)) {
+            throw new EncryptionException('Encryption failed.');
+        }
+
+        return $result;
+    }
+
+    private function runRawOperation(string $input, string $aad, string $nonce, string $key, bool $decrypt): string|false
+    {
         return match ($this->algorithm) {
-            AeadAlgorithm::AES_256_GCM => sodium_crypto_aead_aes256gcm_encrypt($plaintext, $aad, $nonce, $key),
-            AeadAlgorithm::CHACHA20_POLY1305 => sodium_crypto_aead_chacha20poly1305_encrypt($plaintext, $aad, $nonce, $key),
-            AeadAlgorithm::CHACHA20_POLY1305_IETF => sodium_crypto_aead_chacha20poly1305_ietf_encrypt($plaintext, $aad, $nonce, $key),
-            AeadAlgorithm::XCHACHA20_POLY1305_IETF => sodium_crypto_aead_xchacha20poly1305_ietf_encrypt($plaintext, $aad, $nonce, $key),
+            AeadAlgorithm::AES_256_GCM => $decrypt
+                ? sodium_crypto_aead_aes256gcm_decrypt($input, $aad, $nonce, $key)
+                : sodium_crypto_aead_aes256gcm_encrypt($input, $aad, $nonce, $key),
+            AeadAlgorithm::CHACHA20_POLY1305 => $decrypt
+                ? sodium_crypto_aead_chacha20poly1305_decrypt($input, $aad, $nonce, $key)
+                : sodium_crypto_aead_chacha20poly1305_encrypt($input, $aad, $nonce, $key),
+            AeadAlgorithm::CHACHA20_POLY1305_IETF => $decrypt
+                ? sodium_crypto_aead_chacha20poly1305_ietf_decrypt($input, $aad, $nonce, $key)
+                : sodium_crypto_aead_chacha20poly1305_ietf_encrypt($input, $aad, $nonce, $key),
+            AeadAlgorithm::XCHACHA20_POLY1305_IETF => $decrypt
+                ? sodium_crypto_aead_xchacha20poly1305_ietf_decrypt($input, $aad, $nonce, $key)
+                : sodium_crypto_aead_xchacha20poly1305_ietf_encrypt($input, $aad, $nonce, $key),
         };
+    }
+
+    /**
+     * @return array{string, string}
+     */
+    private function splitPayload(string $ciphertext): array
+    {
+        $compactPayload = VersionedPayload::parseCompact($ciphertext, EncryptedPayloadVersion::V1->value);
+        if ($compactPayload === null) {
+            throw new DecryptionException('Invalid ciphertext format.');
+        }
+
+        if ($compactPayload->algorithm !== $this->algorithm->value) {
+            throw new DecryptionException(sprintf('Unsupported payload algorithm "%s".', $compactPayload->algorithm));
+        }
+
+        return [$compactPayload->nonce, $compactPayload->ciphertext];
     }
 }

@@ -28,11 +28,19 @@ final class GenerateBench
 
     public function __construct()
     {
-        $this->random = new RandomBytesGenerator();
-        $this->nonce = new NonceGenerator();
-        $this->salt = new SaltGenerator();
-        $this->keyMaterial = new KeyMaterialGenerator();
-        $this->tokenMaterial = new TokenMaterialGenerator();
+        $services = [
+            'random' => new RandomBytesGenerator(),
+            'nonce' => new NonceGenerator(),
+            'salt' => new SaltGenerator(),
+            'keyMaterial' => new KeyMaterialGenerator(),
+            'tokenMaterial' => new TokenMaterialGenerator(),
+        ];
+
+        $this->random = $services['random'];
+        $this->nonce = $services['nonce'];
+        $this->salt = $services['salt'];
+        $this->keyMaterial = $services['keyMaterial'];
+        $this->tokenMaterial = $services['tokenMaterial'];
     }
 
     public function benchKeyMaterialGenerate(): void

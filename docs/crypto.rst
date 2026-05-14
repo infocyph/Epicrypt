@@ -120,7 +120,7 @@ SecretStream (File Streaming)
 ``SecretStream`` is optimized for chunked file encryption/decryption and powers ``DataProtection\\FileProtector``.
 
 - default algorithm: ``xchacha20poly1305``
-- alternate: ``xchacha20``
+- advanced compatibility mode: ``unauthenticated-xchacha20`` (requires explicit opt-in)
 
 Binary Codec
 ------------

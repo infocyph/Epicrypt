@@ -6,6 +6,7 @@ namespace Infocyph\Epicrypt\Password\Secret;
 
 use Infocyph\Epicrypt\Exception\Password\SecretProtectionException;
 use Infocyph\Epicrypt\Internal\Base64Url;
+use Infocyph\Epicrypt\Internal\BinaryKey;
 use Infocyph\Epicrypt\Internal\Enum\WrappedSecretVersion;
 use Infocyph\Epicrypt\Internal\KeyCandidates;
 use Infocyph\Epicrypt\Internal\VersionedPayload;
@@ -13,6 +14,8 @@ use Infocyph\Epicrypt\Security\KeyRing;
 
 final class WrappedSecretManager
 {
+    private const string ALGORITHM_ID = 'secretbox';
+
     public function rewrap(
         string $wrappedSecret,
         string $oldMasterSecret,
@@ -42,16 +45,12 @@ final class WrappedSecretManager
 
     public function unwrap(string $wrappedSecret, string $masterSecret, bool $masterSecretIsBinary = false): string
     {
-        [$encodedNonce, $encodedCipher] = $this->splitWrappedSecret($wrappedSecret);
-        $key = $masterSecretIsBinary ? $masterSecret : Base64Url::decode($masterSecret);
-
-        if (strlen($key) !== SODIUM_CRYPTO_SECRETBOX_KEYBYTES) {
-            throw new SecretProtectionException('Master secret must be 32 bytes long.');
-        }
+        $payload = $this->parseWrappedPayload($wrappedSecret);
+        $key = $this->decodeMasterSecret($masterSecret, $masterSecretIsBinary);
 
         $plaintext = sodium_crypto_secretbox_open(
-            Base64Url::decode($encodedCipher),
-            Base64Url::decode($encodedNonce),
+            Base64Url::decode($payload['ciphertext']),
+            Base64Url::decode($payload['nonce']),
             $key,
         );
 
@@ -75,6 +74,30 @@ final class WrappedSecretManager
      */
     public function unwrapWithAnyKeyResult(string $wrappedSecret, iterable|KeyRing $masterSecrets, bool $masterSecretsAreBinary = false): UnwrappedSecretResult
     {
+        if ($masterSecrets instanceof KeyRing) {
+            $payload = $this->parseWrappedPayload($wrappedSecret);
+            if ($payload['key_id'] !== null) {
+                $key = $masterSecrets->keys()[$payload['key_id']] ?? null;
+                if ($key === null) {
+                    throw new SecretProtectionException(sprintf('Master secret key id "%s" was not found in the key ring.', $payload['key_id']));
+                }
+
+                try {
+                    return new UnwrappedSecretResult(
+                        $this->unwrap($wrappedSecret, $key, $masterSecretsAreBinary),
+                        $payload['key_id'],
+                        false,
+                    );
+                } catch (SecretProtectionException $e) {
+                    throw new SecretProtectionException(
+                        sprintf('Secret unwrap failed for key id "%s".', $payload['key_id']),
+                        0,
+                        $e,
+                    );
+                }
+            }
+        }
+
         $lastException = null;
         foreach ($this->orderedKeyEntries($masterSecrets) as $entry) {
             try {
@@ -91,21 +114,50 @@ final class WrappedSecretManager
         throw new SecretProtectionException('Secret unwrap failed for every supplied master secret.', 0, $lastException);
     }
 
-    public function wrap(string $secret, string $masterSecret, bool $masterSecretIsBinary = false): string
+    public function unwrapWithKeyRing(string $wrappedSecret, KeyRing $masterSecrets, bool $masterSecretsAreBinary = false): string
     {
-        $key = $masterSecretIsBinary ? $masterSecret : Base64Url::decode($masterSecret);
-        if (strlen($key) !== SODIUM_CRYPTO_SECRETBOX_KEYBYTES) {
-            throw new SecretProtectionException('Master secret must be 32 bytes long.');
-        }
+        return $this->unwrapWithKeyRingResult($wrappedSecret, $masterSecrets, $masterSecretsAreBinary)->plaintext;
+    }
+
+    public function unwrapWithKeyRingResult(string $wrappedSecret, KeyRing $masterSecrets, bool $masterSecretsAreBinary = false): UnwrappedSecretResult
+    {
+        return $this->unwrapWithAnyKeyResult($wrappedSecret, $masterSecrets, $masterSecretsAreBinary);
+    }
+
+    public function wrap(string $secret, string $masterSecret, bool $masterSecretIsBinary = false, ?string $keyId = null): string
+    {
+        $key = $this->decodeMasterSecret($masterSecret, $masterSecretIsBinary);
 
         $nonce = random_bytes(SODIUM_CRYPTO_SECRETBOX_NONCEBYTES);
         $ciphertext = sodium_crypto_secretbox($secret, $nonce, $key);
 
-        return VersionedPayload::encode(
+        return VersionedPayload::encodeCompact(
             WrappedSecretVersion::V1->value,
+            self::ALGORITHM_ID,
+            $keyId,
             Base64Url::encode($nonce),
             Base64Url::encode($ciphertext),
         );
+    }
+
+    public function wrapWithKeyRing(string $secret, KeyRing $keyRing, bool $masterSecretIsBinary = false): string
+    {
+        $activeKey = $keyRing->activeKey();
+        $activeKeyId = $keyRing->activeKeyId();
+        if ($activeKey === null || $activeKeyId === null) {
+            throw new SecretProtectionException('Key ring active key id is required for wrapped secret encryption.');
+        }
+
+        return $this->wrap($secret, $activeKey, $masterSecretIsBinary, $activeKeyId);
+    }
+
+    private function decodeMasterSecret(string $masterSecret, bool $isBinary): string
+    {
+        try {
+            return BinaryKey::fixedLength($masterSecret, $isBinary, SODIUM_CRYPTO_SECRETBOX_KEYBYTES, 'Master secret');
+        } catch (\Throwable $e) {
+            throw new SecretProtectionException('Master secret must be 32 bytes long.', 0, $e);
+        }
     }
 
     /**
@@ -126,16 +178,23 @@ final class WrappedSecretManager
     }
 
     /**
-     * @return array{string, string}
+     * @return array{nonce: string, ciphertext: string, key_id: ?string}
      */
-    private function splitWrappedSecret(string $wrappedSecret): array
+    private function parseWrappedPayload(string $wrappedSecret): array
     {
-        $parsedPayload = VersionedPayload::parse($wrappedSecret, WrappedSecretVersion::V1->value, 2);
-        if ($parsedPayload === null) {
+        $compactPayload = VersionedPayload::parseCompact($wrappedSecret, WrappedSecretVersion::V1->value);
+        if ($compactPayload === null) {
             throw new SecretProtectionException('Invalid wrapped secret format.');
         }
-        [, $parts] = $parsedPayload;
 
-        return [$parts[0], $parts[1]];
+        if ($compactPayload->algorithm !== self::ALGORITHM_ID) {
+            throw new SecretProtectionException('Unsupported wrapped secret algorithm.');
+        }
+
+        return [
+            'nonce' => $compactPayload->nonce,
+            'ciphertext' => $compactPayload->ciphertext,
+            'key_id' => $compactPayload->keyId,
+        ];
     }
 }

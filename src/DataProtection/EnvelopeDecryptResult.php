@@ -10,5 +10,9 @@ final readonly class EnvelopeDecryptResult
         public string $plaintext,
         public ?string $matchedKeyId = null,
         public bool $usedFallbackKey = false,
+        public ?string $algorithm = null,
+        public ?string $dekAlgorithm = null,
+        public ?int $createdAt = null,
+        public ?string $purpose = null,
     ) {}
 }

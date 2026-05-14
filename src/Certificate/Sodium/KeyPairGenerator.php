@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Infocyph\Epicrypt\Certificate\Sodium;
 
 use Infocyph\Epicrypt\Certificate\Contract\KeyPairGeneratorInterface;
-use Infocyph\Epicrypt\Internal\Base64Url;
+use Infocyph\Epicrypt\Certificate\Sodium\Support\SodiumKeyPairFactory;
 
 final class KeyPairGenerator implements KeyPairGeneratorInterface
 {
@@ -16,14 +16,11 @@ final class KeyPairGenerator implements KeyPairGeneratorInterface
     {
         unset($passphrase);
 
-        $keypair = sodium_crypto_box_keypair();
-        $private = sodium_crypto_box_secretkey($keypair);
-        $public = sodium_crypto_box_publickey($keypair);
-
-        if (!$asBase64Url) {
-            return ['private' => $private, 'public' => $public];
-        }
-
-        return ['private' => Base64Url::encode($private), 'public' => Base64Url::encode($public)];
+        return SodiumKeyPairFactory::generate(
+            createKeyPair: sodium_crypto_box_keypair(...),
+            extractPrivate: sodium_crypto_box_secretkey(...),
+            extractPublic: sodium_crypto_box_publickey(...),
+            asBase64Url: $asBase64Url,
+        );
     }
 }

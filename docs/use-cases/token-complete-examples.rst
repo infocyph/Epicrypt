@@ -15,7 +15,6 @@ Use this when the issuer and verifier share one secret or a keyed secret set.
    declare(strict_types=1);
 
    use Infocyph\Epicrypt\Security\Policy\SecurityProfile;
-   use Infocyph\Epicrypt\Token\Jwt\Enum\SymmetricJwtAlgorithm;
    use Infocyph\Epicrypt\Token\Jwt\SymmetricJwt;
    use Infocyph\Epicrypt\Token\Jwt\Validation\RegisteredClaims;
 
@@ -203,3 +202,50 @@ Use validator classes when validation needs to be explicit or composable.
    (new AudienceValidator())->validate('audience-service', $claims['aud']);
    (new SubjectValidator())->validate('subject-service', $claims['sub']);
    (new ExpirationValidator())->validate($claims['nbf'], $claims['exp']);
+
+Use Result APIs for Branching
+-----------------------------
+
+Use this when you need structured verification metadata instead of just a boolean.
+
+.. code-block:: php
+
+   <?php
+
+   declare(strict_types=1);
+
+   $jwtResult = $symVerifier->decodeResult($symToken, $symKeys);
+   $jwtVerified = $jwtResult->verified;
+   $jwtExpired = $jwtResult->expired;
+   $jwtKid = $jwtResult->matchedKeyId;
+
+   $signedPayloadResult = $signedPayload->verifyWithAnyKeyDetailedResult($payloadToken, $ring);
+   $payloadVerified = $signedPayloadResult->verified;
+   $payloadUsedFallback = $signedPayloadResult->usedFallbackKey;
+
+JWKS Export and JWKS-Based Verification
+---------------------------------------
+
+Use this when asymmetric verifiers receive key material as JWKS.
+
+.. code-block:: php
+
+   <?php
+
+   declare(strict_types=1);
+
+   use Infocyph\Epicrypt\Security\KeyRing;
+   use Infocyph\Epicrypt\Token\Jwt\AsymmetricJwt;
+   use Infocyph\Epicrypt\Token\Jwt\Jwks;
+
+   $jwksHelper = new Jwks();
+   $publicRing = new KeyRing($publicSet, 'k2');
+   $jwks = $jwksHelper->exportFromKeyRing($publicRing);
+
+   // Resolve kid -> JWK entry or PEM:
+   $jwk = $jwksHelper->resolveByKid($jwks, 'k2');
+   $publicPem = $jwksHelper->importPublicKeyFromJwk($jwk);
+
+   // Verify using token kid against JWKS:
+   $jwksResult = $asymVerifier->verifyFromJwksResult($asymToken, $jwks);
+   $jwksValid = $jwksResult->verified;

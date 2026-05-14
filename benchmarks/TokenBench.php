@@ -116,18 +116,21 @@ final class TokenBench
     #[Bench\BeforeMethods('setUp')]
     public function benchSymmetricJwtDecode(): void
     {
-        $this->symmetricJwtDecoder->decode($this->jwtToken, $this->jwtSecret);
+        $token = $this->jwtToken;
+        $this->symmetricJwtDecoder->decode($token, $this->jwtSecret);
     }
 
     #[Bench\BeforeMethods('setUp')]
     public function benchSymmetricJwtEncode(): void
     {
-        $this->symmetricJwtEncoder->encode($this->jwtClaims, $this->jwtSecret);
+        $claims = $this->jwtClaims;
+        $this->symmetricJwtEncoder->encode($claims, $this->jwtSecret);
     }
 
     #[Bench\BeforeMethods('setUp')]
     public function benchSymmetricJwtVerify(): void
     {
-        $this->symmetricJwtDecoder->verify($this->jwtToken, $this->jwtSecret);
+        $token = $this->jwtToken;
+        $this->symmetricJwtDecoder->verify($token, $this->jwtSecret);
     }
 }

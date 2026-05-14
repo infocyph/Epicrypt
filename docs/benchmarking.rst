@@ -8,12 +8,12 @@ Benchmark Commands
 
 .. code-block:: bash
 
-   composer bench:run
-   composer bench:quick
-   composer bench:chart
+   composer ic:bench:run
+   composer ic:bench:quick
+   composer ic:bench:chart
 
-- ``bench:quick`` is tuned for fast local checks.
-- ``bench:run`` is a fuller aggregate report.
+- ``ic:bench:quick`` is tuned for fast local checks.
+- ``ic:bench:run`` is a fuller aggregate report.
 
 Benchmark Suite Location
 ------------------------
@@ -44,9 +44,9 @@ Typical Workflow
 .. code-block:: bash
 
    # before changes
-   composer bench:quick
+   composer ic:bench:quick
 
    # make changes
 
    # after changes
-   composer bench:quick
+   composer ic:bench:quick

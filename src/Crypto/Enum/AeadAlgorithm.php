@@ -24,12 +24,7 @@ enum AeadAlgorithm: string
      */
     public function keyLength(): int
     {
-        return match ($this) {
-            self::AES_256_GCM => SODIUM_CRYPTO_AEAD_AES256GCM_KEYBYTES,
-            self::CHACHA20_POLY1305 => SODIUM_CRYPTO_AEAD_CHACHA20POLY1305_KEYBYTES,
-            self::CHACHA20_POLY1305_IETF => SODIUM_CRYPTO_AEAD_CHACHA20POLY1305_IETF_KEYBYTES,
-            self::XCHACHA20_POLY1305_IETF => SODIUM_CRYPTO_AEAD_XCHACHA20POLY1305_IETF_KEYBYTES,
-        };
+        return $this->lengths()['key'];
     }
 
     /**
@@ -37,12 +32,7 @@ enum AeadAlgorithm: string
      */
     public function nonceLength(): int
     {
-        return match ($this) {
-            self::AES_256_GCM => SODIUM_CRYPTO_AEAD_AES256GCM_NPUBBYTES,
-            self::CHACHA20_POLY1305 => SODIUM_CRYPTO_AEAD_CHACHA20POLY1305_NPUBBYTES,
-            self::CHACHA20_POLY1305_IETF => SODIUM_CRYPTO_AEAD_CHACHA20POLY1305_IETF_NPUBBYTES,
-            self::XCHACHA20_POLY1305_IETF => SODIUM_CRYPTO_AEAD_XCHACHA20POLY1305_IETF_NPUBBYTES,
-        };
+        return $this->lengths()['nonce'];
     }
 
     public function requiresHardwareSupport(): bool
@@ -57,6 +47,19 @@ enum AeadAlgorithm: string
             self::CHACHA20_POLY1305 => 'chacha20poly1305',
             self::CHACHA20_POLY1305_IETF => 'chacha20poly1305_ietf',
             self::XCHACHA20_POLY1305_IETF => 'xchacha20poly1305_ietf',
+        };
+    }
+
+    /**
+     * @return array{key: int<1, max>, nonce: int<1, max>}
+     */
+    private function lengths(): array
+    {
+        return match ($this) {
+            self::AES_256_GCM => ['key' => SODIUM_CRYPTO_AEAD_AES256GCM_KEYBYTES, 'nonce' => SODIUM_CRYPTO_AEAD_AES256GCM_NPUBBYTES],
+            self::CHACHA20_POLY1305 => ['key' => SODIUM_CRYPTO_AEAD_CHACHA20POLY1305_KEYBYTES, 'nonce' => SODIUM_CRYPTO_AEAD_CHACHA20POLY1305_NPUBBYTES],
+            self::CHACHA20_POLY1305_IETF => ['key' => SODIUM_CRYPTO_AEAD_CHACHA20POLY1305_IETF_KEYBYTES, 'nonce' => SODIUM_CRYPTO_AEAD_CHACHA20POLY1305_IETF_NPUBBYTES],
+            self::XCHACHA20_POLY1305_IETF => ['key' => SODIUM_CRYPTO_AEAD_XCHACHA20POLY1305_IETF_KEYBYTES, 'nonce' => SODIUM_CRYPTO_AEAD_XCHACHA20POLY1305_IETF_NPUBBYTES],
         };
     }
 }

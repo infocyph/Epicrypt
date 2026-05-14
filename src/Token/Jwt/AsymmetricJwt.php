@@ -4,306 +4,154 @@ declare(strict_types=1);
 
 namespace Infocyph\Epicrypt\Token\Jwt;
 
-use ArrayAccess;
-use Infocyph\Epicrypt\Exception\Token\InvalidClaimException;
 use Infocyph\Epicrypt\Exception\Token\InvalidTokenException;
-use Infocyph\Epicrypt\Exception\Token\KeyResolutionException;
 use Infocyph\Epicrypt\Exception\Token\TokenException;
 use Infocyph\Epicrypt\Exception\Token\UnsupportedAlgorithmException;
-use Infocyph\Epicrypt\Internal\Base64Url;
+use Infocyph\Epicrypt\Internal\Clock\ClockInterface;
+use Infocyph\Epicrypt\Internal\Clock\SystemClock;
 use Infocyph\Epicrypt\Internal\EcdsaSignatureConverter;
-use Infocyph\Epicrypt\Internal\KeyCandidates;
-use Infocyph\Epicrypt\Security\KeyRing;
-use Infocyph\Epicrypt\Security\KeyVerificationResult;
 use Infocyph\Epicrypt\Security\Policy\SecurityProfile;
-use Infocyph\Epicrypt\Token\Contract\JwtTokenInterface;
 use Infocyph\Epicrypt\Token\Jwt\Enum\AsymmetricJwtAlgorithm;
+use Infocyph\Epicrypt\Token\Jwt\Support\AbstractJwt;
 use Infocyph\Epicrypt\Token\Jwt\Support\JwtToken;
-use Infocyph\Epicrypt\Token\Jwt\Validation\JwtValidator;
+use Infocyph\Epicrypt\Token\Jwt\Validation\ExpectedJwtClaims;
+use Infocyph\Epicrypt\Token\Jwt\Validation\JwtValidationOptions;
 use Infocyph\Epicrypt\Token\Jwt\Validation\RegisteredClaims;
-use Throwable;
 
-final readonly class AsymmetricJwt implements JwtTokenInterface
+final readonly class AsymmetricJwt extends AbstractJwt
 {
-    /**
-     * @var array<string>
-     */
-    private const array RESERVED_CLAIMS = ['iss', 'aud', 'sub', 'jti', 'iat', 'nbf', 'exp', 'kid'];
-
     public function __construct(
         private ?string $passphrase = null,
         private AsymmetricJwtAlgorithm $algorithm = AsymmetricJwtAlgorithm::RS512,
-        private ?RegisteredClaims $expectedClaims = null,
-    ) {}
-
-    public static function forProfile(SecurityProfile $profile = SecurityProfile::MODERN, ?RegisteredClaims $expectedClaims = null, ?string $passphrase = null): self
-    {
-        return new self($passphrase, $profile->defaultAsymmetricJwtAlgorithm(), $expectedClaims);
+        RegisteredClaims|ExpectedJwtClaims|null $expectedClaims = null,
+        ?JwtValidationOptions $validationOptions = null,
+        ?ClockInterface $clock = null,
+        private EcdsaSignatureConverter $ecdsaSignatureConverter = new EcdsaSignatureConverter(),
+    ) {
+        parent::__construct('asymmetric', $expectedClaims, $validationOptions ?? new JwtValidationOptions(), $clock ?? new SystemClock());
     }
 
-    public function decode(string $token, mixed $key): object
+    public static function forProfile(SecurityProfile $profile = SecurityProfile::MODERN, RegisteredClaims|ExpectedJwtClaims|null $expectedClaims = null, ?string $passphrase = null, ?JwtValidationOptions $validationOptions = null, ?ClockInterface $clock = null): self
     {
-        $key = $this->requireSupportedKeyType($key);
-
-        if ($this->expectedClaims === null) {
-            throw new TokenException('Expected claims are required for JWT decoding.');
-        }
-
-        try {
-            [$encodedHeader, $encodedPayload, $signature, $header, $payload] = JwtToken::parse($token);
-
-            if (!isset($header['alg']) || !is_string($header['alg'])) {
-                throw new UnsupportedAlgorithmException('Invalid or unsupported algorithm.');
-            }
-
-            $algorithm = AsymmetricJwtAlgorithm::fromHeader($header['alg']);
-            if ($algorithm !== $this->algorithm) {
-                throw new UnsupportedAlgorithmException('Invalid or unsupported algorithm.');
-            }
-
-            $publicKey = KeyResolver::resolve($key, $header['kid'] ?? null);
-            $resource = openssl_pkey_get_public($publicKey);
-
-            if ($resource === false) {
-                throw new InvalidTokenException('Unable to load public key.');
-            }
-
-            $ecdsaLength = $algorithm->ecdsaSignatureLength();
-            if ($ecdsaLength !== null) {
-                $signature = new EcdsaSignatureConverter()->toAsn1($signature, $ecdsaLength);
-            }
-
-            $result = openssl_verify(
-                $encodedHeader . '.' . $encodedPayload,
-                $signature,
-                $resource,
-                $algorithm->opensslAlgorithm(),
-            );
-
-            if ($result !== 1) {
-                throw new InvalidTokenException('Signature verification failed.');
-            }
-
-            new JwtValidator($this->expectedClaims)->validate($payload);
-
-            return (object) $payload;
-        } catch (UnsupportedAlgorithmException|KeyResolutionException|InvalidTokenException $e) {
-            throw $e;
-        } catch (Throwable $e) {
-            throw new InvalidTokenException($e->getMessage(), 0, $e);
-        }
+        return new self($passphrase, $profile->defaultAsymmetricJwtAlgorithm(), $expectedClaims, $validationOptions, $clock, new EcdsaSignatureConverter());
     }
 
     /**
-     * @param iterable<string, string>|KeyRing $keys
+     * @param array<string, mixed> $jwks
      */
-    public function decodeWithAnyKey(string $token, iterable|KeyRing $keys): object
+    public function decodeFromJwks(string $token, array $jwks): object
     {
-        $lastException = null;
-        foreach ($this->orderedKeys($keys) as $key) {
-            try {
-                return $this->decode($token, $key);
-            } catch (Throwable $e) {
-                $lastException = $e;
-            }
+        $result = $this->decodeFromJwksResult($token, $jwks);
+        if (!$result->verified) {
+            throw new InvalidTokenException('JWT verification failed.');
         }
 
-        throw new InvalidTokenException('JWT verification failed for every supplied asymmetric key.', 0, $lastException);
+        return (object) $result->claims;
     }
 
     /**
-     * @param array<string, mixed> $claims
-     * @param array<string, mixed> $headers
+     * @param array<string, mixed> $jwks
      */
-    public function encode(array $claims, mixed $key, array $headers = []): string
+    public function decodeFromJwksResult(string $token, array $jwks): JwtVerificationResult
     {
-        $key = $this->requireSupportedKeyType($key);
+        $kid = $this->tokenKid($token);
+        $publicKey = new Jwks()->resolvePublicKeyByKid($jwks, $kid);
 
-        $registeredClaims = RegisteredClaims::fromArray($claims);
-        [$notBefore, $expiresAt] = $this->extractTemporalClaims($claims);
-        $keyId = $claims['kid'] ?? null;
-
-        try {
-            $algorithm = $this->algorithm;
-
-            $privateKey = KeyResolver::resolve($key, $keyId);
-            $payload = [
-                'iss' => $registeredClaims->issuer,
-                'aud' => $registeredClaims->audience,
-                'sub' => $registeredClaims->subject,
-                'iat' => time(),
-                'nbf' => $notBefore,
-                'exp' => $expiresAt,
-            ];
-
-            if ($registeredClaims->jwtId !== null) {
-                $payload['jti'] = $registeredClaims->jwtId;
-            }
-
-            $header = [
-                'alg' => $algorithm->value,
-                'typ' => 'JWT',
-            ];
-
-            if ($keyId !== null) {
-                if (!is_string($keyId) || $keyId === '') {
-                    throw new InvalidClaimException('Claim "kid" must be a non-empty string when provided.');
-                }
-
-                $header['kid'] = $keyId;
-            }
-
-            [$encodedHeader, $encodedPayload] = JwtToken::encodeSegments(
-                $header + $headers,
-                $payload + $this->removeReservedClaims($claims),
-            );
-
-            $signature = $this->sign($encodedHeader . '.' . $encodedPayload, $privateKey, $algorithm);
-
-            return $encodedHeader . '.' . $encodedPayload . '.' . Base64Url::encode($signature);
-        } catch (UnsupportedAlgorithmException|InvalidClaimException|KeyResolutionException $e) {
-            throw $e;
-        } catch (Throwable $e) {
-            throw new TokenException("JWT encoding failed: {$e->getMessage()}", 0, $e);
-        }
-    }
-
-    public function verify(string $token, mixed $key): bool
-    {
-        try {
-            $this->decode($token, $key);
-
-            return true;
-        } catch (Throwable) {
-            return false;
-        }
+        return $this->decodeResult($token, $publicKey);
     }
 
     /**
-     * @param iterable<string, string>|KeyRing $keys
+     * @param array<string, mixed> $jwks
      */
-    public function verifyWithAnyKey(string $token, iterable|KeyRing $keys): bool
+    public function verifyFromJwks(string $token, array $jwks): bool
     {
-        return $this->verifyWithAnyKeyResult($token, $keys)->verified;
+        return $this->verifyFromJwksResult($token, $jwks)->verified;
     }
 
     /**
-     * @param iterable<string, string>|KeyRing $keys
+     * @param array<string, mixed> $jwks
      */
-    public function verifyWithAnyKeyResult(string $token, iterable|KeyRing $keys): KeyVerificationResult
+    public function verifyFromJwksResult(string $token, array $jwks): JwtVerificationResult
     {
-        foreach ($this->orderedKeyEntries($keys) as $entry) {
-            if ($this->verify($token, $entry['key'])) {
-                return new KeyVerificationResult(true, $entry['id'], !$entry['active']);
-            }
-        }
-
-        return new KeyVerificationResult(false);
+        return $this->decodeFromJwksResult($token, $jwks);
     }
 
-    /**
-     * @param array<string, mixed> $claims
-     * @return array{int, int}
-     */
-    private function extractTemporalClaims(array $claims): array
+    protected function algorithmHeaderValue(mixed $algorithm): string
     {
-        if (!isset($claims['nbf'], $claims['exp'])) {
-            throw new InvalidClaimException('Required claims "nbf" and "exp" are missing.');
+        if (!$algorithm instanceof AsymmetricJwtAlgorithm) {
+            throw new UnsupportedAlgorithmException('Invalid or unsupported algorithm.');
         }
 
-        if (!is_numeric($claims['nbf']) || !is_numeric($claims['exp'])) {
-            throw new InvalidClaimException('Claims "nbf" and "exp" must be numeric timestamps.');
-        }
-
-        if ((int) $claims['exp'] <= (int) $claims['nbf']) {
-            throw new InvalidClaimException('Claim "exp" must be greater than "nbf".');
-        }
-
-        return [(int) $claims['nbf'], (int) $claims['exp']];
+        return $algorithm->value;
     }
 
-    /**
-     * @param iterable<string, string>|KeyRing $keys
-     * @return list<array{id: ?string, key: string, active: bool}>
-     */
-    private function orderedKeyEntries(iterable|KeyRing $keys): array
+    protected function configuredAlgorithm(): AsymmetricJwtAlgorithm
     {
-        try {
-            return KeyCandidates::orderedEntries(
-                $keys,
-                'All asymmetric JWT key candidates must be non-empty strings.',
-                'At least one asymmetric JWT key candidate is required.',
-            );
-        } catch (\InvalidArgumentException $e) {
-            throw new TokenException($e->getMessage(), 0, $e);
-        }
+        return $this->algorithm;
     }
 
-    /**
-     * @param iterable<string, string>|KeyRing $keys
-     * @return list<string>
-     */
-    private function orderedKeys(iterable|KeyRing $keys): array
+    protected function parseAlgorithmFromHeader(string $algorithm): AsymmetricJwtAlgorithm
     {
-        return array_column($this->orderedKeyEntries($keys), 'key');
+        return AsymmetricJwtAlgorithm::fromHeader($algorithm);
     }
 
-    /**
-     * @param array<string, mixed> $claims
-     * @return array<string, mixed>
-     */
-    private function removeReservedClaims(array $claims): array
+    protected function sign(string $input, string $resolvedKey): string
     {
-        return array_diff_key($claims, array_flip(self::RESERVED_CLAIMS));
-    }
-
-    /**
-     * @return string|array<string, mixed>|ArrayAccess<string, mixed>
-     */
-    private function requireSupportedKeyType(mixed $key): string|array|ArrayAccess
-    {
-        if (is_string($key)) {
-            return $key;
-        }
-
-        if ($key instanceof ArrayAccess) {
-            return $key;
-        }
-
-        if (is_array($key)) {
-            $normalized = [];
-
-            foreach ($key as $keyId => $value) {
-                if (!is_string($keyId)) {
-                    throw new TokenException('Key-set array must use string key identifiers.');
-                }
-
-                $normalized[$keyId] = $value;
-            }
-
-            return $normalized;
-        }
-
-        throw new TokenException('Key must be a string or key-set.');
-    }
-
-    private function sign(string $input, string $privateKey, AsymmetricJwtAlgorithm $algorithm): string
-    {
-        $resource = openssl_pkey_get_private($privateKey, $this->passphrase ?? '');
+        $resource = openssl_pkey_get_private($resolvedKey, $this->passphrase ?? '');
         if ($resource === false) {
             throw new TokenException('Unable to load private key for JWT signing.');
         }
 
-        $result = openssl_sign($input, $signature, $resource, $algorithm->opensslAlgorithm());
+        $result = openssl_sign($input, $signature, $resource, $this->algorithm->opensslAlgorithm());
         if (!$result || !is_string($signature)) {
             throw new TokenException('JWT signing failed.');
         }
 
-        $ecdsaLength = $algorithm->ecdsaSignatureLength();
+        $ecdsaLength = $this->algorithm->ecdsaSignatureLength();
         if ($ecdsaLength !== null) {
-            $signature = new EcdsaSignatureConverter()->fromAsn1($signature, $ecdsaLength);
+            $signature = $this->ecdsaSignatureConverter->fromAsn1($signature, $ecdsaLength);
         }
 
         return $signature;
+    }
+
+    protected function verifySignature(string $input, string $signature, string $resolvedKey, mixed $algorithm): bool
+    {
+        if (!$algorithm instanceof AsymmetricJwtAlgorithm) {
+            throw new UnsupportedAlgorithmException('Invalid or unsupported algorithm.');
+        }
+
+        $resource = openssl_pkey_get_public($resolvedKey);
+        if ($resource === false) {
+            throw new InvalidTokenException('Unable to load public key.');
+        }
+
+        $ecdsaLength = $algorithm->ecdsaSignatureLength();
+        if ($ecdsaLength !== null) {
+            $signature = $this->ecdsaSignatureConverter->toAsn1($signature, $ecdsaLength);
+        }
+
+        return openssl_verify(
+            $input,
+            $signature,
+            $resource,
+            $algorithm->opensslAlgorithm(),
+        ) === 1;
+    }
+
+    private function tokenKid(string $token): string
+    {
+        try {
+            [, , , $header] = JwtToken::parse($token);
+        } catch (\Throwable $e) {
+            throw new InvalidTokenException('Invalid JWT format.', 0, $e);
+        }
+
+        $kid = $header['kid'] ?? null;
+        if (!is_string($kid) || $kid === '') {
+            throw new InvalidTokenException('JWT kid header is required for JWKS verification.');
+        }
+
+        return $kid;
     }
 }

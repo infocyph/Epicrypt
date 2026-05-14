@@ -1,9 +1,9 @@
 <?php
 
-use Infocyph\Epicrypt\Token\Jwt\SymmetricJwt;
-use Infocyph\Epicrypt\Token\Jwt\Enum\SymmetricJwtAlgorithm;
-use Infocyph\Epicrypt\Token\Jwt\Validation\RegisteredClaims;
 use Infocyph\Epicrypt\Security\KeyRing;
+use Infocyph\Epicrypt\Token\Jwt\Enum\SymmetricJwtAlgorithm;
+use Infocyph\Epicrypt\Token\Jwt\SymmetricJwt;
+use Infocyph\Epicrypt\Token\Jwt\Validation\RegisteredClaims;
 
 it('encodes and decodes with Token/Jwt symmetric services', function () {
     $now = time();

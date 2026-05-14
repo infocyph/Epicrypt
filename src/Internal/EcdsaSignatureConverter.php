@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Infocyph\Epicrypt\Internal;
 
-use Exception;
+use Infocyph\Epicrypt\Exception\Token\SignatureEncodingException;
 
 final class EcdsaSignatureConverter
 {
@@ -25,7 +25,7 @@ final class EcdsaSignatureConverter
     /**
      * Convert ASN1 string to JOSE signature.
      *
-     * @throws Exception
+     * @throws SignatureEncodingException
      */
     public function fromAsn1(string $signature, int $length): string
     {
@@ -33,7 +33,7 @@ final class EcdsaSignatureConverter
         $position = 0;
 
         if ($this->asn1Seq !== $this->readAsn1Content($message, $position, $this->byteSize)) {
-            throw new Exception('Invalid data. Should start with a sequence.');
+            throw new SignatureEncodingException('Invalid data. Should start with a sequence.');
         }
 
         if ($this->asn1Length2Byte === $this->readAsn1Content($message, $position, $this->byteSize)) {
@@ -45,7 +45,7 @@ final class EcdsaSignatureConverter
 
         $bin = hex2bin(str_pad($pointR, $length, '0', STR_PAD_LEFT) . str_pad($pointS, $length, '0', STR_PAD_LEFT));
         if (!is_string($bin)) {
-            throw new Exception('Unable to parse the data.');
+            throw new SignatureEncodingException('Unable to parse the data.');
         }
 
         return $bin;
@@ -54,18 +54,18 @@ final class EcdsaSignatureConverter
     /**
      * Convert JOSE signature to ASN1 string.
      *
-     * @throws Exception
+     * @throws SignatureEncodingException
      */
     public function toAsn1(string $signature, int $length): string
     {
         $signature = bin2hex($signature);
 
         if ($this->octetLength($signature) !== $length) {
-            throw new Exception('Invalid signature length.');
+            throw new SignatureEncodingException('Invalid signature length.');
         }
 
-        $pointR = $this->preparePositiveInteger(mb_substr($signature, 0, $length, '8bit'));
-        $pointS = $this->preparePositiveInteger(mb_substr($signature, $length, null, '8bit'));
+        $pointR = $this->preparePositiveInteger(substr($signature, 0, $length));
+        $pointS = $this->preparePositiveInteger(substr($signature, $length));
 
         $lengthR = $this->octetLength($pointR);
         $lengthS = $this->octetLength($pointS);
@@ -80,7 +80,7 @@ final class EcdsaSignatureConverter
         );
 
         if (!is_string($bin)) {
-            throw new Exception('Data parsing failed.');
+            throw new SignatureEncodingException('Data parsing failed.');
         }
 
         return $bin;
@@ -88,18 +88,18 @@ final class EcdsaSignatureConverter
 
     private function octetLength(string $data): int
     {
-        return (int) (mb_strlen($data, '8bit') / $this->byteSize);
+        return (int) (strlen($data) / $this->byteSize);
     }
 
     private function preparePositiveInteger(string $data): string
     {
-        if (mb_substr($data, 0, $this->byteSize, '8bit') > $this->asn1BigIntLimit) {
+        if (substr($data, 0, $this->byteSize) > $this->asn1BigIntLimit) {
             return $this->asn1NegativeInteger . $data;
         }
 
-        while (mb_strpos($data, $this->asn1NegativeInteger, 0, '8bit') === 0
-            && mb_substr($data, 2, $this->byteSize, '8bit') <= $this->asn1BigIntLimit) {
-            $data = mb_substr($data, 2, null, '8bit');
+        while (str_starts_with($data, $this->asn1NegativeInteger)
+            && substr($data, 2, $this->byteSize) <= $this->asn1BigIntLimit) {
+            $data = substr($data, 2);
         }
 
         return $data;
@@ -107,19 +107,19 @@ final class EcdsaSignatureConverter
 
     private function readAsn1Content(string $message, int &$position, int $length): string
     {
-        $content = mb_substr($message, $position, $length, '8bit');
+        $content = substr($message, $position, $length);
         $position += $length;
 
         return $content;
     }
 
     /**
-     * @throws Exception
+     * @throws SignatureEncodingException
      */
     private function readAsn1Integer(string $message, int &$position): string
     {
         if ($this->asn1Int !== $this->readAsn1Content($message, $position, $this->byteSize)) {
-            throw new Exception('Invalid data. Should contain an integer.');
+            throw new SignatureEncodingException('Invalid data. Should contain an integer.');
         }
 
         $length = (int) hexdec($this->readAsn1Content($message, $position, $this->byteSize));
@@ -129,9 +129,9 @@ final class EcdsaSignatureConverter
 
     private function retrievePositiveInteger(string $data): string
     {
-        while (mb_strpos($data, $this->asn1NegativeInteger, 0, '8bit') === 0
-            && mb_substr($data, 2, $this->byteSize, '8bit') > $this->asn1BigIntLimit) {
-            $data = mb_substr($data, 2, null, '8bit');
+        while (str_starts_with($data, $this->asn1NegativeInteger)
+            && substr($data, 2, $this->byteSize) > $this->asn1BigIntLimit) {
+            $data = substr($data, 2);
         }
 
         return $data;

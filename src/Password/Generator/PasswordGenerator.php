@@ -77,7 +77,7 @@ final readonly class PasswordGenerator implements PasswordGeneratorInterface
             $passwordChars[] = $this->pick($pool);
         }
 
-        shuffle($passwordChars);
+        $passwordChars = $this->secureShuffle($passwordChars);
 
         return implode('', $passwordChars);
     }
@@ -115,5 +115,19 @@ final readonly class PasswordGenerator implements PasswordGeneratorInterface
         }
 
         return $characters[random_int(0, strlen($characters) - 1)];
+    }
+
+    /**
+     * @param array<int, string> $items
+     * @return array<int, string>
+     */
+    private function secureShuffle(array $items): array
+    {
+        for ($index = count($items) - 1; $index > 0; $index--) {
+            $swapIndex = random_int(0, $index);
+            [$items[$index], $items[$swapIndex]] = [$items[$swapIndex], $items[$index]];
+        }
+
+        return $items;
     }
 }

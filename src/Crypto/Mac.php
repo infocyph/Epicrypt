@@ -7,6 +7,7 @@ namespace Infocyph\Epicrypt\Crypto;
 use Infocyph\Epicrypt\Crypto\Contract\MacInterface;
 use Infocyph\Epicrypt\Exception\Crypto\InvalidKeyException;
 use Infocyph\Epicrypt\Internal\Base64Url;
+use Infocyph\Epicrypt\Internal\BinaryKey;
 
 final class Mac implements MacInterface
 {
@@ -39,11 +40,10 @@ final class Mac implements MacInterface
 
     private function decodeKey(string $key, bool $isBinary): string
     {
-        $decodedKey = $isBinary ? $key : Base64Url::decode($key);
-        if (strlen($decodedKey) !== SODIUM_CRYPTO_AUTH_KEYBYTES) {
-            throw new InvalidKeyException('MAC key must be 32 bytes.');
+        try {
+            return BinaryKey::fixedLength($key, $isBinary, SODIUM_CRYPTO_AUTH_KEYBYTES, 'MAC key');
+        } catch (InvalidKeyException $e) {
+            throw new InvalidKeyException('MAC key must be 32 bytes.', 0, $e);
         }
-
-        return $decodedKey;
     }
 }

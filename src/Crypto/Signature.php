@@ -8,6 +8,7 @@ use Infocyph\Epicrypt\Crypto\Contract\SignatureInterface;
 use Infocyph\Epicrypt\Exception\Crypto\InvalidKeyException;
 use Infocyph\Epicrypt\Exception\Crypto\SignatureException;
 use Infocyph\Epicrypt\Internal\Base64Url;
+use Infocyph\Epicrypt\Internal\BinaryKey;
 
 final class Signature implements SignatureInterface
 {
@@ -16,16 +17,13 @@ final class Signature implements SignatureInterface
      */
     public function sign(string $message, mixed $key, array $context = []): string
     {
-        if (!is_string($key) || $key === '') {
-            throw new InvalidKeyException('Private key must be a non-empty string.');
+        try {
+            $privateKey = BinaryKey::fixedLength($key, (bool) ($context['key_is_binary'] ?? false), SODIUM_CRYPTO_SIGN_SECRETKEYBYTES, 'Private key');
+        } catch (InvalidKeyException $e) {
+            throw new SignatureException('Private key must be a valid signing secret key.', 0, $e);
         }
 
-        $privateKey = (bool) ($context['key_is_binary'] ?? false) ? $key : Base64Url::decode($key);
-        if (strlen($privateKey) !== SODIUM_CRYPTO_SIGN_SECRETKEYBYTES) {
-            throw new InvalidKeyException('Private key has invalid length.');
-        }
-
-        $signature = sodium_crypto_sign_detached($message, $privateKey);
+        $signature = sodium_crypto_sign_detached($message, $this->requireNonEmptyKey($privateKey, 'Private key'));
 
         return Base64Url::encode($signature);
     }
@@ -35,13 +33,10 @@ final class Signature implements SignatureInterface
      */
     public function verify(string $message, string $signature, mixed $key, array $context = []): bool
     {
-        if (!is_string($key) || $key === '') {
-            throw new InvalidKeyException('Public key must be a non-empty string.');
-        }
-
-        $publicKey = (bool) ($context['key_is_binary'] ?? false) ? $key : Base64Url::decode($key);
-        if (strlen($publicKey) !== SODIUM_CRYPTO_SIGN_PUBLICKEYBYTES) {
-            throw new InvalidKeyException('Public key has invalid length.');
+        try {
+            $publicKey = BinaryKey::fixedLength($key, (bool) ($context['key_is_binary'] ?? false), SODIUM_CRYPTO_SIGN_PUBLICKEYBYTES, 'Public key');
+        } catch (InvalidKeyException $e) {
+            throw new SignatureException('Public key must be a valid signing public key.', 0, $e);
         }
 
         $decodedSignature = Base64Url::decode($signature);
@@ -49,6 +44,18 @@ final class Signature implements SignatureInterface
             throw new SignatureException('Signature must decode to non-empty bytes.');
         }
 
-        return sodium_crypto_sign_verify_detached($decodedSignature, $message, $publicKey);
+        return sodium_crypto_sign_verify_detached($decodedSignature, $message, $this->requireNonEmptyKey($publicKey, 'Public key'));
+    }
+
+    /**
+     * @return non-empty-string
+     */
+    private function requireNonEmptyKey(string $key, string $label): string
+    {
+        if ($key === '') {
+            throw new SignatureException($label . ' must not be empty.');
+        }
+
+        return $key;
     }
 }

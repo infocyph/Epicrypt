@@ -52,10 +52,9 @@ Minimal CSR + Certificate Example
    use Infocyph\Epicrypt\Certificate\CertificateBuilder;
    use Infocyph\Epicrypt\Certificate\CertificateParser;
    use Infocyph\Epicrypt\Certificate\CsrBuilder;
-   use Infocyph\Epicrypt\Certificate\Enum\OpenSslRsaBits;
    use Infocyph\Epicrypt\Certificate\KeyPairGenerator;
 
-   $keys = KeyPairGenerator::openSsl(bits: OpenSslRsaBits::BITS_2048)->generate();
+   $keys = KeyPairGenerator::openSsl()->generate();
 
    $dn = [
        'countryName' => 'US',

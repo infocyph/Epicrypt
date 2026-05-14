@@ -4,48 +4,20 @@ declare(strict_types=1);
 
 namespace Infocyph\Epicrypt\Security;
 
-use Infocyph\Epicrypt\Exception\Token\TokenException;
-use Infocyph\Epicrypt\Internal\SignedPayloadCodec;
 use Infocyph\Epicrypt\Security\Enum\SecurityTokenPurpose;
+use Infocyph\Epicrypt\Security\Support\AbstractPurposeToken;
 
-final readonly class EmailVerificationToken
+final readonly class EmailVerificationToken extends AbstractPurposeToken
 {
-    private SignedPayloadCodec $codec;
-
-    public function __construct(
-        string $secret,
-        private int $ttlSeconds = 86400,
-    ) {
-        $this->codec = new SignedPayloadCodec($secret);
-    }
+    protected const int DEFAULT_TTL_SECONDS = 86400;
 
     public function issue(string $userId, string $email): string
     {
-        $purpose = SecurityTokenPurpose::EMAIL_VERIFICATION->value;
-
-        return $this->codec->issue([
-            'sub' => $userId,
-            'email' => $email,
-            'purpose' => $purpose,
-        ], time() + $this->ttlSeconds, $purpose);
+        return $this->issueSubjectAndClaim(SecurityTokenPurpose::EMAIL_VERIFICATION, $userId, 'email', $email);
     }
 
     public function verify(string $token, ?string $email = null): bool
     {
-        try {
-            $purpose = SecurityTokenPurpose::EMAIL_VERIFICATION->value;
-            $claims = $this->codec->verify($token, $purpose);
-            if (($claims['purpose'] ?? null) !== $purpose) {
-                return false;
-            }
-
-            if ($email !== null) {
-                return isset($claims['email']) && is_string($claims['email']) && hash_equals($claims['email'], $email);
-            }
-
-            return true;
-        } catch (TokenException) {
-            return false;
-        }
+        return $this->verifySubjectAndClaim(SecurityTokenPurpose::EMAIL_VERIFICATION, $token, null, 'email', $email);
     }
 }

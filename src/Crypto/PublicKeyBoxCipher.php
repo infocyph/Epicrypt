@@ -6,8 +6,10 @@ namespace Infocyph\Epicrypt\Crypto;
 
 use Infocyph\Epicrypt\Crypto\Contract\CipherInterface;
 use Infocyph\Epicrypt\Exception\Crypto\DecryptionException;
+use Infocyph\Epicrypt\Exception\Crypto\EncryptionException;
 use Infocyph\Epicrypt\Exception\Crypto\InvalidKeyException;
 use Infocyph\Epicrypt\Internal\Base64Url;
+use Infocyph\Epicrypt\Internal\BinaryKey;
 use Infocyph\Epicrypt\Internal\Enum\EncryptedPayloadVersion;
 use Infocyph\Epicrypt\Internal\VersionedPayload;
 
@@ -18,22 +20,27 @@ final class PublicKeyBoxCipher implements CipherInterface
      */
     public function decrypt(string $ciphertext, mixed $key, array $context = []): string
     {
-        if (!is_array($key)) {
-            throw new InvalidKeyException('Key must include sender_public and recipient_private entries.');
-        }
+        $key = $this->normalizeKeyMaterial($key, 'Key must include sender_public and recipient_private entries.');
 
-        $senderPublic = $this->decodeKey($key['sender_public'] ?? null, 'sender_public', $context);
-        $recipientPrivate = $this->decodeKey($key['recipient_private'] ?? null, 'recipient_private', $context);
+        try {
+            [$senderPublic, $recipientPrivate] = $this->resolveBoxKeyPair(
+                $key,
+                (bool) ($context['key_is_binary'] ?? false),
+                'sender_public',
+                'recipient_private',
+            );
+        } catch (InvalidKeyException $e) {
+            throw new DecryptionException('Public key-box decryption key material is invalid.', 0, $e);
+        }
 
         $parsedPayload = VersionedPayload::parse($ciphertext, EncryptedPayloadVersion::V1->value, 2);
         if ($parsedPayload === null) {
             throw new DecryptionException('Invalid ciphertext format.');
         }
-        [, $parts] = $parsedPayload;
 
         $plaintext = sodium_crypto_box_open(
-            Base64Url::decode($parts[1]),
-            Base64Url::decode($parts[0]),
+            Base64Url::decode($parsedPayload->parts[1]),
+            Base64Url::decode($parsedPayload->parts[0]),
             sodium_crypto_box_keypair_from_secretkey_and_publickey($recipientPrivate, $senderPublic),
         );
 
@@ -49,12 +56,18 @@ final class PublicKeyBoxCipher implements CipherInterface
      */
     public function encrypt(string $plaintext, mixed $key, array $context = []): string
     {
-        if (!is_array($key)) {
-            throw new InvalidKeyException('Key must include recipient_public and sender_private entries.');
-        }
+        $key = $this->normalizeKeyMaterial($key, 'Key must include recipient_public and sender_private entries.');
 
-        $recipientPublic = $this->decodeKey($key['recipient_public'] ?? null, 'recipient_public', $context);
-        $senderPrivate = $this->decodeKey($key['sender_private'] ?? null, 'sender_private', $context);
+        try {
+            [$recipientPublic, $senderPrivate] = $this->resolveBoxKeyPair(
+                $key,
+                (bool) ($context['key_is_binary'] ?? false),
+                'recipient_public',
+                'sender_private',
+            );
+        } catch (InvalidKeyException $e) {
+            throw new EncryptionException('Public key-box encryption key material is invalid.', 0, $e);
+        }
         $nonce = random_bytes(SODIUM_CRYPTO_BOX_NONCEBYTES);
 
         $ciphertext = sodium_crypto_box(
@@ -71,19 +84,35 @@ final class PublicKeyBoxCipher implements CipherInterface
     }
 
     /**
-     * @param array<string, mixed> $context
+     * @return array<string, mixed>
      */
-    private function decodeKey(mixed $value, string $name, array $context): string
+    private function normalizeKeyMaterial(mixed $key, string $invalidMessage): array
     {
-        if (!is_string($value) || $value === '') {
-            throw new InvalidKeyException(sprintf('%s must be a non-empty string.', $name));
+        if (!is_array($key)) {
+            throw new InvalidKeyException($invalidMessage);
         }
 
-        $decoded = (bool) ($context['key_is_binary'] ?? false) ? $value : Base64Url::decode($value);
-        if (strlen($decoded) !== SODIUM_CRYPTO_BOX_PUBLICKEYBYTES) {
-            throw new InvalidKeyException(sprintf('%s has invalid key length.', $name));
+        $normalized = [];
+        foreach ($key as $entryKey => $entryValue) {
+            if (!is_string($entryKey)) {
+                throw new InvalidKeyException($invalidMessage);
+            }
+
+            $normalized[$entryKey] = $entryValue;
         }
 
-        return $decoded;
+        return $normalized;
+    }
+
+    /**
+     * @param array<string, mixed> $key
+     * @return array{0: string, 1: string}
+     */
+    private function resolveBoxKeyPair(array $key, bool $keyIsBinary, string $publicKeyField, string $secretKeyField): array
+    {
+        return [
+            BinaryKey::fixedLength($key[$publicKeyField] ?? null, $keyIsBinary, SODIUM_CRYPTO_BOX_PUBLICKEYBYTES, $publicKeyField),
+            BinaryKey::fixedLength($key[$secretKeyField] ?? null, $keyIsBinary, SODIUM_CRYPTO_BOX_SECRETKEYBYTES, $secretKeyField),
+        ];
     }
 }

@@ -6,6 +6,7 @@ namespace Infocyph\Epicrypt\Integrity;
 
 use Infocyph\Epicrypt\Exception\FileAccessException;
 use Infocyph\Epicrypt\Exception\Integrity\HashingException;
+use Infocyph\Epicrypt\Internal\HashAlgorithm;
 use Infocyph\Epicrypt\Internal\SecureCompare;
 
 final readonly class FileHasher
@@ -45,8 +46,10 @@ final readonly class FileHasher
             }
         }
 
-        if (!in_array($this->algorithm, hash_algos(), true)) {
-            throw new HashingException('Unsupported hash algorithm: ' . $this->algorithm);
+        try {
+            HashAlgorithm::assertSupported($this->algorithm);
+        } catch (\InvalidArgumentException $e) {
+            throw new HashingException($e->getMessage(), 0, $e);
         }
 
         $hash = $key === ''

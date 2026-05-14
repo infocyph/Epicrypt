@@ -3,8 +3,8 @@
 use Infocyph\Epicrypt\Security\ActionToken;
 use Infocyph\Epicrypt\Security\CsrfTokenManager;
 use Infocyph\Epicrypt\Security\EmailVerificationToken;
-use Infocyph\Epicrypt\Security\KeyRotationHelper;
 use Infocyph\Epicrypt\Security\KeyRing;
+use Infocyph\Epicrypt\Security\KeyRotationHelper;
 use Infocyph\Epicrypt\Security\PasswordResetToken;
 use Infocyph\Epicrypt\Security\RememberToken;
 use Infocyph\Epicrypt\Security\SignedUrl;
@@ -15,7 +15,7 @@ it('signs and verifies urls', function () {
 
     expect($signed)->toContain('ep_v=1');
     expect($signedUrl->verify($signed))->toBeTrue();
-    expect($signedUrl->verify($signed . 'tamper'))->toBeFalse();
+    expect($signedUrl->verify($signed.'tamper'))->toBeFalse();
 });
 
 it('issues and verifies csrf tokens', function () {
@@ -36,7 +36,7 @@ it('issues purpose-bound reset and action tokens', function () {
     $actionTokenValue = $actionToken->issue('user-1', 'delete-account');
     expect($actionToken->verify($actionTokenValue, 'user-1', 'delete-account'))->toBeTrue();
     $segments = explode('.', $actionTokenValue, 3);
-    $headerJson = base64_decode(strtr($segments[0], '-_', '+/') . str_repeat('=', (4 - strlen($segments[0]) % 4) % 4), true);
+    $headerJson = base64_decode(strtr($segments[0], '-_', '+/').str_repeat('=', (4 - strlen($segments[0]) % 4) % 4), true);
     expect($headerJson)->not->toBeFalse();
     $header = json_decode((string) $headerJson, true, 512, JSON_THROW_ON_ERROR);
     expect($header['v'] ?? null)->toBe(1);
@@ -51,7 +51,7 @@ it('issues purpose-bound reset and action tokens', function () {
 });
 
 it('verifies signatures across rotated key sets', function () {
-    $rotation = new KeyRotationHelper();
+    $rotation = new KeyRotationHelper;
 
     $keys = new KeyRing(['k1' => 'previous-key', 'k2' => 'active-key'], 'k2');
     $payload = 'important-payload';

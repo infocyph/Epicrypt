@@ -14,7 +14,7 @@ use Infocyph\Epicrypt\Internal\Base64Url;
 final readonly class KeyPairGenerator implements KeyPairGeneratorInterface
 {
     public function __construct(
-        private OpenSslRsaBits $bits = OpenSslRsaBits::BITS_2048,
+        private OpenSslRsaBits $bits = OpenSslRsaBits::BITS_3072,
         private OpenSslKeyType $type = OpenSslKeyType::RSA,
         private ?OpenSslCurveName $curveName = null,
     ) {}
@@ -39,7 +39,7 @@ final readonly class KeyPairGenerator implements KeyPairGeneratorInterface
         }
 
         $privateKey = null;
-        $exported = openssl_pkey_export($resource, $privateKey, $passphrase ?? '');
+        $exported = openssl_pkey_export($resource, $privateKey, $passphrase ?? '', $config);
         if (!$exported || !is_string($privateKey) || $privateKey === '') {
             throw new ConfigurationException('Failed to export private key.');
         }

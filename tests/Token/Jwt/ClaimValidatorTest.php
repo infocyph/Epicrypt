@@ -1,11 +1,12 @@
 <?php
 
 use Infocyph\Epicrypt\Exception\Token\InvalidClaimException;
+use Infocyph\Epicrypt\Token\Jwt\Validation\ExpectedJwtClaims;
 use Infocyph\Epicrypt\Token\Jwt\Validation\JwtValidator;
 use Infocyph\Epicrypt\Token\Jwt\Validation\RegisteredClaims;
 
 it('validates registered jwt claims', function () {
-    $validator = new JwtValidator(new RegisteredClaims('issuer', 'audience', 'subject', 'jti-123'));
+    $validator = new JwtValidator(ExpectedJwtClaims::fromRegistered(new RegisteredClaims('issuer', 'audience', 'subject', 'jti-123')));
 
     $claims = [
         'iss' => 'issuer',
@@ -22,7 +23,7 @@ it('validates registered jwt claims', function () {
 });
 
 it('rejects invalid registered jwt claims', function () {
-    $validator = new JwtValidator(new RegisteredClaims('issuer', 'audience', 'subject', 'jti-123'));
+    $validator = new JwtValidator(ExpectedJwtClaims::fromRegistered(new RegisteredClaims('issuer', 'audience', 'subject', 'jti-123')));
 
     $claims = [
         'iss' => 'wrong',

@@ -13,6 +13,7 @@ Scope
 - remember tokens
 - action tokens
 - key rotation helper
+- key-ring metadata for rotation windows and purpose-scoped key usage
 
 Signed URLs
 -----------
@@ -20,11 +21,23 @@ Signed URLs
 .. code-block:: php
 
    use Infocyph\Epicrypt\Security\SignedUrl;
+   use Infocyph\Epicrypt\Security\SignedUrlOptions;
 
    $signed = new SignedUrl('url-secret');
-   $url = $signed->generate('https://example.com/download', ['file' => 'report.csv'], time() + 300);
+   $options = new SignedUrlOptions(
+       method: 'GET',
+       bindHost: true,
+       bindScheme: true,
+       allowArrayParameters: false,
+       allowedHosts: ['example.com'],
+   );
+
+   $url = $signed->generate('https://example.com/download', ['file' => 'report.csv'], time() + 300, $options);
 
    $isValid = $signed->verify($url);
+   $result = $signed->verifyResult($url, $options);
+
+``verifyResult()`` exposes ``verified``, ``expired``, ``invalidSignature``, ``expiresAt``, and ``version``.
 
 CSRF
 ----
@@ -80,3 +93,33 @@ Key Rotation Helper
 
    $isValidWithKid = $rotation->verify('payload', $signature, $keys, 'k2');
    $isValidAgainstSet = $rotation->verify('payload', $signature, $keys);
+   $result = $rotation->verifyResult('payload', $signature, $keys);
+
+``verifyResult()`` returns ``KeyVerificationResult`` with ``verified``, ``matchedKeyId``, and ``usedFallbackKey``.
+
+KeyRing Metadata
+----------------
+
+Use metadata entries when keys have status, validity windows, or scope constraints.
+
+.. code-block:: php
+
+   use Infocyph\Epicrypt\Security\KeyRing;
+
+   $ring = new KeyRing([
+       'k2026-05' => [
+           'key' => 'active-key',
+           'status' => KeyRing::STATUS_ACTIVE,
+           'not_before' => 1767225600,
+           'not_after' => 1798761600,
+           'purpose' => 'jwt-signing',
+       ],
+       'k2025-12' => [
+           'key' => 'fallback-key',
+           'status' => KeyRing::STATUS_FALLBACK,
+           'purpose' => 'jwt-signing',
+       ],
+   ], 'k2026-05');
+
+   $activeKey = $ring->activeKey();
+   $ordered = $ring->orderedEntries('jwt-signing', time());

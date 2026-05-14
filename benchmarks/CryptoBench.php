@@ -19,31 +19,16 @@ final class CryptoBench
 {
     private AeadCipher $aeadCipher;
 
-    private string $aeadCiphertext;
-
-    private string $aeadKey;
-
-    private string $detachedSignature;
-
     private Mac $mac;
-
-    private string $macKey;
-
-    private string $macValue;
-
-    private string $plaintext;
 
     private SecretBoxCipher $secretBoxCipher;
 
-    private string $secretBoxCiphertext;
-
-    private string $secretBoxKey;
-
     private Signature $signature;
 
-    private string $signPrivateKey;
-
-    private string $signPublicKey;
+    /**
+     * @var array<string, string>
+     */
+    private array $state = [];
 
     public function __construct()
     {
@@ -56,68 +41,69 @@ final class CryptoBench
     public function setUp(): void
     {
         $keyGenerator = new KeyMaterialGenerator();
-        $this->plaintext = str_repeat('epicrypt-benchmark-payload-', 4);
+        $plaintext = str_repeat('epicrypt-benchmark-payload-', 4);
+        $this->state['plaintext'] = $plaintext;
 
-        $this->aeadKey = $keyGenerator->generate(SODIUM_CRYPTO_AEAD_XCHACHA20POLY1305_IETF_KEYBYTES);
-        $this->aeadCiphertext = $this->aeadCipher->encrypt($this->plaintext, $this->aeadKey, ['aad' => 'bench-aad']);
+        $this->state['aeadKey'] = $keyGenerator->generate(SODIUM_CRYPTO_AEAD_XCHACHA20POLY1305_IETF_KEYBYTES);
+        $this->state['aeadCiphertext'] = $this->aeadCipher->encrypt($plaintext, $this->state['aeadKey'], ['aad' => 'bench-aad']);
 
-        $this->secretBoxKey = $keyGenerator->generate(SODIUM_CRYPTO_SECRETBOX_KEYBYTES);
-        $this->secretBoxCiphertext = $this->secretBoxCipher->encrypt($this->plaintext, $this->secretBoxKey);
+        $this->state['secretBoxKey'] = $keyGenerator->generate(SODIUM_CRYPTO_SECRETBOX_KEYBYTES);
+        $this->state['secretBoxCiphertext'] = $this->secretBoxCipher->encrypt($plaintext, $this->state['secretBoxKey']);
 
-        $this->macKey = $this->mac->generateKey();
-        $this->macValue = $this->mac->generate($this->plaintext, $this->macKey);
+        $this->state['macKey'] = $this->mac->generateKey();
+        $this->state['macValue'] = $this->mac->generate($plaintext, $this->state['macKey']);
 
         $keyPair = KeyPairGenerator::sodiumSign()->generate(asBase64Url: true);
-        $this->signPrivateKey = $keyPair['private'];
-        $this->signPublicKey = $keyPair['public'];
-        $this->detachedSignature = $this->signature->sign($this->plaintext, $this->signPrivateKey);
+        $this->state['signPrivateKey'] = $keyPair['private'];
+        $this->state['signPublicKey'] = $keyPair['public'];
+        $this->state['detachedSignature'] = $this->signature->sign($plaintext, $this->state['signPrivateKey']);
     }
 
     #[Bench\BeforeMethods('setUp')]
     public function benchAeadDecrypt(): void
     {
-        $this->aeadCipher->decrypt($this->aeadCiphertext, $this->aeadKey, ['aad' => 'bench-aad']);
+        $this->aeadCipher->decrypt($this->state['aeadCiphertext'], $this->state['aeadKey'], ['aad' => 'bench-aad']);
     }
 
     #[Bench\BeforeMethods('setUp')]
     public function benchAeadEncrypt(): void
     {
-        $this->aeadCipher->encrypt($this->plaintext, $this->aeadKey, ['aad' => 'bench-aad']);
+        $this->aeadCipher->encrypt($this->state['plaintext'], $this->state['aeadKey'], ['aad' => 'bench-aad']);
     }
 
     #[Bench\BeforeMethods('setUp')]
     public function benchDetachedSignatureSign(): void
     {
-        $this->signature->sign($this->plaintext, $this->signPrivateKey);
+        $this->signature->sign($this->state['plaintext'], $this->state['signPrivateKey']);
     }
 
     #[Bench\BeforeMethods('setUp')]
     public function benchDetachedSignatureVerify(): void
     {
-        $this->signature->verify($this->plaintext, $this->detachedSignature, $this->signPublicKey);
+        $this->signature->verify($this->state['plaintext'], $this->state['detachedSignature'], $this->state['signPublicKey']);
     }
 
     #[Bench\BeforeMethods('setUp')]
     public function benchMacGenerate(): void
     {
-        $this->mac->generate($this->plaintext, $this->macKey);
+        $this->mac->generate($this->state['plaintext'], $this->state['macKey']);
     }
 
     #[Bench\BeforeMethods('setUp')]
     public function benchMacVerify(): void
     {
-        $this->mac->verify($this->plaintext, $this->macValue, $this->macKey);
+        $this->mac->verify($this->state['plaintext'], $this->state['macValue'], $this->state['macKey']);
     }
 
     #[Bench\BeforeMethods('setUp')]
     public function benchSecretBoxDecrypt(): void
     {
-        $this->secretBoxCipher->decrypt($this->secretBoxCiphertext, $this->secretBoxKey);
+        $this->secretBoxCipher->decrypt($this->state['secretBoxCiphertext'], $this->state['secretBoxKey']);
     }
 
     #[Bench\BeforeMethods('setUp')]
     public function benchSecretBoxEncrypt(): void
     {
-        $this->secretBoxCipher->encrypt($this->plaintext, $this->secretBoxKey);
+        $this->secretBoxCipher->encrypt($this->state['plaintext'], $this->state['secretBoxKey']);
     }
 }
