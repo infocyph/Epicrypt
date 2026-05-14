@@ -1,5 +1,13 @@
 # Epicrypt
 
+[![Security & Standards](https://github.com/infocyph/Epicrypt/actions/workflows/security-standards.yml/badge.svg)](https://github.com/infocyph/Epicrypt/actions/workflows/security-standards.yml)
+[![Documentation](https://img.shields.io/badge/Documentation-Epicrypt-blue?logo=readthedocs&logoColor=white)](https://docs.infocyph.com/projects/Epicrypt/)
+![Packagist Downloads](https://img.shields.io/packagist/dt/infocyph/Epicrypt?color=green&link=https%3A%2F%2Fpackagist.org%2Fpackages%2Finfocyph%2FEpicrypt)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
+![Packagist Version](https://img.shields.io/packagist/v/infocyph/Epicrypt)
+![Packagist PHP Version](https://img.shields.io/packagist/dependency-v/infocyph/Epicrypt/php)
+![GitHub Code Size](https://img.shields.io/github/languages/code-size/infocyph/Epicrypt)
+
 Epicrypt is a capability-first PHP security toolkit.
 
 It provides focused security building blocks for:
@@ -26,12 +34,17 @@ composer require infocyph/epicrypt
 
 ## Documentation
 
-See the `docs/` folder for full guides:
+Primary documentation:
 
-- architecture
-- capability guides
-- testing and benchmarking
-- error handling
+- https://docs.infocyph.com/projects/Epicrypt
+
+## Security
+
+Please review [SECURITY.md](SECURITY.md) for vulnerability reporting guidelines.
+
+## Code of Conduct
+
+Please review [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) before contributing.
 
 ## Usage Examples
 
@@ -160,7 +173,7 @@ use Infocyph\Epicrypt\Certificate\CertificateOptions;
 use Infocyph\Epicrypt\Certificate\Enum\OpenSslRsaBits;
 use Infocyph\Epicrypt\Certificate\KeyPairGenerator;
 
-$pair = KeyPairGenerator::openSsl(bits: OpenSslRsaBits::BITS_2048)->generate();
+$pair = KeyPairGenerator::openSsl(bits: OpenSslRsaBits::BITS_3072)->generate();
 $dn = ['commonName' => 'service.example.test'];
 
 $options = new CertificateOptions(
