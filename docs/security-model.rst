@@ -1,7 +1,7 @@
 Security Model
 ==============
 
-Epicrypt uses versioned payloads, embedded algorithm identifiers, and key-id aware rotation helpers to reduce migration risk.
+Epicrypt uses versioned payloads, embedded algorithm identifiers and key-id aware rotation helpers to reduce migration risk.
 
 Core principles:
 

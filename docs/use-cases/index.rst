@@ -15,16 +15,16 @@ Quick Decision Matrix
    * - You need to...
      - Use this domain
      - Start with
-   * - Secure forms, account flows, and signed browser links
+   * - Secure forms, account flows and signed browser links
      - ``Security``
      - :doc:`Web App Security <web-app-security>`
    * - Issue JWTs or opaque API tokens
      - ``Token``
      - :doc:`API and Token Security <api-and-token-security>`
-   * - Protect files, blobs, or stored secrets
+   * - Protect files, blobs or stored secrets
      - ``DataProtection`` / ``Password``
      - :doc:`File and Secret Protection <file-and-secret-protection>`
-   * - Work with key pairs, CSRs, certificates, or shared-secret derivation
+   * - Work with key pairs, CSRs, certificates or shared-secret derivation
      - ``Certificate``
      - :doc:`PKI and Key Exchange <pki-and-key-exchange>`
    * - Reach for lower-level crypto primitives
@@ -33,7 +33,7 @@ Quick Decision Matrix
    * - Hash content or verify file integrity
      - ``Integrity``
      - :doc:`Integrity Complete Examples <integrity-complete-examples>`
-   * - Generate nonces, salts, keys, and random token material
+   * - Generate nonces, salts, keys and random token material
      - ``Generate``
      - :doc:`Generate Complete Examples <generate-complete-examples>`
 
@@ -52,7 +52,7 @@ Use these pages for browser-facing application flows.
 Secure APIs and Service-to-Service Flows
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Use these pages for bearer tokens, signed payloads, and API authorization boundaries.
+Use these pages for bearer tokens, signed payloads and API authorization boundaries.
 
 - :doc:`API and Token Security Flow <api-and-token-security>`
 - :doc:`Token Complete Examples <token-complete-examples>`
@@ -60,7 +60,7 @@ Use these pages for bearer tokens, signed payloads, and API authorization bounda
 Protect Data at Rest
 ^^^^^^^^^^^^^^^^^^^^
 
-Use these pages for application payloads, file encryption, and wrapped secret material.
+Use these pages for application payloads, file encryption and wrapped secret material.
 
 - :doc:`File and Secret Protection Flow <file-and-secret-protection>`
 - :doc:`Data Protection Complete Examples <data-protection-complete-examples>`
@@ -68,7 +68,7 @@ Use these pages for application payloads, file encryption, and wrapped secret ma
 Work with PKI and Trust Material
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Use these pages for key generation, certificate workflows, and shared-secret derivation.
+Use these pages for key generation, certificate workflows and shared-secret derivation.
 
 - :doc:`PKI and Key Exchange Flow <pki-and-key-exchange>`
 - :doc:`Certificate Complete Examples <certificate-complete-examples>`

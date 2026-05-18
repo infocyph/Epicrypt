@@ -177,6 +177,6 @@ When possible, keep one format per application boundary instead of mixing both s
 Simple Rule of Thumb
 --------------------
 
-- If a higher-level ``Password``, ``Security``, ``Token``, or ``DataProtection`` API fits your use case, choose it first.
+- If a higher-level ``Password``, ``Security``, ``Token`` or ``DataProtection`` API fits your use case, choose it first.
 - Reach for ``Crypto`` primitives only when you need direct cryptographic control.
 - Prefer modern defaults and active-key rotation.

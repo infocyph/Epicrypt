@@ -1,7 +1,7 @@
 Data Protection Complete Examples
 =================================
 
-This page groups ``DataProtection`` examples by what you are protecting: strings, envelopes, and files.
+This page groups ``DataProtection`` examples by what you are protecting: strings, envelopes and files.
 
 Protect an Application String
 -----------------------------

@@ -46,18 +46,24 @@ Documentation Map
    passwords
    tokens
    jwt
+   data-protection
    file-encryption
    certificates
-   security-model
-   migration
-   certificate
    crypto
-   token
-   password
    integrity
    generate
-   data-protection
    security
+   security-model
+   key-rotation
+   migration
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Domain Reference
+
+   password
+   token
+   certificate
    complete-usage-reference
 
 .. toctree::

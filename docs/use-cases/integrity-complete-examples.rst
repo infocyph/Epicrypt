@@ -1,7 +1,7 @@
 Integrity Complete Examples
 ===========================
 
-This page groups ``Integrity`` examples by what is being checked: strings, files, and support helpers.
+This page groups ``Integrity`` examples by what is being checked: strings, files and support helpers.
 
 Hash and Verify a String
 ------------------------

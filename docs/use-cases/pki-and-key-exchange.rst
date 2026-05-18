@@ -1,12 +1,12 @@
 PKI and Key Exchange Flow
 =========================
 
-Use this flow for asymmetric interoperability, certificate lifecycle, and shared-secret derivation.
+Use this flow for asymmetric interoperability, certificate lifecycle and shared-secret derivation.
 
 Brief
 -----
 
-The ``Certificate`` domain groups key pairs, CSRs, certificates, and shared-secret derivation in one place. Use it when trust material has to move between systems, libraries, or deployment boundaries.
+The ``Certificate`` domain groups key pairs, CSRs, certificates and shared-secret derivation in one place. Use it when trust material has to move between systems, libraries or deployment boundaries.
 
 Choose the Capability
 ---------------------

@@ -32,20 +32,6 @@ composer require infocyph/epicrypt
 - PHP `>=8.4`
 - `ext-sodium`, `ext-openssl`, `ext-json`, `ext-mbstring`, `ext-hash`
 
-## Documentation
-
-Primary documentation:
-
-- https://docs.infocyph.com/projects/Epicrypt
-
-## Security
-
-Please review [SECURITY.md](SECURITY.md) for vulnerability reporting guidelines.
-
-## Code of Conduct
-
-Please review [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) before contributing.
-
 ## Usage Examples
 
 ### Encrypt and decrypt a string
@@ -96,7 +82,7 @@ $ciphertext = $protector->encryptWithKeyRing('rotating-data', $ring);
 $result = $protector->decryptWithKeyRingResult($ciphertext, $ring);
 ```
 
-### Hash, verify, and rehash password
+### Hash, verify and rehash password
 
 ```php
 <?php
@@ -182,3 +168,19 @@ $options = new CertificateOptions(
 
 $certPem = CertificateBuilder::openSsl()->selfSign($dn, $pair['private'], options: $options);
 ```
+
+## Security
+
+Protected by [PHPForge](https://github.com/infocyph/PHPForge) — an automated quality and security gate for PHP projects.
+
+---
+
+<div align="center">
+  <sub><strong>Made with ❤️ for the PHP community</strong></sub><br />
+  <sub><a href="LICENSE">MIT Licensed</a></sub><br />
+  <a href="https://docs.infocyph.com/projects/Epicrypt">Documentation</a> •
+  <a href="SECURITY.md">Security</a> •
+  <a href="CODE_OF_CONDUCT.md">Code of Conduct</a> •
+  <a href="CONTRIBUTING.md">Contributing</a> •
+  <a href="https://github.com/infocyph/Epicrypt/issues">Report | Request | Suggest</a>
+</div>
