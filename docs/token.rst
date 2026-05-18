@@ -11,7 +11,7 @@ Scope
 - opaque tokens
 - claim validation and key resolution
 - key-ring verification helpers for signed payload and JWT rotation
-- JWKS/JWK export, import, and kid-based verification flows
+- JWKS/JWK export, import and kid-based verification flows
 - structured verification result objects for safer application decisions
 
 Symmetric JWT

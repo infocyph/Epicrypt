@@ -1,7 +1,7 @@
 Security Complete Examples
 ==========================
 
-This page groups ``Security`` examples around common web application scenes: signed links, CSRF, purpose-bound account tokens, and key rotation.
+This page groups ``Security`` examples around common web application scenes: signed links, CSRF, purpose-bound account tokens and key rotation.
 
 Generate and Verify a Signed URL
 --------------------------------
@@ -39,7 +39,7 @@ Issue and Verify a CSRF Token
 Issue Purpose-Bound Account Tokens
 ----------------------------------
 
-Use these classes for recovery, verification, remembered devices, and one-off actions.
+Use these classes for recovery, verification, remembered devices and one-off actions.
 
 .. code-block:: php
 

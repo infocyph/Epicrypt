@@ -20,7 +20,7 @@
         "ext-mbstring": "*",
         "ext-openssl": "*",
         "ext-sodium": "*",
-        "infocyph/pathwise": "^2.5"
+        "infocyph/pathwise": "^2.5.1"
     },
     "require-dev": {
         "infocyph/phpforge": "dev-main"

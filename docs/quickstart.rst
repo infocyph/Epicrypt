@@ -14,5 +14,5 @@ Quickstart
    $ciphertext = $protector->encrypt('hello epicrypt', $key);
    $plaintext = $protector->decrypt($ciphertext, $key);
 
-For deeper guides, see ``crypto.rst``, ``token.rst``, and ``data-protection.rst``.
+For deeper guides, see ``crypto.rst``, ``token.rst`` and ``data-protection.rst``.
 

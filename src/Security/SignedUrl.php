@@ -166,15 +166,15 @@ final readonly class SignedUrl implements SignedUrlGeneratorInterface, SignedUrl
     {
         [$path, $host, $scheme, $port] = $this->pathComponents($parts);
 
-        if (!$options->bindHost && !$options->bindScheme) {
-            return $path;
-        }
+        if (!$options->bindHost) {
+            if (!$options->bindScheme) {
+                return $path;
+            }
 
-        if (!$options->bindHost && $options->bindScheme) {
             return $scheme . '://' . $path;
         }
 
-        if ($options->bindHost && !$options->bindScheme) {
+        if (!$options->bindScheme) {
             return '//' . $host . $port . $path;
         }
 

@@ -6,8 +6,8 @@ The complete usage reference is now distributed into the ``use-cases`` section f
 Coverage Rules
 --------------
 
-- Includes the core and most-used public classes under ``Certificate``, ``Crypto``, ``Token``, ``Password``, ``Integrity``, ``Generate``, ``DataProtection``, and ``Security``.
-- Includes practical examples for constructors, encode/decode flows, verify flows, key-set flows, and option/context arguments.
+- Includes the core and most-used public classes under ``Certificate``, ``Crypto``, ``Token``, ``Password``, ``Integrity``, ``Generate``, ``DataProtection`` and ``Security``.
+- Includes practical examples for constructors, encode/decode flows, verify flows, key-set flows and option/context arguments.
 - Excludes ``Internal`` and ``Support`` namespace classes because those are implementation details, not stable app-facing API.
 
 Distributed Reference Pages

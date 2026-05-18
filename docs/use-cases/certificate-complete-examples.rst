@@ -6,7 +6,7 @@ This page groups the main ``Certificate`` APIs by job so you can learn them as a
 Generate Key Pairs
 ------------------
 
-Use this when you need OpenSSL or sodium key material for encryption, signatures, or interop.
+Use this when you need OpenSSL or sodium key material for encryption, signatures or interop.
 
 .. code-block:: php
 
@@ -126,7 +126,7 @@ Use these only when you need direct access to backend-specific behavior.
 Certificate Utility and PKCS#12 Flows
 -------------------------------------
 
-Use this when you need cert metadata checks, chain verification, and bundle conversion for deployment tooling.
+Use this when you need cert metadata checks, chain verification and bundle conversion for deployment tooling.
 
 .. code-block:: php
 

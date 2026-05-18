@@ -1,7 +1,7 @@
 Token Complete Examples
 =======================
 
-This page groups ``Token`` examples by token style so you can compare JWT, signed payload, opaque token, and validation helpers in one place.
+This page groups ``Token`` examples by token style so you can compare JWT, signed payload, opaque token and validation helpers in one place.
 
 Create and Verify a Symmetric JWT
 ---------------------------------

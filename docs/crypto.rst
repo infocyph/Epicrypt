@@ -19,7 +19,7 @@ Direct cryptographic primitives and operations:
 
 This is the lower-level surface of Epicrypt.
 
-For most new applications, prefer the higher-level ``Password``, ``Token``, ``DataProtection``, and ``Security`` domains first, then drop down into ``Crypto`` only when you truly need primitive-level control.
+For most new applications, prefer the higher-level ``Password``, ``Token``, ``DataProtection`` and ``Security`` domains first, then drop down into ``Crypto`` only when you truly need primitive-level control.
 
 AEAD Cipher
 -----------

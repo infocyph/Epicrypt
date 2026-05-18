@@ -1,12 +1,12 @@
 File and Secret Protection Flow
 ===============================
 
-Use this flow when protecting data at rest (files, blobs, or serialized secret material).
+Use this flow when protecting data at rest (files, blobs or serialized secret material).
 
 Brief
 -----
 
-Use ``DataProtection`` when you want safe higher-level protection workflows, and use ``Password\Secret`` helpers when you need an explicit wrapped-secret lifecycle for application secrets.
+Use ``DataProtection`` when you want safe higher-level protection workflows and use ``Password\Secret`` helpers when you need an explicit wrapped-secret lifecycle for application secrets.
 
 Choose the Capability
 ---------------------

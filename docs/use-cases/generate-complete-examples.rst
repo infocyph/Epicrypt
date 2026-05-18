@@ -1,7 +1,7 @@
 Generate Complete Examples
 ==========================
 
-This page shows the ``Generate`` helpers in the same order they usually appear in real applications: random bytes first, then nonces, salts, keys, and token material.
+This page shows the ``Generate`` helpers in the same order they usually appear in real applications: random bytes first, then nonces, salts, keys and token material.
 
 Generate Random Bytes or Strings
 --------------------------------

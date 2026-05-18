@@ -37,7 +37,7 @@ Signed URLs
    $isValid = $signed->verify($url);
    $result = $signed->verifyResult($url, $options);
 
-``verifyResult()`` exposes ``verified``, ``expired``, ``invalidSignature``, ``expiresAt``, and ``version``.
+``verifyResult()`` exposes ``verified``, ``expired``, ``invalidSignature``, ``expiresAt`` and ``version``.
 
 CSRF
 ----
@@ -95,12 +95,12 @@ Key Rotation Helper
    $isValidAgainstSet = $rotation->verify('payload', $signature, $keys);
    $result = $rotation->verifyResult('payload', $signature, $keys);
 
-``verifyResult()`` returns ``KeyVerificationResult`` with ``verified``, ``matchedKeyId``, and ``usedFallbackKey``.
+``verifyResult()`` returns ``KeyVerificationResult`` with ``verified``, ``matchedKeyId`` and ``usedFallbackKey``.
 
 KeyRing Metadata
 ----------------
 
-Use metadata entries when keys have status, validity windows, or scope constraints.
+Use metadata entries when keys have status, validity windows or scope constraints.
 
 .. code-block:: php
 

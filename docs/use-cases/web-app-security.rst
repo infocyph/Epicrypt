@@ -1,7 +1,7 @@
 Web App Security Flow
 =====================
 
-Use this flow when building browser-facing apps with forms, sessions, signed links, and account verification steps.
+Use this flow when building browser-facing apps with forms, sessions, signed links and account verification steps.
 
 Brief
 -----
@@ -29,7 +29,7 @@ Start Here
 Learn by Example
 ----------------
 
-Scenario: a web app needs one CSRF token for form posts, one reset token for account recovery, and one signed link for email verification.
+Scenario: a web app needs one CSRF token for form posts, one reset token for account recovery and one signed link for email verification.
 
 .. code-block:: php
 

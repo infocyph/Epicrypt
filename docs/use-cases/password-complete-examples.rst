@@ -1,7 +1,7 @@
 Password Complete Examples
 ==========================
 
-This page groups ``Password`` examples by the job you are doing: generate a password, enforce policy, hash it, score it, or protect a stored secret.
+This page groups ``Password`` examples by the job you are doing: generate a password, enforce policy, hash it, score it or protect a stored secret.
 
 Generate a Password
 -------------------
