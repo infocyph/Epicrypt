@@ -9,7 +9,7 @@ final class PasswordStrength
     /**
      * @param array{email?: mixed, username?: mixed} $context
      */
-    public function score(string $password, array $context = []): int
+    public function score(#[\SensitiveParameter] string $password, array $context = []): int
     {
         $score = 0;
         $length = strlen($password);
@@ -37,7 +37,7 @@ final class PasswordStrength
         $score -= $this->commonPatternPenalty($password);
         $score -= $this->identityPenalty($password, $context);
 
-        return min($score, 100);
+        return max(0, min($score, 100));
     }
 
     private function commonPatternPenalty(string $password): int
@@ -100,7 +100,8 @@ final class PasswordStrength
         $lower = strtolower($password);
         $sequences = ['abcdefghijklmnopqrstuvwxyz', '0123456789', 'qwertyuiopasdfghjklzxcvbnm'];
         foreach ($sequences as $sequence) {
-            for ($index = 0; $index <= strlen($sequence) - 4; $index++) {
+            $lastStart = strlen($sequence) - 4;
+            for ($index = 0; $index <= $lastStart; $index++) {
                 $chunk = substr($sequence, $index, 4);
                 if (str_contains($lower, $chunk)) {
                     return 15;

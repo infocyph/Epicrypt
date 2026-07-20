@@ -22,7 +22,7 @@ final readonly class KeyPairGenerator implements KeyPairGeneratorInterface
     /**
      * @return array{private: string, public: string}
      */
-    public function generate(?string $passphrase = null, bool $asBase64Url = false): array
+    public function generate(#[\SensitiveParameter] ?string $passphrase = null, bool $asBase64Url = false): array
     {
         $config = [
             'private_key_bits' => $this->bits->value,

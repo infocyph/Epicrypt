@@ -15,7 +15,7 @@ final class PasswordHasher implements PasswordHasherInterface
     /**
      * @param array<string, mixed> $options
      */
-    public function hashPassword(string $password, array $options = []): string
+    public function hashPassword(#[\SensitiveParameter] string $password, array $options = []): string
     {
         [$algorithm, $hashOptions] = $this->resolveHashConfiguration($options);
         $algo = $algorithm->toPasswordAlgorithm();
@@ -39,7 +39,7 @@ final class PasswordHasher implements PasswordHasherInterface
     /**
      * @param array<string, mixed> $options
      */
-    public function verifyAndNeedsRehash(string $password, string $hash, array $options = []): PasswordVerificationResult
+    public function verifyAndNeedsRehash(#[\SensitiveParameter] string $password, string $hash, array $options = []): PasswordVerificationResult
     {
         $verified = $this->verifyPassword($password, $hash, $options);
         if (!$verified) {
@@ -52,7 +52,7 @@ final class PasswordHasher implements PasswordHasherInterface
     /**
      * @param array<string, mixed> $options
      */
-    public function verifyAndRehash(string $password, string $hash, array $options = []): PasswordVerificationResult
+    public function verifyAndRehash(#[\SensitiveParameter] string $password, string $hash, array $options = []): PasswordVerificationResult
     {
         $result = $this->verifyAndNeedsRehash($password, $hash, $options);
         if (!$result->verified || !$result->needsRehash) {
@@ -69,10 +69,9 @@ final class PasswordHasher implements PasswordHasherInterface
     /**
      * @param array<string, mixed> $options
      */
-    public function verifyPassword(string $password, string $hash, array $options = []): bool
+    // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter -- Options are retained for the public contract.
+    public function verifyPassword(#[\SensitiveParameter] string $password, string $hash, array $options = []): bool
     {
-        unset($options);
-
         return password_verify($password, $hash);
     }
 

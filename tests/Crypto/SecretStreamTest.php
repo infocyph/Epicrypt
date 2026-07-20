@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 use Infocyph\Epicrypt\Crypto\Enum\StreamAlgorithm;
 use Infocyph\Epicrypt\Crypto\SecretStream;
 use Infocyph\Epicrypt\Exception\ConfigurationException;
@@ -20,6 +22,25 @@ it('requires explicit opt-in for unauthenticated stream mode', function () {
         new SecretStream($key, StreamAlgorithm::UNAUTHENTICATED_XCHACHA20, '', true),
     )->toBeInstanceOf(SecretStream::class);
 });
+
+it('rejects invalid stream chunk sizes before creating output', function (int $chunkSize) {
+    $directory = sys_get_temp_dir().DIRECTORY_SEPARATOR.'epicrypt-secretstream-'.bin2hex(random_bytes(6));
+    mkdir($directory);
+
+    $inputPath = $directory.DIRECTORY_SEPARATOR.'plain.txt';
+    $outputPath = $directory.DIRECTORY_SEPARATOR.'encrypted.bin';
+    file_put_contents($inputPath, 'payload');
+
+    try {
+        $stream = new SecretStream(random_bytes(SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_KEYBYTES));
+
+        expect(fn () => $stream->encrypt($inputPath, $outputPath, $chunkSize))
+            ->toThrow(ConfigurationException::class)
+            ->and(file_exists($outputPath))->toBeFalse();
+    } finally {
+        cleanupSecretStreamTempDirectory($directory);
+    }
+})->with([0, -1, (16 * 1024 * 1024) + 1]);
 
 it('returns total bytes written for single-chunk secret stream encryption', function () {
     $directory = sys_get_temp_dir().DIRECTORY_SEPARATOR.'epicrypt-secretstream-'.bin2hex(random_bytes(6));
@@ -59,6 +80,28 @@ it('returns total bytes written for multi-chunk secret stream encryption', funct
 
         expect($written)->toBe(filesize($encryptedPath));
         expect(file_get_contents($decryptedPath))->toBe($content);
+    } finally {
+        cleanupSecretStreamTempDirectory($directory);
+    }
+});
+
+it('supports safe in-place stream encryption and decryption', function () {
+    $directory = sys_get_temp_dir().DIRECTORY_SEPARATOR.'epicrypt-secretstream-'.bin2hex(random_bytes(6));
+    mkdir($directory);
+
+    $path = $directory.DIRECTORY_SEPARATOR.'payload.bin';
+    $content = str_repeat('in-place-stream-data-', 32);
+    file_put_contents($path, $content);
+
+    try {
+        $stream = new SecretStream(random_bytes(SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_KEYBYTES));
+        $stream->encrypt($path, $path, 64);
+
+        expect(file_get_contents($path))->not->toBe($content);
+
+        $stream->decrypt($path, $path, 64);
+
+        expect(file_get_contents($path))->toBe($content);
     } finally {
         cleanupSecretStreamTempDirectory($directory);
     }

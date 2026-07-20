@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 use Infocyph\Epicrypt\Security\KeyRing;
 use Infocyph\Epicrypt\Token\Jwt\Enum\SymmetricJwtAlgorithm;
 use Infocyph\Epicrypt\Token\Jwt\SymmetricJwt;

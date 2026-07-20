@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 use Infocyph\Epicrypt\Token\Opaque\OpaqueToken;
 
 it('issues opaque tokens and verifies digests', function () {

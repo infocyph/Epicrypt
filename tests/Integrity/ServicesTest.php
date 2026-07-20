@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 use Infocyph\Epicrypt\Exception\Integrity\HashingException;
 use Infocyph\Epicrypt\Integrity\FileHasher;
 use Infocyph\Epicrypt\Integrity\StringHasher;
@@ -30,6 +32,18 @@ it('creates stable content fingerprints', function () {
     $fingerprintB = $fingerprinter->fingerprint('payload', ['a' => '1', 'b' => '2']);
 
     expect($fingerprintA)->toBe($fingerprintB);
+});
+
+it('frames fingerprint metadata without delimiter or type ambiguity', function () {
+    $fingerprinter = new ContentFingerprinter;
+
+    $combinedValue = $fingerprinter->fingerprint('payload', ['a' => 'b&c=d']);
+    $separateValues = $fingerprinter->fingerprint('payload', ['a' => 'b', 'c' => 'd']);
+    $booleanValue = $fingerprinter->fingerprint('payload', ['enabled' => true]);
+    $stringValue = $fingerprinter->fingerprint('payload', ['enabled' => '1']);
+
+    expect($combinedValue)->not->toBe($separateValues)
+        ->and($booleanValue)->not->toBe($stringValue);
 });
 
 it('rejects unsupported hash algorithms for integrity services', function () {

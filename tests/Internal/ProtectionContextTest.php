@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 use Infocyph\Epicrypt\DataProtection\Support\ProtectionContext;
 use Infocyph\Epicrypt\Exception\ConfigurationException;
 

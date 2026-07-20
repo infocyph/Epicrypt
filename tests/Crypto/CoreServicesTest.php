@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 use Infocyph\Epicrypt\Certificate\KeyPairGenerator;
 use Infocyph\Epicrypt\Crypto\AeadCipher;
 use Infocyph\Epicrypt\Crypto\Mac;

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 it('has required native sodium/hash/openssl/password function support', function () {
     $coverage = [
         'sodium_bin2base64',

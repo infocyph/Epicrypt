@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 use Infocyph\Epicrypt\Exception\ConfigurationException;
 use Infocyph\Epicrypt\Generate\KeyMaterial\KeyDerivationContext;
 use Infocyph\Epicrypt\Generate\KeyMaterial\KeyDeriver;

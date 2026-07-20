@@ -80,6 +80,8 @@ Use Support Helpers
 -------------------
 
 Use helpers for canonical fingerprints and timing-safe equality checks.
+Fingerprint metadata is sorted and encoded with length-prefixed, type-aware fields,
+so delimiters inside keys or values cannot create an ambiguous input.
 
 .. code-block:: php
 

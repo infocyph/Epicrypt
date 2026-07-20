@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 use Infocyph\Epicrypt\Security\ActionToken;
 use Infocyph\Epicrypt\Security\CsrfTokenManager;
 use Infocyph\Epicrypt\Security\EmailVerificationToken;

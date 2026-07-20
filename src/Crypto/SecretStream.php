@@ -16,6 +16,8 @@ use RuntimeException;
 
 final readonly class SecretStream
 {
+    private const int MAX_CHUNK_SIZE = 16 * 1024 * 1024;
+
     public function __construct(
         private string $key,
         private StreamAlgorithm $algorithm = StreamAlgorithm::XCHACHA20POLY1305,
@@ -33,39 +35,48 @@ final readonly class SecretStream
 
     public function decrypt(string $inputPath, string $outputPath, int $chunkSize = 8192): void
     {
+        $this->assertValidChunkSize($chunkSize);
         $this->checkReadableInput($inputPath);
 
-        $fileWriter = new SafeFileWriter($outputPath, false);
-
         try {
-            if ($this->algorithm->usesSecretStream()) {
-                $this->decryptUsingSecretStream($inputPath, $fileWriter, $chunkSize);
-            } else {
+            $this->writeSafely($outputPath, function (SafeFileWriter $fileWriter) use ($inputPath, $chunkSize): void {
+                if ($this->algorithm->usesSecretStream()) {
+                    $this->decryptUsingSecretStream($inputPath, $fileWriter, $chunkSize);
+
+                    return;
+                }
+
                 $this->decryptUsingCryptoStream($inputPath, $fileWriter, $chunkSize);
-            }
-        } catch (RuntimeException $e) {
+            });
+        } catch (\Exception $e) {
             throw new DecryptionException($e->getMessage(), 0, $e);
-        } finally {
-            $fileWriter->close();
         }
     }
 
     public function encrypt(string $inputPath, string $outputPath, int $chunkSize = 8192): int
     {
+        $this->assertValidChunkSize($chunkSize);
         $this->checkReadableInput($inputPath);
 
-        $fileWriter = new SafeFileWriter($outputPath, false);
-
         try {
-            if ($this->algorithm->usesSecretStream()) {
-                return $this->encryptUsingSecretStream($inputPath, $fileWriter, $chunkSize);
-            }
-
-            return $this->encryptUsingCryptoStream($inputPath, $fileWriter, $chunkSize);
-        } catch (RuntimeException $e) {
+            return $this->writeSafely(
+                $outputPath,
+                fn(SafeFileWriter $fileWriter): int => $this->algorithm->usesSecretStream()
+                    ? $this->encryptUsingSecretStream($inputPath, $fileWriter, $chunkSize)
+                    : $this->encryptUsingCryptoStream($inputPath, $fileWriter, $chunkSize),
+            );
+        } catch (\Exception $e) {
             throw new EncryptionException($e->getMessage(), 0, $e);
-        } finally {
-            $fileWriter->close();
+        }
+    }
+
+    private function assertValidChunkSize(int $chunkSize): void
+    {
+        if ($chunkSize < 1 || $chunkSize > self::MAX_CHUNK_SIZE) {
+            throw new ConfigurationException(sprintf(
+                'Chunk size must be between 1 and %d bytes.',
+                self::MAX_CHUNK_SIZE,
+            ));
         }
     }
 
@@ -273,6 +284,44 @@ final readonly class SecretStream
         return $chunk;
     }
 
+    private function replaceOutput(string $temporaryPath, string $outputPath): void
+    {
+        if (!file_exists($outputPath)) {
+            if (!rename($temporaryPath, $outputPath)) {
+                throw new FileAccessException('Unable to finalize output file: ' . $outputPath);
+            }
+
+            return;
+        }
+
+        if (!is_file($outputPath)) {
+            throw new FileAccessException('Output path is not a file: ' . $outputPath);
+        }
+
+        if (PHP_OS_FAMILY !== 'Windows' && rename($temporaryPath, $outputPath)) {
+            return;
+        }
+
+        $backupPath = $temporaryPath . '.backup';
+        if (!rename($outputPath, $backupPath)) {
+            throw new FileAccessException('Unable to back up the existing output file: ' . $outputPath);
+        }
+
+        if (rename($temporaryPath, $outputPath)) {
+            if (!unlink($backupPath) && is_file($backupPath)) {
+                throw new FileAccessException('Unable to delete the previous output file backup.');
+            }
+
+            return;
+        }
+
+        if (!rename($backupPath, $outputPath)) {
+            throw new FileAccessException('Unable to restore the existing output file after replacement failed.');
+        }
+
+        throw new FileAccessException('Unable to finalize output file: ' . $outputPath);
+    }
+
     private function writeBinary(SafeFileWriter $fileWriter, string $data): int
     {
         $written = $fileWriter->__call('binary', [$data]);
@@ -281,5 +330,47 @@ final readonly class SecretStream
         }
 
         return strlen($data);
+    }
+
+    /**
+     * @template TResult
+     * @param \Closure(SafeFileWriter): TResult $operation
+     * @return TResult
+     */
+    private function writeSafely(string $outputPath, \Closure $operation): mixed
+    {
+        $directory = dirname($outputPath);
+        if (!is_dir($directory) || !is_writable($directory)) {
+            throw new FileAccessException('Output directory is not writable: ' . $directory);
+        }
+
+        $temporaryPath = tempnam($directory, '.epicrypt-');
+        if ($temporaryPath === false) {
+            throw new FileAccessException('Unable to create a temporary output file.');
+        }
+
+        $fileWriter = new SafeFileWriter($temporaryPath, false);
+        $committed = false;
+
+        try {
+            $result = $operation($fileWriter);
+            $fileWriter->close();
+
+            $this->replaceOutput($temporaryPath, $outputPath);
+
+            $committed = true;
+
+            return $result;
+        } finally {
+            if (!$committed) {
+                try {
+                    $fileWriter->close();
+                } finally {
+                    if (is_file($temporaryPath) && !unlink($temporaryPath) && is_file($temporaryPath)) {
+                        throw new FileAccessException('Unable to delete temporary output file.');
+                    }
+                }
+            }
+        }
     }
 }

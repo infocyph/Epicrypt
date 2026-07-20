@@ -12,7 +12,7 @@ final readonly class PasswordPolicyValidator
         private PasswordStrength $strength = new PasswordStrength(),
     ) {}
 
-    public function validate(string $password, ?PasswordPolicy $policy = null): PasswordPolicyResult
+    public function validate(#[\SensitiveParameter] string $password, ?PasswordPolicy $policy = null): PasswordPolicyResult
     {
         $policy ??= new PasswordPolicy();
         $violations = [];

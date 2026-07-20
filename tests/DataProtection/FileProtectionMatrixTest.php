@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 use Infocyph\Epicrypt\DataProtection\FileProtector;
 use Infocyph\Epicrypt\Exception\Crypto\DecryptionException;
 use Infocyph\Epicrypt\Generate\KeyMaterial\KeyMaterialGenerator;
@@ -53,9 +55,11 @@ it('fails file decryption with wrong key', function () {
 
     try {
         $protector->encrypt($plain, $encrypted, $correctKey);
+        file_put_contents($decrypted, 'existing output');
 
         expect(fn () => $protector->decrypt($encrypted, $decrypted, $wrongKey))
-            ->toThrow(DecryptionException::class);
+            ->toThrow(DecryptionException::class)
+            ->and(file_get_contents($decrypted))->toBe('existing output');
     } finally {
         removeMatrixTempDirectory($root);
     }
@@ -79,7 +83,8 @@ it('fails file decryption when ciphertext is tampered', function () {
         file_put_contents($encrypted, substr($ciphertext, 0, max(0, strlen($ciphertext) - 5)));
 
         expect(fn () => $protector->decrypt($encrypted, $decrypted, $key, 256))
-            ->toThrow(DecryptionException::class);
+            ->toThrow(DecryptionException::class)
+            ->and(file_exists($decrypted))->toBeFalse();
     } finally {
         removeMatrixTempDirectory($root);
     }

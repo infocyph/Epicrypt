@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 use Infocyph\Epicrypt\DataProtection\EnvelopeProtector;
 use Infocyph\Epicrypt\DataProtection\FileProtector;
 use Infocyph\Epicrypt\DataProtection\ProtectionAad;
