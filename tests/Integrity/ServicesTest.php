@@ -34,6 +34,18 @@ it('creates stable content fingerprints', function () {
     expect($fingerprintA)->toBe($fingerprintB);
 });
 
+it('frames fingerprint metadata without delimiter or type ambiguity', function () {
+    $fingerprinter = new ContentFingerprinter;
+
+    $combinedValue = $fingerprinter->fingerprint('payload', ['a' => 'b&c=d']);
+    $separateValues = $fingerprinter->fingerprint('payload', ['a' => 'b', 'c' => 'd']);
+    $booleanValue = $fingerprinter->fingerprint('payload', ['enabled' => true]);
+    $stringValue = $fingerprinter->fingerprint('payload', ['enabled' => '1']);
+
+    expect($combinedValue)->not->toBe($separateValues)
+        ->and($booleanValue)->not->toBe($stringValue);
+});
+
 it('rejects unsupported hash algorithms for integrity services', function () {
     $tmpPath = tempnam(sys_get_temp_dir(), 'epicrypt-int-');
     file_put_contents($tmpPath, 'file-content');
