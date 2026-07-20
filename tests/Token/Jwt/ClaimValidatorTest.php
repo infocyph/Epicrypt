@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 use Infocyph\Epicrypt\Exception\Token\InvalidClaimException;
 use Infocyph\Epicrypt\Token\Jwt\Validation\ExpectedJwtClaims;
 use Infocyph\Epicrypt\Token\Jwt\Validation\JwtValidator;

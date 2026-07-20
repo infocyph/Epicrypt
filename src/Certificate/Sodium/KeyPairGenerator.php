@@ -12,10 +12,9 @@ final class KeyPairGenerator implements KeyPairGeneratorInterface
     /**
      * @return array{private: string, public: string}
      */
-    public function generate(?string $passphrase = null, bool $asBase64Url = false): array
+    // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter -- Sodium keys do not support passphrase wrapping.
+    public function generate(#[\SensitiveParameter] ?string $passphrase = null, bool $asBase64Url = false): array
     {
-        unset($passphrase);
-
         return SodiumKeyPairFactory::generate(
             createKeyPair: sodium_crypto_box_keypair(...),
             extractPrivate: sodium_crypto_box_secretkey(...),

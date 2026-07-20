@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 use Infocyph\Epicrypt\Internal\VersionedPayload;
 
 it('encodes compact payloads with reserved empty key id marker', function () {

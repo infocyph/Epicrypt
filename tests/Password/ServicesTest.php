@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 use Infocyph\Epicrypt\Exception\Password\SecretProtectionException;
 use Infocyph\Epicrypt\Password\Enum\PasswordHashAlgorithm;
 use Infocyph\Epicrypt\Password\Generator\PasswordGenerator;
@@ -170,6 +172,13 @@ it('applies improved password strength penalties', function () {
 
     expect($strong)->toBeGreaterThan($weak);
     expect($identityPenalty)->toBeLessThan($strong);
+});
+
+it('keeps password strength scores within the documented range', function () {
+    $strength = new PasswordStrength;
+
+    expect($strength->score('123456'))->toBe(0)
+        ->and($strength->score(str_repeat('A1!', 100)))->toBeBetween(0, 100);
 });
 
 it('provides a null compromised password checker implementation', function () {

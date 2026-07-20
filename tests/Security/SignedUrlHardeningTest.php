@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 use Infocyph\Epicrypt\Exception\ConfigurationException;
 use Infocyph\Epicrypt\Security\SignedUrl;
 use Infocyph\Epicrypt\Security\SignedUrlOptions;

@@ -121,6 +121,9 @@ SecretStream (File Streaming)
 
 - default algorithm: ``xchacha20poly1305``
 - advanced compatibility mode: ``unauthenticated-xchacha20`` (requires explicit opt-in)
+- chunk sizes must be between 1 byte and 16 MiB; the default is 8 KiB
+- output is staged in the destination directory and committed only after the complete operation succeeds
+- existing destinations use atomic replacement where supported and backup/rollback replacement on Windows
 
 Binary Codec
 ------------
