@@ -97,6 +97,7 @@ final class JwtToken
 
     private static function rejectDuplicateObjectKeys(string $json): void
     {
+        /** @var list<array<string, true>> $objects */
         $objects = [];
         $length = strlen($json);
         for ($offset = 0; $offset < $length; $offset++) {
@@ -124,11 +125,15 @@ final class JwtToken
             if (!is_string($key)) {
                 throw new JsonException('JSON object key must be a string.');
             }
-            $objectIndex = array_key_last($objects);
-            if (isset($objects[$objectIndex][$key])) {
+            $object = array_pop($objects);
+            if ($object === null) {
+                throw new JsonException('JSON object key is outside an object.');
+            }
+            if (isset($object[$key])) {
                 throw new JsonException('Duplicate JSON object key.');
             }
-            $objects[$objectIndex][$key] = true;
+            $object[$key] = true;
+            $objects[] = $object;
         }
     }
 }
