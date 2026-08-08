@@ -5,14 +5,12 @@ declare(strict_types=1);
 namespace Infocyph\Epicrypt\Integrity;
 
 use Infocyph\Epicrypt\Exception\Integrity\HashingException;
-use Infocyph\Epicrypt\Integrity\Contract\HasherInterface;
-use Infocyph\Epicrypt\Internal\HashAlgorithm;
 use Infocyph\Epicrypt\Internal\SecureCompare;
 
-final readonly class StringHasher implements HasherInterface
+final readonly class StringHasher
 {
     public function __construct(
-        private string $algorithm = 'sha256',
+        private IntegrityAlgorithm $algorithm = IntegrityAlgorithm::SHA256,
     ) {}
 
     /**
@@ -32,7 +30,7 @@ final readonly class StringHasher implements HasherInterface
         }
         $binary = $binaryOption;
 
-        if ($this->algorithm === 'blake2b') {
+        if ($this->algorithm === IntegrityAlgorithm::BLAKE2B) {
             $lengthOption = $options['length'] ?? SODIUM_CRYPTO_GENERICHASH_BYTES;
             if (!is_int($lengthOption)) {
                 throw new HashingException('Blake2b length must be an integer.');
@@ -46,16 +44,10 @@ final readonly class StringHasher implements HasherInterface
             return $binary ? $hash : sodium_bin2hex($hash);
         }
 
-        try {
-            HashAlgorithm::assertSupported($this->algorithm);
-        } catch (\InvalidArgumentException $e) {
-            throw new HashingException($e->getMessage(), 0, $e);
-        }
-
         if ($key === '') {
-            $hash = hash($this->algorithm, $data, $binary);
+            $hash = hash($this->algorithm->value, $data, $binary);
         } else {
-            $hash = hash_hmac($this->algorithm, $data, $key, $binary);
+            $hash = hash_hmac($this->algorithm->value, $data, $key, $binary);
         }
 
         return $hash;

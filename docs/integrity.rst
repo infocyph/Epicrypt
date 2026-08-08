@@ -1,50 +1,20 @@
-Integrity Domain
-================
+Integrity
+=========
 
-Namespace: ``Infocyph\\Epicrypt\\Integrity``
-
-Scope
------
-
-- string hashing
-- file hashing
-- digest verification
-- timing-safe comparison support
-- content fingerprint support
-
-String Hashing
---------------
+Security-facing hashing accepts only SHA-256, SHA-384, SHA-512, and BLAKE2b.
 
 .. code-block:: php
 
+   <?php
+
+   declare(strict_types=1);
+
+   use Infocyph\Epicrypt\Integrity\IntegrityAlgorithm;
    use Infocyph\Epicrypt\Integrity\StringHasher;
 
-   $hasher = new StringHasher('sha256');
-   $digest = $hasher->hash('payload');
-   $isValid = $hasher->verify('payload', $digest);
+   $hasher = new StringHasher(IntegrityAlgorithm::SHA512);
+   $digest = $hasher->hash('content');
+   $valid = $hasher->verify('content', $digest);
 
-HMAC
-~~~~
-
-.. code-block:: php
-
-   $digest = $hasher->hash('payload', ['key' => 'hmac-secret']);
-
-Blake2b
-~~~~~~~
-
-.. code-block:: php
-
-   $blake = new StringHasher('blake2b');
-   $digest = $blake->hash('payload', ['length' => 32]);
-
-File Hashing
-------------
-
-.. code-block:: php
-
-   use Infocyph\Epicrypt\Integrity\FileHasher;
-
-   $fileHasher = new FileHasher('sha256');
-   $digest = $fileHasher->hash('/path/to/file.txt');
-   $isValid = $fileHasher->verify('/path/to/file.txt', $digest);
+Use a non-empty key option when message authentication rather than an unkeyed
+digest is required.

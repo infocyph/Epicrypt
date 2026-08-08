@@ -13,11 +13,19 @@ use Infocyph\Epicrypt\Exception\ConfigurationException;
 final class OpenSslExtensionConfig
 {
     /**
-     * @param array<string, string> $distinguishedName
+     * @param array<array-key, mixed> $distinguishedName
      */
     public static function createTempConfig(CertificateOptions $options, array $distinguishedName = []): string
     {
-        $commonName = self::resolveCommonName($distinguishedName);
+        $validatedDistinguishedName = [];
+        foreach ($distinguishedName as $key => $value) {
+            if (!is_string($key) || !is_string($value)) {
+                throw new ConfigurationException('OpenSSL distinguished name values must be strings.');
+            }
+            self::assertConfigValue($value, 'distinguished name');
+            $validatedDistinguishedName[$key] = $value;
+        }
+        $commonName = self::resolveCommonName($validatedDistinguishedName);
 
         $lines = [
             '[req]',
@@ -32,30 +40,18 @@ final class OpenSslExtensionConfig
             '[v3_req]',
         ];
 
-        $sanEntries = [];
-        $dnsIndex = 1;
-        foreach ($options->sanDns as $dns) {
-            $sanEntries[] = sprintf('DNS.%d=%s', $dnsIndex++, $dns);
-        }
-        $ipIndex = 1;
-        foreach ($options->sanIp as $ip) {
-            $sanEntries[] = sprintf('IP.%d=%s', $ipIndex++, $ip);
-        }
-        $emailIndex = 1;
-        foreach ($options->sanEmail as $email) {
-            $sanEntries[] = sprintf('email.%d=%s', $emailIndex++, $email);
-        }
+        $sanEntries = self::sanEntries($options);
 
         if ($sanEntries !== []) {
             $lines[] = 'subjectAltName=@alt_names';
         }
 
         if ($options->keyUsage !== []) {
-            $lines[] = 'keyUsage=' . implode(', ', $options->keyUsage);
+            $lines[] = 'keyUsage=' . implode(', ', array_map(static fn($usage): string => $usage->value, $options->keyUsage));
         }
 
         if ($options->extendedKeyUsage !== []) {
-            $lines[] = 'extendedKeyUsage=' . implode(', ', $options->extendedKeyUsage);
+            $lines[] = 'extendedKeyUsage=' . implode(', ', array_map(static fn($usage): string => $usage->value, $options->extendedKeyUsage));
         }
 
         $lines[] = 'basicConstraints=' . ($options->isCa ? 'critical,CA:TRUE' : 'CA:FALSE');
@@ -82,6 +78,13 @@ final class OpenSslExtensionConfig
         return $tempFile;
     }
 
+    private static function assertConfigValue(string $value, string $label): void
+    {
+        if (str_contains($value, "\r") || str_contains($value, "\n") || str_contains($value, "\0")) {
+            throw new ConfigurationException(sprintf('OpenSSL %s cannot contain CR, LF, or NUL.', $label));
+        }
+    }
+
     /**
      * @param array<string, string> $distinguishedName
      */
@@ -95,5 +98,22 @@ final class OpenSslExtensionConfig
         $trimmed = trim($commonName);
 
         return $trimmed === '' ? 'localhost' : $trimmed;
+    }
+
+    /** @return list<string> */
+    private static function sanEntries(CertificateOptions $options): array
+    {
+        $entries = [];
+        foreach ($options->sanDns as $index => $dns) {
+            $entries[] = sprintf('DNS.%d=%s', $index + 1, $dns);
+        }
+        foreach ($options->sanIp as $index => $ip) {
+            $entries[] = sprintf('IP.%d=%s', $index + 1, $ip);
+        }
+        foreach ($options->sanEmail as $index => $email) {
+            $entries[] = sprintf('email.%d=%s', $index + 1, $email);
+        }
+
+        return $entries;
     }
 }

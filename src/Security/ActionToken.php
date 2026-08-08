@@ -12,14 +12,14 @@ final readonly class ActionToken extends AbstractPurposeToken
     protected const int DEFAULT_TTL_SECONDS = 900;
 
     /**
-     * @param array<string, scalar> $context
+     * @param array<string, scalar> $metadata
      */
-    public function issue(string $subject, string $action, array $context = []): string
+    public function issue(string $subject, string $action, array $metadata = []): string
     {
         return $this->issueForPurpose(SecurityTokenPurpose::ACTION_TOKEN, [
             'sub' => $subject,
             'action' => $action,
-            'ctx' => $context,
+            'ctx' => $metadata,
         ]);
     }
 

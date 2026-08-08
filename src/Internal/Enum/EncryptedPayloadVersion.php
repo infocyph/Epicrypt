@@ -6,5 +6,5 @@ namespace Infocyph\Epicrypt\Internal\Enum;
 
 enum EncryptedPayloadVersion: string
 {
-    case V1 = 'epc1';
+    case V2 = 'epc2';
 }

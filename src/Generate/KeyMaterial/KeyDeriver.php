@@ -12,13 +12,13 @@ use Infocyph\Epicrypt\Internal\HashAlgorithm;
 
 final class KeyDeriver
 {
-    /**
-     * @param array<string, mixed>|KeyDerivationContext $context
-     */
-    public function deriveFromPassword(string $password, string $salt, int $length = 32, array|KeyDerivationContext $context = []): string
-    {
-        $derivationContext = $this->normalizeContext($context);
-        $profile = $derivationContext->profile;
+    public function deriveFromPassword(
+        string $password,
+        string $salt,
+        int $length = 32,
+        KeyDerivationContext $context = new KeyDerivationContext(),
+    ): string {
+        $derivationContext = $context;
         $saltBinary = $this->decodeMaybeBinary($salt, $derivationContext->saltIsBinary, 'Salt');
         if (strlen($saltBinary) !== SODIUM_CRYPTO_PWHASH_SALTBYTES) {
             throw new ConfigurationException(sprintf('Salt must be %d bytes.', SODIUM_CRYPTO_PWHASH_SALTBYTES));
@@ -28,20 +28,20 @@ final class KeyDeriver
             LengthGuard::atLeastOne($length, 'Derived key length'),
             $password,
             $saltBinary,
-            $derivationContext->opslimit ?? $profile->passwordDerivationOpsLimit(),
-            $derivationContext->memlimit ?? $profile->passwordDerivationMemLimit(),
+            $derivationContext->opslimit ?? SODIUM_CRYPTO_PWHASH_OPSLIMIT_MODERATE,
+            $derivationContext->memlimit ?? SODIUM_CRYPTO_PWHASH_MEMLIMIT_MODERATE,
             SODIUM_CRYPTO_PWHASH_ALG_ARGON2ID13,
         );
 
         return $this->formatOutput($derived, $derivationContext->asBase64Url);
     }
 
-    /**
-     * @param array<string, mixed>|KeyDerivationContext $context
-     */
-    public function hkdf(string $inputKeyMaterial, int $length = 32, array|KeyDerivationContext $context = []): string
-    {
-        $derivationContext = $this->normalizeContext($context);
+    public function hkdf(
+        string $inputKeyMaterial,
+        int $length = 32,
+        KeyDerivationContext $context = new KeyDerivationContext(),
+    ): string {
+        $derivationContext = $context;
         $ikmBinary = $this->decodeMaybeBinary(
             $inputKeyMaterial,
             $derivationContext->inputKeyMaterialIsBinary,
@@ -63,12 +63,13 @@ final class KeyDeriver
         return $this->formatOutput($derived, $derivationContext->asBase64Url);
     }
 
-    /**
-     * @param array<string, mixed>|KeyDerivationContext $context
-     */
-    public function subkey(string $rootKey, int $subkeyId, int $length = 32, array|KeyDerivationContext $context = []): string
-    {
-        $derivationContext = $this->normalizeContext($context);
+    public function subkey(
+        string $rootKey,
+        int $subkeyId,
+        int $length = 32,
+        KeyDerivationContext $context = new KeyDerivationContext(),
+    ): string {
+        $derivationContext = $context;
         $rootKeyBinary = $this->decodeMaybeBinary($rootKey, $derivationContext->rootKeyIsBinary, 'Root key');
         if (strlen($rootKeyBinary) !== SODIUM_CRYPTO_KDF_KEYBYTES) {
             throw new ConfigurationException(sprintf('Root key must be %d bytes.', SODIUM_CRYPTO_KDF_KEYBYTES));
@@ -115,14 +116,6 @@ final class KeyDeriver
     private function formatOutput(string $derived, bool $asBase64Url): string
     {
         return $asBase64Url ? Base64Url::encode($derived) : $derived;
-    }
-
-    /**
-     * @param array<string, mixed>|KeyDerivationContext $context
-     */
-    private function normalizeContext(array|KeyDerivationContext $context): KeyDerivationContext
-    {
-        return $context instanceof KeyDerivationContext ? $context : KeyDerivationContext::fromArray($context);
     }
 
     /**

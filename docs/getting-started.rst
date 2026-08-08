@@ -1,25 +1,12 @@
-Getting Started
+Getting started
 ===============
 
-Installation
-------------
+Epicrypt 2.0 requires PHP 8.4 with Hash, JSON, OpenSSL, and Sodium. Install it
+with Composer and generate cryptographic keys; never use memorable secrets.
 
 .. code-block:: bash
 
    composer require infocyph/epicrypt
-
-Requirements
-------------
-
-- PHP ``8.4+``
-- ``ext-sodium``
-- ``ext-openssl``
-- ``ext-json``
-- ``ext-mbstring``
-- ``ext-hash``
-
-First 5 Minutes
----------------
 
 .. code-block:: php
 
@@ -27,42 +14,15 @@ First 5 Minutes
 
    declare(strict_types=1);
 
-   use Infocyph\Epicrypt\Crypto\AeadCipher;
-   use Infocyph\Epicrypt\Generate\KeyMaterial\KeyMaterialGenerator;
+   use Infocyph\Epicrypt\DataProtection\ProtectionOptions;
+   use Infocyph\Epicrypt\DataProtection\StringProtector;
 
-   $key = (new KeyMaterialGenerator())
-       ->generate(SODIUM_CRYPTO_AEAD_XCHACHA20POLY1305_IETF_KEYBYTES);
+   $key = sodium_bin2base64(random_bytes(32), SODIUM_BASE64_VARIANT_URLSAFE_NO_PADDING);
+   $options = new ProtectionOptions('customer-email', 'tenant=42');
+   $protector = new StringProtector();
 
-   $cipher = new AeadCipher();
-   $ciphertext = $cipher->encrypt('hello epicrypt', $key, ['aad' => 'demo']);
-   $plaintext = $cipher->decrypt($ciphertext, $key, ['aad' => 'demo']);
+   $protected = $protector->protect('alice@example.test', $key, $options);
+   $plaintext = $protector->unprotect($protected, $key, $options);
 
-   var_dump($plaintext); // "hello epicrypt"
-
-Key Format Notes
-----------------
-
-Many Epicrypt APIs accept keys as **Base64URL strings** by default.
-
-- If you pass raw binary keys, provide context flags such as:
-  - ``['key_is_binary' => true]``
-  - ``['nonce_is_binary' => true]`` where relevant
-
-Domain Overview
----------------
-
-- ``Certificate``: PKI/certificates/key-exchange/asymmetric interoperability
-- ``Crypto``: direct crypto primitives (AEAD, secretbox, signatures, MAC)
-- ``Token``: JWT, payload tokens, opaque tokens
-- ``Password``: password generation/hashing and wrapped secrets
-- ``Integrity``: string/file digest and verification helpers
-- ``Generate``: random/nonce/salt/key/token material generation
-- ``DataProtection``: string/file/envelope protection flows
-- ``Security``: signed URLs, CSRF, reset/remember/action verification tokens
-
-Next
-----
-
-- Read :doc:`Architecture <architecture>` first.
-- Use the :doc:`Use Cases hub <use-cases/index>` to choose the right feature quickly.
-- Then jump into the matching capability guide for API details.
+The purpose and additional authenticated data are security boundaries. Supply
+the same values during unprotection and keep key material outside source code.

@@ -5,9 +5,8 @@ declare(strict_types=1);
 namespace Infocyph\Epicrypt\Token\Opaque;
 
 use Infocyph\Epicrypt\Generate\Support\LengthGuard;
-use Infocyph\Epicrypt\Token\Contract\OpaqueTokenInterface;
 
-final class OpaqueToken implements OpaqueTokenInterface
+final class OpaqueToken
 {
     public function hash(string $token): string
     {

@@ -5,16 +5,16 @@ declare(strict_types=1);
 namespace Infocyph\Epicrypt\Certificate\OpenSSL;
 
 use Infocyph\Epicrypt\Certificate\CertificateOptions;
-use Infocyph\Epicrypt\Certificate\Contract\CertificateBuilderInterface;
+use Infocyph\Epicrypt\Certificate\Enum\CertificateDigest;
 use Infocyph\Epicrypt\Certificate\OpenSSL\Support\OpenSslCertificateSigner;
 use Infocyph\Epicrypt\Certificate\OpenSSL\Support\OpenSslExtensionConfig;
 use Infocyph\Epicrypt\Certificate\Support\Pem;
 use Infocyph\Epicrypt\Exception\ConfigurationException;
 
-final readonly class CertificateBuilder implements CertificateBuilderInterface
+final readonly class CertificateBuilder
 {
     public function __construct(
-        private string $digestAlgorithm = 'sha512',
+        private CertificateDigest $digestAlgorithm = CertificateDigest::SHA512,
     ) {}
 
     /**
@@ -25,7 +25,7 @@ final readonly class CertificateBuilder implements CertificateBuilderInterface
         $privateResource = Pem::requirePrivateKeyResource($privateKey, $passphrase);
         $effectiveOptions = $options ?? new CertificateOptions(days: $days, digestAlgorithm: $this->digestAlgorithm);
         $requestedDays = $effectiveOptions->days;
-        $digestAlgorithm = $effectiveOptions->digestAlgorithm;
+        $digestAlgorithm = $effectiveOptions->digestAlgorithm->value;
         $tempConfigPath = OpenSslExtensionConfig::createTempConfig($effectiveOptions, $distinguishedName);
         $csrConfig = ['digest_alg' => $digestAlgorithm];
         $signConfig = ['digest_alg' => $digestAlgorithm];

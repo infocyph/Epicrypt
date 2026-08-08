@@ -4,74 +4,223 @@ declare(strict_types=1);
 
 namespace Infocyph\Epicrypt\Token\Jwt;
 
-use Infocyph\Epicrypt\Exception\Token\UnsupportedAlgorithmException;
-use Infocyph\Epicrypt\Internal\Clock\ClockInterface;
+use Infocyph\Epicrypt\Exception\ConfigurationException;
+use Infocyph\Epicrypt\Internal\Base64Url;
 use Infocyph\Epicrypt\Internal\Clock\SystemClock;
-use Infocyph\Epicrypt\Security\Policy\SecurityProfile;
+use Infocyph\Epicrypt\Security\KeyPurpose;
+use Infocyph\Epicrypt\Security\KeyRing;
 use Infocyph\Epicrypt\Token\Jwt\Enum\SymmetricJwtAlgorithm;
-use Infocyph\Epicrypt\Token\Jwt\Support\AbstractJwt;
-use Infocyph\Epicrypt\Token\Jwt\Validation\ExpectedJwtClaims;
-use Infocyph\Epicrypt\Token\Jwt\Validation\JwtValidationOptions;
-use Infocyph\Epicrypt\Token\Jwt\Validation\RegisteredClaims;
+use Infocyph\Epicrypt\Token\Jwt\Support\JwtToken;
+use Psr\Clock\ClockInterface;
+use Throwable;
 
-final readonly class SymmetricJwt extends AbstractJwt
+final readonly class SymmetricJwt
 {
-    public function __construct(
-        private SymmetricJwtAlgorithm $algorithm = SymmetricJwtAlgorithm::HS512,
-        RegisteredClaims|ExpectedJwtClaims|null $expectedClaims = null,
-        ?JwtValidationOptions $validationOptions = null,
-        ?ClockInterface $clock = null,
+    private const string ISSUER = 'issuer';
+
+    private const string VERIFIER = 'verifier';
+
+    private function __construct(
+        private string $mode,
+        #[\SensitiveParameter]
+        private string|KeyRing $key,
+        private SymmetricJwtAlgorithm $algorithm,
+        private string $type,
+        private ?string $keyId,
+        private ?JwtPolicy $policy,
+        private ?JwtReplayStoreInterface $replayStore,
+        private ClockInterface $clock,
     ) {
-        parent::__construct('symmetric', $expectedClaims, $validationOptions ?? new JwtValidationOptions(), $clock ?? new SystemClock());
+        if ($this->type === '' || strlen($this->type) > 128) {
+            throw new ConfigurationException('JWT type must contain between 1 and 128 bytes.');
+        }
+        if ($this->keyId !== null && preg_match('/\A[A-Za-z0-9_-]{1,128}\z/D', $this->keyId) !== 1) {
+            throw new ConfigurationException('JWT key id must be a Base64URL-safe identifier.');
+        }
+        if ($this->policy !== null && $this->policy->replayMode !== JwtReplayMode::NONE && $this->replayStore === null) {
+            throw new ConfigurationException('A replay store is required by the selected JWT replay policy.');
+        }
+        if (is_string($this->key)) {
+            self::assertKeySize($this->key, $this->algorithm);
+        }
     }
 
-    public static function forProfile(SecurityProfile $profile = SecurityProfile::MODERN, RegisteredClaims|ExpectedJwtClaims|null $expectedClaims = null, ?JwtValidationOptions $validationOptions = null, ?ClockInterface $clock = null): self
+    public static function generateBinaryKey(SymmetricJwtAlgorithm $algorithm = SymmetricJwtAlgorithm::HS512): string
     {
-        return new self($profile->defaultSymmetricJwtAlgorithm(), $expectedClaims, $validationOptions, $clock);
+        return random_bytes(self::minimumKeyBytes($algorithm));
     }
 
-    protected function algorithmHeaderValue(mixed $algorithm): string
+    public static function generateEncodedKey(SymmetricJwtAlgorithm $algorithm = SymmetricJwtAlgorithm::HS512): string
     {
-        if (!$algorithm instanceof SymmetricJwtAlgorithm) {
-            throw new UnsupportedAlgorithmException('Invalid or unsupported algorithm.');
+        return Base64Url::encode(self::generateBinaryKey($algorithm));
+    }
+
+    public static function issuer(
+        #[\SensitiveParameter]
+        string $key,
+        string $type,
+        ?string $keyId = null,
+        SymmetricJwtAlgorithm $algorithm = SymmetricJwtAlgorithm::HS512,
+        ClockInterface $clock = new SystemClock(),
+    ): self {
+        return new self(self::ISSUER, $key, $algorithm, $type, $keyId, null, null, $clock);
+    }
+
+    public static function verifier(
+        #[\SensitiveParameter]
+        string|KeyRing $key,
+        JwtPolicy $policy,
+        SymmetricJwtAlgorithm $algorithm = SymmetricJwtAlgorithm::HS512,
+        ?JwtReplayStoreInterface $replayStore = null,
+        ClockInterface $clock = new SystemClock(),
+    ): self {
+        return new self(self::VERIFIER, $key, $algorithm, $policy->expectedType, null, $policy, $replayStore, $clock);
+    }
+
+    public function issue(JwtClaims $claims): string
+    {
+        if ($this->mode !== self::ISSUER || !is_string($this->key)) {
+            throw new ConfigurationException('This JWT instance is not configured for issuance.');
         }
 
-        return $algorithm->value;
+        $header = ['alg' => $this->algorithm->value, 'typ' => $this->type];
+        if ($this->keyId !== null) {
+            $header['kid'] = $this->keyId;
+        }
+        [$encodedHeader, $encodedPayload] = JwtToken::encodeSegments($header, $claims->toArray());
+        $input = $encodedHeader . '.' . $encodedPayload;
+        $signature = hash_hmac($this->algorithm->hmacAlgorithm(), $input, $this->key, true);
+
+        return $input . '.' . Base64Url::encode($signature);
     }
 
-    protected function configuredAlgorithm(): SymmetricJwtAlgorithm
+    public function verify(string $token): bool
     {
-        return $this->algorithm;
+        return $this->verifyResult($token)->valid;
     }
 
-    protected function parseAlgorithmFromHeader(string $algorithm): SymmetricJwtAlgorithm
+    public function verifyResult(string $token): JwtVerificationResult
     {
-        return SymmetricJwtAlgorithm::fromHeader($algorithm);
-    }
-
-    protected function sign(string $input, string $resolvedKey): string
-    {
-        return hash_hmac(
-            $this->algorithm->hmacAlgorithm(),
-            $input,
-            $resolvedKey,
-            true,
-        );
-    }
-
-    protected function verifySignature(string $input, string $signature, string $resolvedKey, mixed $algorithm): bool
-    {
-        if (!$algorithm instanceof SymmetricJwtAlgorithm) {
-            throw new UnsupportedAlgorithmException('Invalid or unsupported algorithm.');
+        if ($this->mode !== self::VERIFIER || $this->policy === null) {
+            throw new ConfigurationException('This JWT instance is not configured for verification.');
         }
 
-        $expected = hash_hmac(
-            $algorithm->hmacAlgorithm(),
-            $input,
-            $resolvedKey,
-            true,
-        );
+        try {
+            [$encodedHeader, $encodedPayload, $signature, $header, $claims] = JwtToken::parse($token);
+        } catch (Throwable) {
+            return JwtVerificationResult::failure(JwtFailureReason::MALFORMED);
+        }
 
-        return hash_equals($expected, $signature);
+        $headerFailure = $this->validateHeader($header);
+        if ($headerFailure !== null) {
+            return JwtVerificationResult::failure($headerFailure);
+        }
+
+        [$resolvedKey, $matchedKeyId, $keyFailure] = $this->resolveKey($header['kid'] ?? null);
+        if ($keyFailure !== null) {
+            return JwtVerificationResult::failure($keyFailure);
+        }
+        if (!is_string($resolvedKey)) {
+            return JwtVerificationResult::failure(JwtFailureReason::KEY_NOT_USABLE);
+        }
+
+        $expected = hash_hmac($this->algorithm->hmacAlgorithm(), $encodedHeader . '.' . $encodedPayload, $resolvedKey, true);
+        if (!hash_equals($expected, $signature)) {
+            return JwtVerificationResult::failure(JwtFailureReason::INVALID_SIGNATURE);
+        }
+
+        $validation = JwtValidator::validate($claims, $this->policy, $this->clock->now()->getTimestamp());
+        if ($validation instanceof JwtFailureReason) {
+            return JwtVerificationResult::failure($validation);
+        }
+
+        if (!$this->consumeReplay($validation['issuer'], $validation['jwt_id'], $validation['expires_at'])) {
+            return JwtVerificationResult::failure(JwtFailureReason::REPLAYED);
+        }
+
+        return JwtVerificationResult::success($claims, $header, $matchedKeyId);
+    }
+
+    private static function assertKeySize(string $key, SymmetricJwtAlgorithm $algorithm): void
+    {
+        $minimum = self::minimumKeyBytes($algorithm);
+        if (strlen($key) < $minimum) {
+            throw new ConfigurationException(sprintf('%s keys must contain at least %d raw bytes.', $algorithm->value, $minimum));
+        }
+    }
+
+    /** @return int<1, max> */
+    private static function minimumKeyBytes(SymmetricJwtAlgorithm $algorithm): int
+    {
+        return match ($algorithm) {
+            SymmetricJwtAlgorithm::HS256 => 32,
+            SymmetricJwtAlgorithm::HS384 => 48,
+            SymmetricJwtAlgorithm::HS512 => 64,
+        };
+    }
+
+    private function consumeReplay(string $issuer, string $jwtId, int $expiresAt): bool
+    {
+        if ($this->policy?->replayMode === JwtReplayMode::NONE) {
+            return true;
+        }
+
+        return $this->replayStore?->consume($issuer, $jwtId, $expiresAt) === true;
+    }
+
+    /** @return array{?string, ?string, ?JwtFailureReason} */
+    private function resolveKey(mixed $keyId): array
+    {
+        if (is_string($this->key)) {
+            return [$this->key, is_string($keyId) ? $keyId : null, null];
+        }
+        if (!is_string($keyId) || $keyId === '') {
+            return [null, null, JwtFailureReason::UNKNOWN_KEY];
+        }
+
+        $entry = $this->key->resolveForVerification(
+            $keyId,
+            KeyPurpose::JWT_SIGNING,
+            $this->algorithm->value,
+            $this->policy?->expectedIssuer,
+        );
+        if ($entry === null) {
+            return [null, null, JwtFailureReason::UNKNOWN_KEY];
+        }
+
+        try {
+            self::assertKeySize($entry->key, $this->algorithm);
+        } catch (ConfigurationException) {
+            return [null, null, JwtFailureReason::KEY_NOT_USABLE];
+        }
+
+        return [$entry->key, $entry->id, null];
+    }
+
+    /**
+     * @param array<string, mixed> $header
+     */
+    private function validateHeader(array $header): ?JwtFailureReason
+    {
+        if (!isset($header['alg'], $header['typ']) || !is_string($header['alg']) || !is_string($header['typ'])) {
+            return JwtFailureReason::MALFORMED;
+        }
+        if (SymmetricJwtAlgorithm::tryFrom($header['alg']) === null) {
+            return JwtFailureReason::UNSUPPORTED_ALGORITHM;
+        }
+        if ($header['alg'] !== $this->algorithm->value) {
+            return JwtFailureReason::ALGORITHM_MISMATCH;
+        }
+        if (!hash_equals($this->type, $header['typ'])) {
+            return JwtFailureReason::INVALID_TYPE;
+        }
+        if (isset($header['cty']) || isset($header['crit'])) {
+            return JwtFailureReason::MALFORMED;
+        }
+        if (isset($header['kid']) && (!is_string($header['kid']) || preg_match('/\A[A-Za-z0-9_-]{1,128}\z/D', $header['kid']) !== 1)) {
+            return JwtFailureReason::MALFORMED;
+        }
+
+        return null;
     }
 }

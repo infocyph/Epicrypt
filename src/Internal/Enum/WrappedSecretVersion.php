@@ -6,5 +6,5 @@ namespace Infocyph\Epicrypt\Internal\Enum;
 
 enum WrappedSecretVersion: string
 {
-    case V1 = 'eps1';
+    case V2 = 'eps2';
 }

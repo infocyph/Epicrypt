@@ -6,10 +6,10 @@ namespace Infocyph\Epicrypt\Internal;
 
 use Infocyph\Epicrypt\Exception\Token\ExpiredTokenException;
 use Infocyph\Epicrypt\Exception\Token\InvalidTokenException;
-use Infocyph\Epicrypt\Internal\Clock\ClockInterface;
 use Infocyph\Epicrypt\Internal\Clock\SystemClock;
 use Infocyph\Epicrypt\Internal\Enum\SignedPayloadAlgorithm;
 use Infocyph\Epicrypt\Internal\Enum\SignedPayloadVersion;
+use Psr\Clock\ClockInterface;
 
 /**
  * @internal
@@ -34,7 +34,7 @@ final readonly class SignedPayloadCodec
         $header = [
             'alg' => strtoupper($this->algorithm->value),
             'typ' => 'SPT',
-            'v' => SignedPayloadVersion::V1->value,
+            'v' => SignedPayloadVersion::V2->value,
         ];
 
         if ($type !== null) {
@@ -42,7 +42,7 @@ final readonly class SignedPayloadCodec
         }
 
         $payload = $claims;
-        $payload['iat'] = $this->clock->now();
+        $payload['iat'] = $this->clock->now()->getTimestamp();
         if ($expiresAt !== null) {
             $payload['exp'] = $expiresAt;
         }
@@ -72,7 +72,7 @@ final readonly class SignedPayloadCodec
         }
 
         $header = Json::decodeToArray(Base64Url::decode($encodedHeader));
-        if (isset($header['v']) && (!is_numeric($header['v']) || (int) $header['v'] !== SignedPayloadVersion::V1->value)) {
+        if (isset($header['v']) && (!is_numeric($header['v']) || (int) $header['v'] !== SignedPayloadVersion::V2->value)) {
             throw new InvalidTokenException('Unsupported signed payload version.');
         }
 
@@ -96,7 +96,7 @@ final readonly class SignedPayloadCodec
      */
     private function validateTemporalClaims(array $payload): void
     {
-        $now = $this->clock->now();
+        $now = $this->clock->now()->getTimestamp();
 
         if (array_key_exists('iat', $payload) && !is_numeric($payload['iat'])) {
             throw new InvalidTokenException('Invalid iat claim.');

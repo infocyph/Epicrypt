@@ -6,21 +6,19 @@ namespace Infocyph\Epicrypt\Security;
 
 use Infocyph\Epicrypt\Exception\ConfigurationException;
 use Infocyph\Epicrypt\Internal\Base64Url;
-use Infocyph\Epicrypt\Internal\Clock\ClockInterface;
 use Infocyph\Epicrypt\Internal\Clock\SystemClock;
 use Infocyph\Epicrypt\Internal\Enum\SignedUrlVersion;
 use Infocyph\Epicrypt\Internal\SecureCompare;
 use Infocyph\Epicrypt\Internal\SecurityPolicy;
-use Infocyph\Epicrypt\Security\Contract\SignedUrlGeneratorInterface;
-use Infocyph\Epicrypt\Security\Contract\SignedUrlVerifierInterface;
 use Infocyph\Epicrypt\Security\Support\SignedUrlGuard;
+use Psr\Clock\ClockInterface;
 
 /**
  * @phpstan-type QueryScalar bool|float|int|string
  * @phpstan-type QueryArray array<array-key, QueryScalar>
  * @phpstan-type QueryMap array<string, QueryScalar|QueryArray>
  */
-final readonly class SignedUrl implements SignedUrlGeneratorInterface, SignedUrlVerifierInterface
+final readonly class SignedUrl
 {
     private const string METHOD_PARAM = 'ep_m';
 
@@ -50,7 +48,7 @@ final readonly class SignedUrl implements SignedUrlGeneratorInterface, SignedUrl
         }
 
         $merged = $normalized;
-        $merged[$this->versionParam] = SignedUrlVersion::V1->value;
+        $merged[$this->versionParam] = SignedUrlVersion::V2->value;
         if ($expiresAt !== null) {
             $merged[$this->expiresParam] = $expiresAt;
         }
@@ -96,7 +94,7 @@ final readonly class SignedUrl implements SignedUrlGeneratorInterface, SignedUrl
         $version = $signatureData['version'];
 
         unset($query[$this->signatureParam]);
-        $expiration = SignedUrlGuard::validateExpirationFromQuery($query, $this->expiresParam, $this->clock->now(), $version);
+        $expiration = SignedUrlGuard::validateExpirationFromQuery($query, $this->expiresParam, $this->clock->now()->getTimestamp(), $version);
         if ($expiration !== null) {
             return $expiration;
         }

@@ -1,12 +1,12 @@
 # Epicrypt
 
 [![Security & Standards](https://github.com/infocyph/Epicrypt/actions/workflows/security-standards.yml/badge.svg)](https://github.com/infocyph/Epicrypt/actions/workflows/security-standards.yml)
-[![Documentation](https://img.shields.io/badge/Documentation-Epicrypt-blue?logo=readthedocs&logoColor=white)](https://docs.infocyph.com/projects/Epicrypt/)
 ![Packagist Downloads](https://img.shields.io/packagist/dt/infocyph/Epicrypt?color=green&link=https%3A%2F%2Fpackagist.org%2Fpackages%2Finfocyph%2FEpicrypt)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
 ![Packagist Version](https://img.shields.io/packagist/v/infocyph/Epicrypt)
 ![Packagist PHP Version](https://img.shields.io/packagist/dependency-v/infocyph/Epicrypt/php)
 ![GitHub Code Size](https://img.shields.io/github/languages/code-size/infocyph/Epicrypt)
+[![Documentation](https://img.shields.io/badge/Documentation-Epicrypt-blue?logo=readthedocs&logoColor=white)](https://docs.infocyph.com/projects/Epicrypt/)
 
 Epicrypt is a capability-first PHP security toolkit.
 
@@ -30,7 +30,7 @@ composer require infocyph/epicrypt
 ## Requirements
 
 - PHP `>=8.4`
-- `ext-sodium`, `ext-openssl`, `ext-json`, `ext-mbstring`, `ext-hash`
+- `ext-sodium`, `ext-openssl`, `ext-json`, `ext-hash`
 
 ## Usage Examples
 
@@ -39,14 +39,18 @@ composer require infocyph/epicrypt
 ```php
 <?php
 
+declare(strict_types=1);
+
+use Infocyph\Epicrypt\DataProtection\ProtectionOptions;
 use Infocyph\Epicrypt\DataProtection\StringProtector;
 use Infocyph\Epicrypt\Generate\KeyMaterial\KeyMaterialGenerator;
 
-$key = (new KeyMaterialGenerator())->forSecretBox();
-$protector = new StringProtector();
+$key = (new KeyMaterialGenerator())->forAead();
+$options = new ProtectionOptions('application-secret');
+$protector = StringProtector::create();
 
-$ciphertext = $protector->encrypt('secret-value', $key);
-$plaintext = $protector->decrypt($ciphertext, $key);
+$ciphertext = $protector->protect('secret-value', $key, $options);
+$plaintext = $protector->unprotect($ciphertext, $key, $options);
 ```
 
 ### Encrypt and decrypt a file
@@ -54,14 +58,18 @@ $plaintext = $protector->decrypt($ciphertext, $key);
 ```php
 <?php
 
+declare(strict_types=1);
+
 use Infocyph\Epicrypt\DataProtection\FileProtector;
+use Infocyph\Epicrypt\DataProtection\ProtectionOptions;
 use Infocyph\Epicrypt\Generate\KeyMaterial\KeyMaterialGenerator;
 
 $key = (new KeyMaterialGenerator())->forSecretStream();
+$options = new ProtectionOptions('file-backup');
 $files = new FileProtector();
 
-$files->encrypt('/data/plain.txt', '/data/plain.txt.epc', $key);
-$files->decrypt('/data/plain.txt.epc', '/data/plain.out.txt', $key);
+$files->protect('/data/plain.txt', '/data/plain.txt.ep2', $key, $options);
+$files->unprotect('/data/plain.txt.ep2', '/data/plain.out.txt', $key, $options);
 ```
 
 ### Rotate keys with a key ring
@@ -69,23 +77,32 @@ $files->decrypt('/data/plain.txt.epc', '/data/plain.out.txt', $key);
 ```php
 <?php
 
+declare(strict_types=1);
+
+use Infocyph\Epicrypt\DataProtection\ProtectionOptions;
 use Infocyph\Epicrypt\DataProtection\StringProtector;
+use Infocyph\Epicrypt\Security\KeyPurpose;
 use Infocyph\Epicrypt\Security\KeyRing;
+use Infocyph\Epicrypt\Security\KeyRingEntry;
+use Infocyph\Epicrypt\Security\KeyStatus;
 
 $ring = new KeyRing([
-    '2026-01' => $oldKey,
-    '2026-05' => $newKey,
-], '2026-05');
+    new KeyRingEntry('2026-01', $oldKey, KeyStatus::FALLBACK, KeyPurpose::DATA_PROTECTION, 'xchacha20-poly1305-ietf'),
+    new KeyRingEntry('2026-05', $newKey, KeyStatus::ACTIVE, KeyPurpose::DATA_PROTECTION, 'xchacha20-poly1305-ietf'),
+]);
 
-$protector = new StringProtector();
-$ciphertext = $protector->encryptWithKeyRing('rotating-data', $ring);
-$result = $protector->decryptWithKeyRingResult($ciphertext, $ring);
+$options = new ProtectionOptions('rotating-data');
+$protector = StringProtector::create();
+$ciphertext = $protector->protectWithKeyRing('rotating-data', $ring, $options);
+$result = $protector->unprotectWithKeyRing($ciphertext, $ring, $options);
 ```
 
 ### Hash, verify and rehash password
 
 ```php
 <?php
+
+declare(strict_types=1);
 
 use Infocyph\Epicrypt\Password\PasswordHasher;
 
@@ -101,6 +118,8 @@ $rehash = $hasher->verifyAndRehash('MyStrongPassword!2026', $hash);
 ```php
 <?php
 
+declare(strict_types=1);
+
 use Infocyph\Epicrypt\Security\CsrfTokenManager;
 
 $csrf = new CsrfTokenManager('csrf-secret');
@@ -113,6 +132,8 @@ $ok = $csrf->verifyToken('session-1', $token);
 
 ```php
 <?php
+
+declare(strict_types=1);
 
 use Infocyph\Epicrypt\Security\SignedUrl;
 
@@ -127,26 +148,17 @@ $ok = $signed->verify($url);
 ```php
 <?php
 
-use Infocyph\Epicrypt\Token\Jwt\Enum\SymmetricJwtAlgorithm;
+declare(strict_types=1);
+
+use Infocyph\Epicrypt\Token\Jwt\JwtClaims;
+use Infocyph\Epicrypt\Token\Jwt\JwtPolicy;
 use Infocyph\Epicrypt\Token\Jwt\SymmetricJwt;
-use Infocyph\Epicrypt\Token\Jwt\Validation\RegisteredClaims;
 
-$issuer = new SymmetricJwt(SymmetricJwtAlgorithm::HS512);
-$token = $issuer->encode([
-    'iss' => 'issuer-service',
-    'aud' => 'api',
-    'sub' => 'user-1',
-    'jti' => 'jwt-1',
-    'nbf' => time(),
-    'exp' => time() + 600,
-], 'signing-secret');
-
-$verifier = new SymmetricJwt(
-    SymmetricJwtAlgorithm::HS512,
-    new RegisteredClaims('issuer-service', 'api', 'user-1', 'jwt-1'),
-);
-
-$ok = $verifier->verify($token, 'signing-secret');
+$key = SymmetricJwt::generateBinaryKey();
+$claims = JwtClaims::issue('issuer-service', 'user-1', ['api'], 600);
+$token = SymmetricJwt::issuer($key, 'at+jwt')->issue($claims);
+$verifier = SymmetricJwt::verifier($key, JwtPolicy::accessToken('issuer-service', 'api'));
+$ok = $verifier->verify($token);
 ```
 
 ### Generate certificate with SAN
@@ -154,10 +166,12 @@ $ok = $verifier->verify($token, 'signing-secret');
 ```php
 <?php
 
-use Infocyph\Epicrypt\Certificate\CertificateBuilder;
+declare(strict_types=1);
+
 use Infocyph\Epicrypt\Certificate\CertificateOptions;
 use Infocyph\Epicrypt\Certificate\Enum\OpenSslRsaBits;
 use Infocyph\Epicrypt\Certificate\KeyPairGenerator;
+use Infocyph\Epicrypt\Certificate\OpenSSL\CertificateBuilder;
 
 $pair = KeyPairGenerator::openSsl(bits: OpenSslRsaBits::BITS_3072)->generate();
 $dn = ['commonName' => 'service.example.test'];
@@ -166,21 +180,41 @@ $options = new CertificateOptions(
     sanDns: ['service.example.test', 'api.example.test'],
 );
 
-$certPem = CertificateBuilder::openSsl()->selfSign($dn, $pair['private'], options: $options);
+$certPem = (new CertificateBuilder())->selfSign($dn, $pair['private'], options: $options);
 ```
 
 ## Security
 
-Protected by [PHPForge](https://github.com/infocyph/PHPForge) — an automated quality and security gate for PHP projects.
+Do not disclose suspected vulnerabilities in a public issue, discussion or pull request. Review the
+[security policy](SECURITY.md), then use [GitHub private vulnerability reporting](https://github.com/infocyph/Epicrypt/security/advisories/new)
+to contact the maintainers confidentially.
+
+Epicrypt is protected by [PHPForge](https://github.com/infocyph/PHPForge), an automated quality and security gate covering
+tests, static and taint analysis, dependency auditing, architecture checks, and release readiness. Automated controls reduce
+risk but do not replace responsible disclosure or manual review.
 
 ---
 
 <div align="center">
   <sub><strong>Made with ❤️ for the PHP community</strong></sub><br />
   <sub><a href="LICENSE">MIT Licensed</a></sub><br />
-  <a href="https://docs.infocyph.com/projects/Epicrypt">Documentation</a> •
+  <a href="https://docs.infocyph.com/projects/Epicrypt/">Documentation</a> •
   <a href="SECURITY.md">Security</a> •
   <a href="CODE_OF_CONDUCT.md">Code of Conduct</a> •
-  <a href="CONTRIBUTING.md">Contributing</a> •
-  <a href="https://github.com/infocyph/Epicrypt/issues">Report | Request | Suggest</a>
+  <a href="CONTRIBUTING.md">Contributing</a><br />
+  <span title="Issue templates" aria-label="Issue templates">🗂️</span>
+  <a href="https://github.com/infocyph/Epicrypt/issues/new?template=bug_report.yml">Bug</a> •
+  <a href="https://github.com/infocyph/Epicrypt/issues/new?template=feature_request.yml">Feature</a> •
+  <a href="https://github.com/infocyph/Epicrypt/issues/new?template=docs_improvement.yml">Documentation</a> •
+  <a href="https://github.com/infocyph/Epicrypt/issues/new?template=question.yml">Question</a> •
+  <a href="https://github.com/infocyph/Epicrypt/issues/new?template=ci_failure.yml">CI failure</a><br />
+  <span title="Pull request templates" aria-label="Pull request templates">🔀</span>
+  <a href="https://github.com/infocyph/Epicrypt/compare/main...HEAD?quick_pull=1&amp;template=PULL_REQUEST_TEMPLATE.md">General</a> •
+  <a href="https://github.com/infocyph/Epicrypt/compare/main...HEAD?quick_pull=1&amp;template=bug_fix.md">Bug fix</a> •
+  <a href="https://github.com/infocyph/Epicrypt/compare/main...HEAD?quick_pull=1&amp;template=feature.md">Feature</a> •
+  <a href="https://github.com/infocyph/Epicrypt/compare/main...HEAD?quick_pull=1&amp;template=refactor.md">Refactor</a> •
+  <a href="https://github.com/infocyph/Epicrypt/compare/main...HEAD?quick_pull=1&amp;template=performance.md">Performance</a> •
+  <a href="https://github.com/infocyph/Epicrypt/compare/main...HEAD?quick_pull=1&amp;template=security_reliability.md">Security &amp; reliability</a> •
+  <a href="https://github.com/infocyph/Epicrypt/compare/main...HEAD?quick_pull=1&amp;template=documentation.md">Documentation</a> •
+  <a href="https://github.com/infocyph/Epicrypt/compare/main...HEAD?quick_pull=1&amp;template=maintenance.md">Maintenance</a>
 </div>

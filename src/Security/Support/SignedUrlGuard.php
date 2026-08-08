@@ -181,7 +181,7 @@ final class SignedUrlGuard
         }
 
         $version = (int) $value;
-        if ($version !== SignedUrlVersion::V1->value) {
+        if ($version !== SignedUrlVersion::V2->value) {
             return null;
         }
 

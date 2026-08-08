@@ -5,12 +5,11 @@ declare(strict_types=1);
 namespace Infocyph\Epicrypt\Certificate\OpenSSL;
 
 use Infocyph\Epicrypt\Certificate\CertificateOptions;
-use Infocyph\Epicrypt\Certificate\Contract\CsrBuilderInterface;
 use Infocyph\Epicrypt\Certificate\OpenSSL\Support\OpenSslExtensionConfig;
 use Infocyph\Epicrypt\Certificate\Support\Pem;
 use Infocyph\Epicrypt\Exception\ConfigurationException;
 
-final class CsrBuilder implements CsrBuilderInterface
+final class CsrBuilder
 {
     /**
      * @param array<string, string> $distinguishedName
@@ -20,7 +19,7 @@ final class CsrBuilder implements CsrBuilderInterface
         $privateResource = Pem::requirePrivateKeyResource($privateKey, $passphrase);
         $effectiveOptions = $options ?? new CertificateOptions();
         $tempConfigPath = OpenSslExtensionConfig::createTempConfig($effectiveOptions, $distinguishedName);
-        $config = ['digest_alg' => $effectiveOptions->digestAlgorithm];
+        $config = ['digest_alg' => $effectiveOptions->digestAlgorithm->value];
         $config['config'] = $tempConfigPath;
         $config['req_extensions'] = 'v3_req';
 

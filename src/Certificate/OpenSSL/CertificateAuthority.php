@@ -5,12 +5,11 @@ declare(strict_types=1);
 namespace Infocyph\Epicrypt\Certificate\OpenSSL;
 
 use Infocyph\Epicrypt\Certificate\CertificateOptions;
-use Infocyph\Epicrypt\Certificate\Contract\CertificateAuthorityInterface;
 use Infocyph\Epicrypt\Certificate\OpenSSL\Support\OpenSslCertificateSigner;
 use Infocyph\Epicrypt\Certificate\OpenSSL\Support\OpenSslExtensionConfig;
 use Infocyph\Epicrypt\Certificate\Support\Pem;
 
-final class CertificateAuthority implements CertificateAuthorityInterface
+final class CertificateAuthority
 {
     public function signCsr(
         string $csrPem,
@@ -21,7 +20,7 @@ final class CertificateAuthority implements CertificateAuthorityInterface
     ): string {
         $caKeyResource = Pem::requirePrivateKeyResource($caPrivateKeyPem, $passphrase);
         $tempConfigPath = OpenSslExtensionConfig::createTempConfig($options);
-        $config = ['digest_alg' => $options->digestAlgorithm];
+        $config = ['digest_alg' => $options->digestAlgorithm->value];
         $config['config'] = $tempConfigPath;
         $config['x509_extensions'] = 'v3_req';
 

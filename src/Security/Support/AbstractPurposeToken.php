@@ -5,10 +5,10 @@ declare(strict_types=1);
 namespace Infocyph\Epicrypt\Security\Support;
 
 use Infocyph\Epicrypt\Exception\Token\TokenException;
-use Infocyph\Epicrypt\Internal\Clock\ClockInterface;
 use Infocyph\Epicrypt\Internal\Clock\SystemClock;
 use Infocyph\Epicrypt\Internal\SignedPayloadCodec;
 use Infocyph\Epicrypt\Security\Enum\SecurityTokenPurpose;
+use Psr\Clock\ClockInterface;
 
 abstract readonly class AbstractPurposeToken
 {
@@ -36,7 +36,7 @@ abstract readonly class AbstractPurposeToken
 
         return $this->codec->issue(
             ['purpose' => $purposeValue] + $claims,
-            $this->clock->now() + $this->ttlSeconds,
+            $this->clock->now()->getTimestamp() + $this->ttlSeconds,
             $purposeValue,
         );
     }

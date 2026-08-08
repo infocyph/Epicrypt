@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Infocyph\Epicrypt\Password\Generator;
 
+use Infocyph\Epicrypt\Exception\Password\InvalidPasswordException;
+
 final readonly class PasswordPolicy
 {
     public function __construct(
@@ -13,5 +15,17 @@ final readonly class PasswordPolicy
         public bool $requireDigit = true,
         public bool $requireSymbol = true,
         public bool $includeAmbiguous = false,
-    ) {}
+    ) {
+        if ($this->minLength < 1) {
+            throw new InvalidPasswordException('Password minimum length must be positive.');
+        }
+    }
+
+    public function requiredCharacterClasses(): int
+    {
+        return (int) $this->requireUpper
+            + (int) $this->requireLower
+            + (int) $this->requireDigit
+            + (int) $this->requireSymbol;
+    }
 }

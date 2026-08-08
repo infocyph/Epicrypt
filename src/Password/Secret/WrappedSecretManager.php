@@ -10,6 +10,7 @@ use Infocyph\Epicrypt\Internal\BinaryKey;
 use Infocyph\Epicrypt\Internal\Enum\WrappedSecretVersion;
 use Infocyph\Epicrypt\Internal\KeyCandidates;
 use Infocyph\Epicrypt\Internal\VersionedPayload;
+use Infocyph\Epicrypt\Security\KeyPurpose;
 use Infocyph\Epicrypt\Security\KeyRing;
 
 final class WrappedSecretManager
@@ -77,14 +78,14 @@ final class WrappedSecretManager
         if ($masterSecrets instanceof KeyRing) {
             $payload = $this->parseWrappedPayload($wrappedSecret);
             if ($payload['key_id'] !== null) {
-                $key = $masterSecrets->keys()[$payload['key_id']] ?? null;
-                if ($key === null) {
+                $entry = $masterSecrets->resolveForRead($payload['key_id'], KeyPurpose::SECRET_WRAPPING, self::ALGORITHM_ID);
+                if ($entry === null) {
                     throw new SecretProtectionException(sprintf('Master secret key id "%s" was not found in the key ring.', $payload['key_id']));
                 }
 
                 try {
                     return new UnwrappedSecretResult(
-                        $this->unwrap($wrappedSecret, $key, $masterSecretsAreBinary),
+                        $this->unwrap($wrappedSecret, $entry->key, $masterSecretsAreBinary),
                         $payload['key_id'],
                         false,
                     );
@@ -132,7 +133,7 @@ final class WrappedSecretManager
         $ciphertext = sodium_crypto_secretbox($secret, $nonce, $key);
 
         return VersionedPayload::encodeCompact(
-            WrappedSecretVersion::V1->value,
+            WrappedSecretVersion::V2->value,
             self::ALGORITHM_ID,
             $keyId,
             Base64Url::encode($nonce),
@@ -142,13 +143,13 @@ final class WrappedSecretManager
 
     public function wrapWithKeyRing(string $secret, KeyRing $keyRing, bool $masterSecretIsBinary = false): string
     {
-        $activeKey = $keyRing->activeKey();
-        $activeKeyId = $keyRing->activeKeyId();
-        if ($activeKey === null || $activeKeyId === null) {
-            throw new SecretProtectionException('Key ring active key id is required for wrapped secret encryption.');
+        try {
+            $entry = $keyRing->activeForWrite(KeyPurpose::SECRET_WRAPPING, self::ALGORITHM_ID);
+        } catch (\Throwable $exception) {
+            throw new SecretProtectionException('An active secret-wrapping key is required.', 0, $exception);
         }
 
-        return $this->wrap($secret, $activeKey, $masterSecretIsBinary, $activeKeyId);
+        return $this->wrap($secret, $entry->key, $masterSecretIsBinary, $entry->id);
     }
 
     private function decodeMasterSecret(string $masterSecret, bool $isBinary): string
@@ -171,6 +172,8 @@ final class WrappedSecretManager
                 $keys,
                 'All master secret candidates must be non-empty strings.',
                 'At least one master secret candidate is required.',
+                KeyPurpose::SECRET_WRAPPING,
+                self::ALGORITHM_ID,
             );
         } catch (\InvalidArgumentException $e) {
             throw new SecretProtectionException($e->getMessage(), 0, $e);
@@ -182,7 +185,7 @@ final class WrappedSecretManager
      */
     private function parseWrappedPayload(string $wrappedSecret): array
     {
-        $compactPayload = VersionedPayload::parseCompact($wrappedSecret, WrappedSecretVersion::V1->value);
+        $compactPayload = VersionedPayload::parseCompact($wrappedSecret, WrappedSecretVersion::V2->value);
         if ($compactPayload === null) {
             throw new SecretProtectionException('Invalid wrapped secret format.');
         }

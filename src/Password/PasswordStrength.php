@@ -6,10 +6,7 @@ namespace Infocyph\Epicrypt\Password;
 
 final class PasswordStrength
 {
-    /**
-     * @param array{email?: mixed, username?: mixed} $context
-     */
-    public function score(#[\SensitiveParameter] string $password, array $context = []): int
+    public function score(#[\SensitiveParameter] string $password): int
     {
         $score = 0;
         $length = strlen($password);
@@ -35,7 +32,6 @@ final class PasswordStrength
         $score -= $this->repetitionPenalty($password);
         $score -= $this->sequentialPenalty($password);
         $score -= $this->commonPatternPenalty($password);
-        $score -= $this->identityPenalty($password, $context);
 
         return max(0, min($score, 100));
     }
@@ -46,35 +42,6 @@ final class PasswordStrength
         $patterns = ['password', 'welcome', 'admin', 'qwerty', 'letmein', '123456', 'iloveyou'];
         foreach ($patterns as $pattern) {
             if (str_contains($lower, $pattern)) {
-                return 20;
-            }
-        }
-
-        return 0;
-    }
-
-    /**
-     * @param array{email?: mixed, username?: mixed} $context
-     */
-    private function identityPenalty(string $password, array $context): int
-    {
-        $passwordLower = strtolower($password);
-        $candidates = [];
-
-        if (isset($context['email']) && is_string($context['email']) && $context['email'] !== '') {
-            $candidates[] = strtolower($context['email']);
-            $emailLocal = explode('@', strtolower($context['email']), 2)[0];
-            if ($emailLocal !== '') {
-                $candidates[] = $emailLocal;
-            }
-        }
-
-        if (isset($context['username']) && is_string($context['username']) && $context['username'] !== '') {
-            $candidates[] = strtolower($context['username']);
-        }
-
-        foreach ($candidates as $candidate) {
-            if (str_contains($passwordLower, $candidate)) {
                 return 20;
             }
         }

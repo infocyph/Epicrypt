@@ -4,10 +4,9 @@ declare(strict_types=1);
 
 namespace Infocyph\Epicrypt\Certificate\OpenSSL;
 
-use Infocyph\Epicrypt\Certificate\Contract\CertificateParserInterface;
 use Infocyph\Epicrypt\Exception\ConfigurationException;
 
-final class CertificateParser implements CertificateParserInterface
+final class CertificateParser
 {
     /**
      * @return array<string, mixed>

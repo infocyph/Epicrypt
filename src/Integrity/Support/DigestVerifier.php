@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Infocyph\Epicrypt\Integrity\Support;
 
-use Infocyph\Epicrypt\Integrity\Contract\HasherInterface;
+use Infocyph\Epicrypt\Integrity\StringHasher;
 
 /**
  * @internal
@@ -12,7 +12,7 @@ use Infocyph\Epicrypt\Integrity\Contract\HasherInterface;
 final readonly class DigestVerifier
 {
     public function __construct(
-        private HasherInterface $hasher,
+        private StringHasher $hasher,
     ) {}
 
     /**

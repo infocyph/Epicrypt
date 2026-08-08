@@ -8,7 +8,6 @@ use Infocyph\Epicrypt\Crypto\Enum\AeadAlgorithm;
 use Infocyph\Epicrypt\Generate\KeyMaterial\Enum\KeyPurpose;
 use Infocyph\Epicrypt\Generate\Support\LengthGuard;
 use Infocyph\Epicrypt\Internal\Base64Url;
-use Infocyph\Epicrypt\Security\Policy\SecurityProfile;
 
 final class KeyMaterialGenerator
 {
@@ -22,9 +21,20 @@ final class KeyMaterialGenerator
         return $this->generate(SODIUM_CRYPTO_SECRETBOX_KEYBYTES, $asBase64Url);
     }
 
-    public function forPurpose(KeyPurpose $purpose, SecurityProfile $profile = SecurityProfile::MODERN, bool $asBase64Url = true): string
+    public function forPurpose(KeyPurpose $purpose, bool $asBase64Url = true): string
     {
-        return $this->generate($profile->recommendedKeyLength($purpose), $asBase64Url);
+        $length = match ($purpose) {
+            KeyPurpose::AEAD,
+            KeyPurpose::SECRETBOX,
+            KeyPurpose::MASTER_SECRET,
+            KeyPurpose::WRAPPED_SECRET_MASTER,
+            KeyPurpose::SECRETSTREAM,
+            KeyPurpose::MAC,
+            KeyPurpose::TOKEN_SIGNING,
+            KeyPurpose::SIGNED_PAYLOAD => 32,
+        };
+
+        return $this->generate($length, $asBase64Url);
     }
 
     public function forSecretBox(bool $asBase64Url = true): string

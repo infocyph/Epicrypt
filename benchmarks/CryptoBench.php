@@ -6,6 +6,7 @@ namespace Infocyph\Epicrypt\Benchmarks;
 
 use Infocyph\Epicrypt\Certificate\KeyPairGenerator;
 use Infocyph\Epicrypt\Crypto\AeadCipher;
+use Infocyph\Epicrypt\Crypto\Enum\AeadAlgorithm;
 use Infocyph\Epicrypt\Crypto\Mac;
 use Infocyph\Epicrypt\Crypto\SecretBoxCipher;
 use Infocyph\Epicrypt\Crypto\Signature;
@@ -17,7 +18,8 @@ use PhpBench\Attributes as Bench;
 #[Bench\Warmup(1)]
 final class CryptoBench
 {
-    private AeadCipher $aeadCipher;
+    /** @var array<string, AeadCipher> */
+    private array $aeadCiphers = [];
 
     private Mac $mac;
 
@@ -32,7 +34,6 @@ final class CryptoBench
 
     public function __construct()
     {
-        $this->aeadCipher = new AeadCipher();
         $this->secretBoxCipher = new SecretBoxCipher();
         $this->mac = new Mac();
         $this->signature = new Signature();
@@ -44,8 +45,18 @@ final class CryptoBench
         $plaintext = str_repeat('epicrypt-benchmark-payload-', 4);
         $this->state['plaintext'] = $plaintext;
 
-        $this->state['aeadKey'] = $keyGenerator->generate(SODIUM_CRYPTO_AEAD_XCHACHA20POLY1305_IETF_KEYBYTES);
-        $this->state['aeadCiphertext'] = $this->aeadCipher->encrypt($plaintext, $this->state['aeadKey'], ['aad' => 'bench-aad']);
+        foreach (AeadAlgorithm::cases() as $algorithm) {
+            if (!$algorithm->isAvailable()) {
+                continue;
+            }
+            $this->aeadCiphers[$algorithm->value] = new AeadCipher($algorithm);
+            $this->state['aeadKey:' . $algorithm->value] = $keyGenerator->forAead($algorithm);
+            $this->state['aeadCiphertext:' . $algorithm->value] = $this->aeadCiphers[$algorithm->value]->encrypt(
+                $plaintext,
+                $this->state['aeadKey:' . $algorithm->value],
+                'bench-aad',
+            );
+        }
 
         $this->state['secretBoxKey'] = $keyGenerator->generate(SODIUM_CRYPTO_SECRETBOX_KEYBYTES);
         $this->state['secretBoxCiphertext'] = $this->secretBoxCipher->encrypt($plaintext, $this->state['secretBoxKey']);
@@ -59,16 +70,38 @@ final class CryptoBench
         $this->state['detachedSignature'] = $this->signature->sign($plaintext, $this->state['signPrivateKey']);
     }
 
-    #[Bench\BeforeMethods('setUp')]
-    public function benchAeadDecrypt(): void
+    /** @return iterable<string, array{algorithm: string}> */
+    public function aeadAlgorithms(): iterable
     {
-        $this->aeadCipher->decrypt($this->state['aeadCiphertext'], $this->state['aeadKey'], ['aad' => 'bench-aad']);
+        foreach (AeadAlgorithm::cases() as $algorithm) {
+            if ($algorithm->isAvailable()) {
+                yield $algorithm->value => ['algorithm' => $algorithm->value];
+            }
+        }
     }
 
     #[Bench\BeforeMethods('setUp')]
-    public function benchAeadEncrypt(): void
+    #[Bench\ParamProviders('aeadAlgorithms')]
+    public function benchAeadDecrypt(array $params): void
     {
-        $this->aeadCipher->encrypt($this->state['plaintext'], $this->state['aeadKey'], ['aad' => 'bench-aad']);
+        $algorithm = $params['algorithm'];
+        $this->aeadCiphers[$algorithm]->decrypt(
+            $this->state['aeadCiphertext:' . $algorithm],
+            $this->state['aeadKey:' . $algorithm],
+            'bench-aad',
+        );
+    }
+
+    #[Bench\BeforeMethods('setUp')]
+    #[Bench\ParamProviders('aeadAlgorithms')]
+    public function benchAeadEncrypt(array $params): void
+    {
+        $algorithm = $params['algorithm'];
+        $this->aeadCiphers[$algorithm]->encrypt(
+            $this->state['plaintext'],
+            $this->state['aeadKey:' . $algorithm],
+            'bench-aad',
+        );
     }
 
     #[Bench\BeforeMethods('setUp')]

@@ -6,13 +6,12 @@ namespace Infocyph\Epicrypt\Integrity;
 
 use Infocyph\Epicrypt\Exception\FileAccessException;
 use Infocyph\Epicrypt\Exception\Integrity\HashingException;
-use Infocyph\Epicrypt\Internal\HashAlgorithm;
 use Infocyph\Epicrypt\Internal\SecureCompare;
 
 final readonly class FileHasher
 {
     public function __construct(
-        private string $algorithm = 'sha256',
+        private IntegrityAlgorithm $algorithm = IntegrityAlgorithm::SHA256,
     ) {}
 
     public function hash(string $path, string $key = ''): string
@@ -21,7 +20,7 @@ final readonly class FileHasher
             throw new FileAccessException('Invalid file path: ' . $path);
         }
 
-        if ($this->algorithm === 'blake2b') {
+        if ($this->algorithm === IntegrityAlgorithm::BLAKE2B) {
             $stream = fopen($path, 'rb');
             if ($stream === false) {
                 throw new FileAccessException('Unable to open file: ' . $path);
@@ -46,15 +45,9 @@ final readonly class FileHasher
             }
         }
 
-        try {
-            HashAlgorithm::assertSupported($this->algorithm);
-        } catch (\InvalidArgumentException $e) {
-            throw new HashingException($e->getMessage(), 0, $e);
-        }
-
         $hash = $key === ''
-            ? hash_file($this->algorithm, $path)
-            : hash_hmac_file($this->algorithm, $path, $key);
+            ? hash_file($this->algorithm->value, $path)
+            : hash_hmac_file($this->algorithm->value, $path, $key);
 
         if (!is_string($hash)) {
             throw new HashingException('File hashing failed.');

@@ -34,8 +34,8 @@ AEAD Cipher
        ->generate(SODIUM_CRYPTO_AEAD_XCHACHA20POLY1305_IETF_KEYBYTES);
 
    $cipher = new AeadCipher(AeadAlgorithm::XCHACHA20_POLY1305_IETF);
-   $encrypted = $cipher->encrypt('message', $key, ['aad' => 'ctx']);
-   $plain = $cipher->decrypt($encrypted, $key, ['aad' => 'ctx']);
+   $encrypted = $cipher->encrypt('message', $key, 'ctx');
+   $plain = $cipher->decrypt($encrypted, $key, 'ctx');
 
 Supported AEAD algorithms:
 
@@ -70,15 +70,8 @@ PublicKeyBox Cipher
    $recipient = KeyPairGenerator::sodium()->generate(asBase64Url: true);
 
    $cipher = new PublicKeyBoxCipher();
-   $encrypted = $cipher->encrypt('message', [
-       'recipient_public' => $recipient['public'],
-       'sender_private' => $sender['private'],
-   ]);
-
-   $plain = $cipher->decrypt($encrypted, [
-       'sender_public' => $sender['public'],
-       'recipient_private' => $recipient['private'],
-   ]);
+   $encrypted = $cipher->encrypt('message', $recipient['public'], $sender['private']);
+   $plain = $cipher->decrypt($encrypted, $sender['public'], $recipient['private']);
 
 SealedBox Cipher
 ----------------
@@ -119,9 +112,8 @@ SecretStream (File Streaming)
 
 ``SecretStream`` is optimized for chunked file encryption/decryption and powers ``DataProtection\\FileProtector``.
 
-- default algorithm: ``xchacha20poly1305``
-- advanced compatibility mode: ``unauthenticated-xchacha20`` (requires explicit opt-in)
-- chunk sizes must be between 1 byte and 16 MiB; the default is 8 KiB
+- algorithm: authenticated XChaCha20-Poly1305 SecretStream only
+- chunk sizes must be between 1 byte and 16 MiB; the benchmark-selected default is 64 KiB
 - output is staged in the destination directory and committed only after the complete operation succeeds
 - existing destinations use atomic replacement where supported and backup/rollback replacement on Windows
 

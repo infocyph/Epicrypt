@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace Infocyph\Epicrypt\Crypto;
 
-use Infocyph\Epicrypt\Crypto\Context\AeadContext;
-use Infocyph\Epicrypt\Crypto\Contract\CipherInterface;
 use Infocyph\Epicrypt\Crypto\Enum\AeadAlgorithm;
 use Infocyph\Epicrypt\Exception\Crypto\CryptoException;
 use Infocyph\Epicrypt\Exception\Crypto\DecryptionException;
@@ -16,26 +14,28 @@ use Infocyph\Epicrypt\Internal\Base64Url;
 use Infocyph\Epicrypt\Internal\BinaryKey;
 use Infocyph\Epicrypt\Internal\Enum\EncryptedPayloadVersion;
 use Infocyph\Epicrypt\Internal\VersionedPayload;
-use Infocyph\Epicrypt\Security\Policy\SecurityProfile;
 
-final readonly class AeadCipher implements CipherInterface
+final readonly class AeadCipher
 {
     public function __construct(private AeadAlgorithm $algorithm = AeadAlgorithm::XCHACHA20_POLY1305_IETF) {}
 
-    public static function forProfile(SecurityProfile $profile = SecurityProfile::MODERN): self
+    public function decrypt(string $ciphertext, string $key, string $aad = ''): string
     {
-        return new self($profile->defaultAeadAlgorithm());
+        return $this->decryptWithBinaryKey(
+            $ciphertext,
+            $this->decodeKey($key, $this->algorithm->keyLength(), 'Decryption'),
+            $aad,
+        );
     }
 
-    /**
-     * @param array<string, mixed> $context
-     */
-    public function decrypt(string $ciphertext, mixed $key, array $context = []): string
-    {
+    public function decryptWithBinaryKey(
+        string $ciphertext,
+        #[\SensitiveParameter]
+        string $key,
+        string $aad = '',
+    ): string {
         $this->assertAlgorithmAvailability();
-        $aeadContext = AeadContext::fromArray($context);
-
-        $decodedKey = $this->decodeKey($key, $this->algorithm->keyLength(), $aeadContext->keyIsBinary, 'Decryption');
+        $this->assertBinaryKey($key, $this->algorithm->keyLength(), 'Decryption');
         [$encodedNonce, $encodedCiphertext] = $this->splitPayload($ciphertext);
 
         $nonce = Base64Url::decode($encodedNonce);
@@ -43,7 +43,7 @@ final readonly class AeadCipher implements CipherInterface
             throw new InvalidNonceException(sprintf('Nonce must be %d bytes.', $this->algorithm->nonceLength()));
         }
 
-        $plaintext = $this->decryptRaw(Base64Url::decode($encodedCiphertext), $aeadContext->aad, $nonce, $decodedKey);
+        $plaintext = $this->decryptRaw(Base64Url::decode($encodedCiphertext), $aad, $nonce, $key);
 
         if (!is_string($plaintext)) {
             throw new DecryptionException('AEAD decryption failed.');
@@ -52,34 +52,41 @@ final readonly class AeadCipher implements CipherInterface
         return $plaintext;
     }
 
-    /**
-     * @param array<string, mixed> $context
-     */
-    public function encrypt(string $plaintext, mixed $key, array $context = []): string
-    {
+    public function encrypt(
+        string $plaintext,
+        #[\SensitiveParameter]
+        string $key,
+        string $aad = '',
+        ?string $keyId = null,
+    ): string {
+        return $this->encryptWithBinaryKey(
+            $plaintext,
+            $this->decodeKey($key, $this->algorithm->keyLength(), 'Encryption'),
+            $aad,
+            $keyId,
+        );
+    }
+
+    public function encryptWithBinaryKey(
+        string $plaintext,
+        #[\SensitiveParameter]
+        string $key,
+        string $aad = '',
+        ?string $keyId = null,
+        ?string $nonce = null,
+    ): string {
         $this->assertAlgorithmAvailability();
-        $aeadContext = AeadContext::fromArray($context);
-
-        $decodedKey = $this->decodeKey($key, $this->algorithm->keyLength(), $aeadContext->keyIsBinary, 'Encryption');
-        $keyId = $aeadContext->keyId;
-
-        if ($aeadContext->nonce !== null) {
-            $nonce = $aeadContext->nonce;
-            if (!$aeadContext->nonceIsBinary) {
-                $nonce = Base64Url::decode($nonce);
-            }
-        } else {
-            $nonce = random_bytes($this->algorithm->nonceLength());
-        }
+        $this->assertBinaryKey($key, $this->algorithm->keyLength(), 'Encryption');
+        $nonce ??= random_bytes($this->algorithm->nonceLength());
 
         if (strlen($nonce) !== $this->algorithm->nonceLength()) {
             throw new InvalidNonceException(sprintf('Nonce must be %d bytes.', $this->algorithm->nonceLength()));
         }
 
-        $ciphertext = $this->encryptRaw($plaintext, $aeadContext->aad, $nonce, $decodedKey);
+        $ciphertext = $this->encryptRaw($plaintext, $aad, $nonce, $key);
 
         return VersionedPayload::encodeCompact(
-            EncryptedPayloadVersion::V1->value,
+            EncryptedPayloadVersion::V2->value,
             $this->algorithm->value,
             $keyId,
             Base64Url::encode($nonce),
@@ -94,10 +101,17 @@ final readonly class AeadCipher implements CipherInterface
         }
     }
 
-    private function decodeKey(mixed $key, int $expectedLength, bool $isBinary, string $operation): string
+    private function assertBinaryKey(string $key, int $expectedLength, string $operation): void
+    {
+        if (strlen($key) !== $expectedLength) {
+            throw new InvalidKeyException(sprintf('%s key must be %d bytes.', $operation, $expectedLength));
+        }
+    }
+
+    private function decodeKey(string $key, int $expectedLength, string $operation): string
     {
         try {
-            return BinaryKey::fixedLength($key, $isBinary, $expectedLength, sprintf('%s key', $operation));
+            return BinaryKey::fixedLength($key, false, $expectedLength, sprintf('%s key', $operation));
         } catch (InvalidKeyException $e) {
             throw new InvalidKeyException(sprintf('%s key must be %d bytes.', $operation, $expectedLength), 0, $e);
         }
@@ -141,7 +155,7 @@ final readonly class AeadCipher implements CipherInterface
      */
     private function splitPayload(string $ciphertext): array
     {
-        $compactPayload = VersionedPayload::parseCompact($ciphertext, EncryptedPayloadVersion::V1->value);
+        $compactPayload = VersionedPayload::parseCompact($ciphertext, EncryptedPayloadVersion::V2->value);
         if ($compactPayload === null) {
             throw new DecryptionException('Invalid ciphertext format.');
         }
