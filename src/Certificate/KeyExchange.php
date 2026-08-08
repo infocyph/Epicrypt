@@ -6,8 +6,10 @@ namespace Infocyph\Epicrypt\Certificate;
 
 use Infocyph\Epicrypt\Certificate\Contract\KeyExchangeInterface;
 use Infocyph\Epicrypt\Certificate\Enum\KeyExchangeBackend;
+use Infocyph\Epicrypt\Exception\ConfigurationException;
+use Infocyph\Epicrypt\Internal\Base64Url;
 
-final readonly class KeyExchange implements KeyExchangeInterface
+final readonly class KeyExchange
 {
     private function __construct(
         private KeyExchangeInterface $backend,
@@ -37,8 +39,47 @@ final readonly class KeyExchange implements KeyExchangeInterface
         return $this->backendType;
     }
 
-    public function derive(string $privateKey, string $publicKey, bool $keysAreBinary = false): string
-    {
-        return $this->backend->derive($privateKey, $publicKey, $keysAreBinary);
+    public function deriveBinaryKey(
+        string $privateKey,
+        string $publicKey,
+        int $length,
+        string $context,
+        string $salt = '',
+    ): string {
+        return $this->derive($privateKey, $publicKey, $length, $context, $salt, true);
+    }
+
+    public function deriveKey(
+        string $privateKey,
+        string $publicKey,
+        int $length,
+        string $context,
+        string $salt = '',
+    ): string {
+        return Base64Url::encode($this->derive($privateKey, $publicKey, $length, $context, $salt, false));
+    }
+
+    private function derive(
+        string $privateKey,
+        string $publicKey,
+        int $length,
+        string $context,
+        string $salt,
+        bool $keysAreBinary,
+    ): string {
+        if ($length < 16 || $length > 64) {
+            throw new ConfigurationException('Derived key length must be between 16 and 64 bytes.');
+        }
+        if ($context === '' || str_contains($context, "\0")) {
+            throw new ConfigurationException('Key derivation context must be non-empty and cannot contain NUL.');
+        }
+
+        $secret = $this->backend->deriveSharedSecret($privateKey, $publicKey, $keysAreBinary);
+
+        try {
+            return hash_hkdf('sha512', $secret, $length, $context, $salt);
+        } finally {
+            sodium_memzero($secret);
+        }
     }
 }

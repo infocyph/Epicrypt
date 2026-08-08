@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Infocyph\Epicrypt\Crypto;
 
-use Infocyph\Epicrypt\Crypto\Enum\StreamAlgorithm;
 use Infocyph\Epicrypt\Exception\ConfigurationException;
 use Infocyph\Epicrypt\Exception\Crypto\DecryptionException;
 use Infocyph\Epicrypt\Exception\Crypto\EncryptionException;
@@ -13,60 +12,88 @@ use Infocyph\Epicrypt\Exception\FileAccessException;
 use Infocyph\Pathwise\FileManager\SafeFileReader;
 use Infocyph\Pathwise\FileManager\SafeFileWriter;
 use RuntimeException;
+use Throwable;
 
 final readonly class SecretStream
 {
+    public const int DEFAULT_CHUNK_SIZE = 64 * 1024;
+
     private const int MAX_CHUNK_SIZE = 16 * 1024 * 1024;
 
     public function __construct(
+        #[\SensitiveParameter]
         private string $key,
-        private StreamAlgorithm $algorithm = StreamAlgorithm::XCHACHA20POLY1305,
         private string $additionalData = '',
-        private bool $allowUnauthenticatedStream = false,
+        private string $framingPrefix = '',
     ) {
-        if (strlen($this->key) !== $this->algorithm->keyLength()) {
-            throw new InvalidKeyException(sprintf('Stream key must be %d bytes.', $this->algorithm->keyLength()));
-        }
-
-        if ($this->algorithm === StreamAlgorithm::UNAUTHENTICATED_XCHACHA20 && !$this->allowUnauthenticatedStream) {
-            throw new ConfigurationException('Unauthenticated stream encryption must be explicitly enabled.');
+        if (strlen($this->key) !== SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_KEYBYTES) {
+            throw new InvalidKeyException(sprintf(
+                'Stream key must be %d bytes.',
+                SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_KEYBYTES,
+            ));
         }
     }
 
-    public function decrypt(string $inputPath, string $outputPath, int $chunkSize = 8192): void
-    {
+    public function decrypt(
+        string $inputPath,
+        string $outputPath,
+        int $chunkSize = self::DEFAULT_CHUNK_SIZE,
+    ): void {
+        $this->assertPaths($inputPath, $outputPath);
         $this->assertValidChunkSize($chunkSize);
-        $this->checkReadableInput($inputPath);
 
         try {
-            $this->writeSafely($outputPath, function (SafeFileWriter $fileWriter) use ($inputPath, $chunkSize): void {
-                if ($this->algorithm->usesSecretStream()) {
-                    $this->decryptUsingSecretStream($inputPath, $fileWriter, $chunkSize);
-
-                    return;
-                }
-
-                $this->decryptUsingCryptoStream($inputPath, $fileWriter, $chunkSize);
-            });
-        } catch (\Exception $e) {
-            throw new DecryptionException($e->getMessage(), 0, $e);
+            $this->writeSafely(
+                $outputPath,
+                fn(SafeFileWriter $writer) => $this->decryptFrames($inputPath, $writer, $chunkSize),
+            );
+        } catch (DecryptionException $exception) {
+            throw $exception;
+        } catch (Throwable $exception) {
+            throw new DecryptionException('SecretStream decryption failed.', 0, $exception);
         }
     }
 
-    public function encrypt(string $inputPath, string $outputPath, int $chunkSize = 8192): int
-    {
+    public function encrypt(
+        string $inputPath,
+        string $outputPath,
+        int $chunkSize = self::DEFAULT_CHUNK_SIZE,
+    ): int {
+        $this->assertPaths($inputPath, $outputPath);
         $this->assertValidChunkSize($chunkSize);
-        $this->checkReadableInput($inputPath);
 
         try {
             return $this->writeSafely(
                 $outputPath,
-                fn(SafeFileWriter $fileWriter): int => $this->algorithm->usesSecretStream()
-                    ? $this->encryptUsingSecretStream($inputPath, $fileWriter, $chunkSize)
-                    : $this->encryptUsingCryptoStream($inputPath, $fileWriter, $chunkSize),
+                fn(SafeFileWriter $writer): int => $this->encryptFrames($inputPath, $writer, $chunkSize),
             );
-        } catch (\Exception $e) {
-            throw new EncryptionException($e->getMessage(), 0, $e);
+        } catch (EncryptionException $exception) {
+            throw $exception;
+        } catch (Throwable $exception) {
+            throw new EncryptionException('SecretStream encryption failed.', 0, $exception);
+        }
+    }
+
+    private function assertPaths(string $inputPath, string $outputPath): void
+    {
+        if (!is_file($inputPath) || !is_readable($inputPath)) {
+            throw new FileAccessException('Input file is not readable: ' . $inputPath);
+        }
+
+        $inputRealPath = realpath($inputPath);
+        $outputRealPath = realpath($outputPath);
+        if ($inputRealPath !== false && $outputRealPath !== false && $inputRealPath === $outputRealPath) {
+            throw new FileAccessException('Input and output must identify different files.');
+        }
+
+        if ($outputRealPath === false) {
+            $outputDirectory = realpath(dirname($outputPath));
+            if ($inputRealPath !== false && $outputDirectory !== false) {
+                $candidate = $outputDirectory . DIRECTORY_SEPARATOR . basename($outputPath);
+                if ($candidate === $inputRealPath) {
+                    throw new FileAccessException('Input and output must identify different files.');
+                }
+            }
         }
     }
 
@@ -80,213 +107,187 @@ final readonly class SecretStream
         }
     }
 
-    private function checkReadableInput(string $path): void
-    {
-        if (!file_exists($path) || !is_readable($path)) {
-            throw new FileAccessException('Invalid input file: ' . $path);
+    private function consumeFullFrames(
+        string &$buffer,
+        string &$state,
+        SafeFileWriter $writer,
+        bool $finalSeen,
+        int $frameSize,
+    ): bool {
+        while (strlen($buffer) >= $frameSize) {
+            $ciphertext = substr($buffer, 0, $frameSize);
+            $buffer = substr($buffer, $frameSize);
+            $finalSeen = $this->decryptFrame($state, $ciphertext, $writer, $finalSeen);
         }
+
+        return $finalSeen;
     }
 
-    private function decryptUsingCryptoStream(string $inputPath, SafeFileWriter $fileWriter, int $chunkSize): void
+    private function consumeHeader(string &$buffer): ?string
     {
-        $fileReader = new SafeFileReader($inputPath);
+        if (strlen($buffer) < SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_HEADERBYTES) {
+            return null;
+        }
+
+        $header = substr($buffer, 0, SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_HEADERBYTES);
+        $buffer = substr($buffer, SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_HEADERBYTES);
+
+        return sodium_crypto_secretstream_xchacha20poly1305_init_pull($header, $this->key);
+    }
+
+    private function consumePrefix(string &$buffer): bool
+    {
+        $prefixLength = strlen($this->framingPrefix);
+        if (strlen($buffer) < $prefixLength) {
+            return false;
+        }
+
+        $actualPrefix = substr($buffer, 0, $prefixLength);
+        if (!hash_equals($this->framingPrefix, $actualPrefix)) {
+            throw new RuntimeException('Invalid SecretStream framing prefix.');
+        }
+
+        $buffer = substr($buffer, $prefixLength);
+
+        return true;
+    }
+
+    private function decryptFrame(
+        string &$state,
+        string $frame,
+        SafeFileWriter $writer,
+        bool $finalSeen,
+    ): bool {
+        if ($finalSeen) {
+            throw new RuntimeException('Trailing data or a duplicate final frame was found.');
+        }
+
+        if (strlen($frame) < SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_ABYTES) {
+            throw new RuntimeException('Truncated SecretStream frame.');
+        }
+
+        $decrypted = sodium_crypto_secretstream_xchacha20poly1305_pull(
+            $state,
+            $frame,
+            $this->additionalData,
+        );
+        if ($decrypted === false) {
+            throw new RuntimeException('Malformed or corrupted SecretStream frame.');
+        }
+
+        [$plaintext, $tag] = $decrypted;
+        if (!is_string($plaintext) || !is_int($tag)) {
+            throw new RuntimeException('Invalid SecretStream decrypted frame values.');
+        }
+        $this->writeAll($writer, $plaintext);
+
+        return $tag === SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_TAG_FINAL;
+    }
+
+    private function decryptFrames(string $inputPath, SafeFileWriter $writer, int $chunkSize): void
+    {
+        $reader = new SafeFileReader($inputPath);
+        $state = null;
 
         try {
-            $nonce = $fileReader->binary($this->algorithm->prefixLength())->current();
-            if (!is_string($nonce) || strlen($nonce) !== $this->algorithm->prefixLength()) {
-                throw new RuntimeException('Invalid nonce length.');
+            $frameSize = $chunkSize + SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_ABYTES;
+            $finalSeen = false;
+            $buffer = '';
+            $prefixValidated = $this->framingPrefix === '';
+
+            foreach ($reader->chunks($frameSize) as $frame) {
+                if ($frame === '') {
+                    continue;
+                }
+                $buffer .= $frame;
+
+                if (!$prefixValidated) {
+                    $prefixValidated = $this->consumePrefix($buffer);
+                }
+
+                if ($prefixValidated && $state === null) {
+                    $state = $this->consumeHeader($buffer);
+                }
+
+                if ($state !== null) {
+                    $finalSeen = $this->consumeFullFrames($buffer, $state, $writer, $finalSeen, $frameSize);
+                }
             }
 
-            $this->forEachChunk($fileReader, $chunkSize, 'plaintext', function (string $chunk) use ($fileWriter, &$nonce): void {
-                $decryptedChunk = sodium_crypto_stream_xchacha20_xor($chunk, $nonce, $this->key);
-                $this->writeBinary($fileWriter, $decryptedChunk);
-                $nonce = $this->incrementNonce($nonce);
-            });
+            if (!$prefixValidated || $state === null) {
+                throw new RuntimeException('Invalid or truncated SecretStream header.');
+            }
+
+            if ($buffer !== '') {
+                $finalSeen = $this->decryptFrame($state, $buffer, $writer, $finalSeen);
+            }
+
+            if (!$finalSeen) {
+                throw new RuntimeException('SecretStream final frame is missing.');
+            }
         } finally {
-            $fileReader->releaseLock();
+            if (is_string($state)) {
+                sodium_memzero($state);
+            }
+            $reader->releaseLock();
         }
     }
 
-    private function decryptUsingSecretStream(string $inputPath, SafeFileWriter $fileWriter, int $chunkSize): void
+    private function encryptFrames(string $inputPath, SafeFileWriter $writer, int $chunkSize): int
     {
-        $fileReader = new SafeFileReader($inputPath);
+        [$state, $header] = $this->initializePush();
+        $reader = new SafeFileReader($inputPath);
+        $written = $this->writeAll($writer, $this->framingPrefix . $header);
 
         try {
-            $header = $fileReader->binary($this->algorithm->prefixLength())->current();
-            if (!is_string($header) || strlen($header) !== $this->algorithm->prefixLength()) {
-                throw new RuntimeException('Invalid secret stream header.');
-            }
-
-            $state = sodium_crypto_secretstream_xchacha20poly1305_init_pull($header, $this->key);
-
-            $isFinalTagSeen = false;
-            $cipherChunkSize = $chunkSize + SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_ABYTES;
-            $chunkIterator = $fileReader->binary($cipherChunkSize);
-
-            foreach ($chunkIterator as $chunk) {
-                $chunk = $this->normalizeChunk($chunk, 'ciphertext');
-                if ($chunk === null) {
+            $buffer = null;
+            foreach ($reader->chunks($chunkSize) as $chunk) {
+                if ($chunk === '') {
                     continue;
                 }
 
-                $decryptedFrame = sodium_crypto_secretstream_xchacha20poly1305_pull(
-                    $state,
-                    $chunk,
-                    $this->additionalData,
-                );
-
-                if ($decryptedFrame === false) {
-                    throw new RuntimeException('Failed to decrypt secret stream frame.');
+                if ($buffer !== null) {
+                    $frame = sodium_crypto_secretstream_xchacha20poly1305_push(
+                        $state,
+                        $buffer,
+                        $this->additionalData,
+                        SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_TAG_MESSAGE,
+                    );
+                    $written += $this->writeAll($writer, $frame);
                 }
-
-                [$data, $tag] = $decryptedFrame;
-                if (!is_string($data) || !is_int($tag)) {
-                    throw new RuntimeException('Invalid secret stream frame.');
-                }
-
-                $this->writeBinary($fileWriter, $data);
-
-                if ($tag === SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_TAG_FINAL) {
-                    $isFinalTagSeen = true;
-
-                    break;
-                }
+                $buffer = $chunk;
             }
 
-            if (!$isFinalTagSeen) {
-                throw new RuntimeException('Incomplete or corrupted file detected during decryption.');
-            }
-
-            sodium_memzero($state);
-        } finally {
-            $fileReader->releaseLock();
-        }
-    }
-
-    private function encryptUsingCryptoStream(string $inputPath, SafeFileWriter $fileWriter, int $chunkSize): int
-    {
-        $nonce = random_bytes($this->algorithm->prefixLength());
-        $bytesWritten = $this->writeBinary($fileWriter, $nonce);
-
-        $fileReader = new SafeFileReader($inputPath);
-
-        try {
-            $this->forEachChunk($fileReader, $chunkSize, 'plaintext', function (string $chunk) use ($fileWriter, &$nonce, &$bytesWritten): void {
-                $encryptedChunk = sodium_crypto_stream_xchacha20_xor($chunk, $nonce, $this->key);
-                $bytesWritten += $this->writeBinary($fileWriter, $encryptedChunk);
-                $nonce = $this->incrementNonce($nonce);
-            });
-
-            return $bytesWritten;
-        } finally {
-            $fileReader->releaseLock();
-        }
-    }
-
-    private function encryptUsingSecretStream(string $inputPath, SafeFileWriter $fileWriter, int $chunkSize): int
-    {
-        [$state, $header] = sodium_crypto_secretstream_xchacha20poly1305_init_push($this->key);
-        if (!is_string($state) || !is_string($header)) {
-            throw new RuntimeException('Unable to initialize secret stream push state.');
-        }
-
-        $bytesWritten = $this->writeBinary($fileWriter, $header);
-
-        $fileReader = new SafeFileReader($inputPath);
-
-        try {
-            $chunkIterator = $fileReader->binary($chunkSize);
-            /** @var string|null $bufferedChunk */
-            $bufferedChunk = null;
-
-            foreach ($chunkIterator as $chunk) {
-                $chunk = $this->normalizeChunk($chunk, 'plaintext');
-                if ($chunk === null) {
-                    continue;
-                }
-
-                if ($bufferedChunk === null) {
-                    $bufferedChunk = $chunk;
-
-                    continue;
-                }
-
-                $encryptedChunk = sodium_crypto_secretstream_xchacha20poly1305_push(
-                    $state,
-                    $bufferedChunk,
-                    $this->additionalData,
-                    SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_TAG_MESSAGE,
-                );
-
-                $bytesWritten += $this->writeBinary($fileWriter, $encryptedChunk);
-                $bufferedChunk = $chunk;
-            }
-
-            $finalChunk = sodium_crypto_secretstream_xchacha20poly1305_push(
+            $finalFrame = sodium_crypto_secretstream_xchacha20poly1305_push(
                 $state,
-                $bufferedChunk ?? '',
+                $buffer ?? '',
                 $this->additionalData,
                 SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_TAG_FINAL,
             );
 
-            $bytesWritten += $this->writeBinary($fileWriter, $finalChunk);
-            sodium_memzero($state);
-
-            return $bytesWritten;
+            return $written + $this->writeAll($writer, $finalFrame);
         } finally {
-            $fileReader->releaseLock();
+            sodium_memzero($state);
+            $reader->releaseLock();
         }
     }
 
-    private function forEachChunk(SafeFileReader $fileReader, int $chunkSize, string $kind, callable $consumer): void
+    /** @return array{string, string} */
+    private function initializePush(): array
     {
-        foreach ($fileReader->binary($chunkSize) as $chunk) {
-            $chunk = $this->normalizeChunk($chunk, $kind);
-            if ($chunk === null) {
-                continue;
-            }
-
-            $consumer($chunk);
-        }
-    }
-
-    private function incrementNonce(string $nonce): string
-    {
-        $length = strlen($nonce);
-        if ($length === 0) {
-            throw new RuntimeException('Nonce must not be empty.');
+        $initialized = sodium_crypto_secretstream_xchacha20poly1305_init_push($this->key);
+        $state = $initialized[0] ?? null;
+        $header = $initialized[1] ?? null;
+        if (!is_string($state) || !is_string($header)) {
+            throw new RuntimeException('Unable to initialize SecretStream encryption state.');
         }
 
-        $bytes = str_split($nonce);
-
-        for ($index = $length - 1; $index >= 0; $index--) {
-            $next = (ord($bytes[$index]) + 1) & 0xFF;
-            $bytes[$index] = chr($next);
-
-            if ($next !== 0) {
-                break;
-            }
-        }
-
-        return implode('', $bytes);
-    }
-
-    private function normalizeChunk(mixed $chunk, string $kind): ?string
-    {
-        if ($chunk === null || $chunk === '') {
-            return null;
-        }
-
-        if (!is_string($chunk)) {
-            throw new RuntimeException(sprintf('Invalid %s chunk encountered.', $kind));
-        }
-
-        return $chunk;
+        return [$state, $header];
     }
 
     private function replaceOutput(string $temporaryPath, string $outputPath): void
     {
-        if (!file_exists($outputPath)) {
+        if (!file_exists($outputPath) || PHP_OS_FAMILY !== 'Windows') {
             if (!rename($temporaryPath, $outputPath)) {
                 throw new FileAccessException('Unable to finalize output file: ' . $outputPath);
             }
@@ -298,38 +299,40 @@ final readonly class SecretStream
             throw new FileAccessException('Output path is not a file: ' . $outputPath);
         }
 
-        if (PHP_OS_FAMILY !== 'Windows' && rename($temporaryPath, $outputPath)) {
-            return;
-        }
-
         $backupPath = $temporaryPath . '.backup';
         if (!rename($outputPath, $backupPath)) {
-            throw new FileAccessException('Unable to back up the existing output file: ' . $outputPath);
+            throw new FileAccessException('Unable to preserve the existing output file.');
         }
 
         if (rename($temporaryPath, $outputPath)) {
             if (!unlink($backupPath) && is_file($backupPath)) {
-                throw new FileAccessException('Unable to delete the previous output file backup.');
+                throw new FileAccessException('Unable to remove the replaced output backup.');
             }
 
             return;
         }
 
         if (!rename($backupPath, $outputPath)) {
-            throw new FileAccessException('Unable to restore the existing output file after replacement failed.');
+            throw new FileAccessException('Unable to restore the existing output file.');
         }
 
         throw new FileAccessException('Unable to finalize output file: ' . $outputPath);
     }
 
-    private function writeBinary(SafeFileWriter $fileWriter, string $data): int
+    private function writeAll(SafeFileWriter $writer, string $data): int
     {
-        $written = $fileWriter->__call('binary', [$data]);
-        if ($written === false) {
-            throw new RuntimeException('Failed to write output chunk.');
+        $length = strlen($data);
+        $offset = 0;
+
+        while ($offset < $length) {
+            $written = $writer->writeBinary(substr($data, $offset));
+            if ($written < 1) {
+                throw new RuntimeException('Unable to write the complete output frame.');
+            }
+            $offset += $written;
         }
 
-        return strlen($data);
+        return $length;
     }
 
     /**
@@ -349,26 +352,21 @@ final readonly class SecretStream
             throw new FileAccessException('Unable to create a temporary output file.');
         }
 
-        $fileWriter = new SafeFileWriter($temporaryPath, false);
+        $writer = new SafeFileWriter($temporaryPath);
         $committed = false;
 
         try {
-            $result = $operation($fileWriter);
-            $fileWriter->close();
-
+            $result = $operation($writer);
+            $writer->close();
             $this->replaceOutput($temporaryPath, $outputPath);
-
             $committed = true;
 
             return $result;
         } finally {
-            if (!$committed) {
-                try {
-                    $fileWriter->close();
-                } finally {
-                    if (is_file($temporaryPath) && !unlink($temporaryPath) && is_file($temporaryPath)) {
-                        throw new FileAccessException('Unable to delete temporary output file.');
-                    }
+            if (!$committed && is_file($temporaryPath)) {
+                $writer->close();
+                if (!unlink($temporaryPath) && is_file($temporaryPath)) {
+                    throw new FileAccessException('Unable to remove temporary output file.');
                 }
             }
         }

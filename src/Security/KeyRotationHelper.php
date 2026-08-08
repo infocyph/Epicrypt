@@ -18,7 +18,16 @@ final class KeyRotationHelper
     public function resolve(string $kid, array|KeyRing $keySet): string
     {
         if ($keySet instanceof KeyRing) {
-            $keySet = $keySet->keys();
+            $entry = $keySet->resolveForVerification(
+                $kid,
+                KeyPurpose::KEY_ROTATION,
+                SecurityPolicy::DEFAULT_KEY_ROTATION_HMAC_ALGORITHM,
+            );
+            if ($entry === null) {
+                throw new KeyResolutionException('Unknown or ineligible key identifier: ' . $kid);
+            }
+
+            return $entry->key;
         }
 
         if (!isset($keySet[$kid]) || $keySet[$kid] === '') {
@@ -40,12 +49,12 @@ final class KeyRotationHelper
 
     public function signWithKeyRing(string $payload, KeyRing $keyRing): string
     {
-        $kid = $keyRing->activeKeyId();
-        if ($kid === null) {
-            throw new KeyResolutionException('Active key id is required when signing with a KeyRing.');
-        }
+        $entry = $keyRing->activeForWrite(
+            KeyPurpose::KEY_ROTATION,
+            SecurityPolicy::DEFAULT_KEY_ROTATION_HMAC_ALGORITHM,
+        );
 
-        return $this->sign($payload, $kid, $keyRing);
+        return $this->sign($payload, $entry->id, $keyRing);
     }
 
     /**
@@ -71,7 +80,13 @@ final class KeyRotationHelper
             );
         }
 
-        foreach (KeyCandidates::orderedEntries($keySet, 'All rotation keys must be non-empty strings.', 'At least one rotation key is required.') as $entry) {
+        foreach (KeyCandidates::orderedEntries(
+            $keySet,
+            'All rotation keys must be non-empty strings.',
+            'At least one rotation key is required.',
+            KeyPurpose::KEY_ROTATION,
+            SecurityPolicy::DEFAULT_KEY_ROTATION_HMAC_ALGORITHM,
+        ) as $entry) {
             $computed = Base64Url::encode(hash_hmac(SecurityPolicy::DEFAULT_KEY_ROTATION_HMAC_ALGORITHM, $payload, $entry['key'], true));
             if (SecureCompare::equals($computed, $signature)) {
                 return new KeyVerificationResult(true, $entry['id'], !$entry['active']);

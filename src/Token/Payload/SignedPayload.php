@@ -6,16 +6,16 @@ namespace Infocyph\Epicrypt\Token\Payload;
 
 use Infocyph\Epicrypt\Exception\Token\ExpiredTokenException;
 use Infocyph\Epicrypt\Exception\Token\TokenException;
-use Infocyph\Epicrypt\Internal\Clock\ClockInterface;
 use Infocyph\Epicrypt\Internal\Clock\SystemClock;
 use Infocyph\Epicrypt\Internal\SignedPayloadCodec;
+use Infocyph\Epicrypt\Security\KeyPurpose;
 use Infocyph\Epicrypt\Security\KeyRing;
 use Infocyph\Epicrypt\Security\KeyVerificationResult;
-use Infocyph\Epicrypt\Token\Contract\PayloadTokenInterface;
 use Infocyph\Epicrypt\Token\Support\TokenAnyKey;
 use Infocyph\Epicrypt\Token\Support\TokenKeyCandidates;
+use Psr\Clock\ClockInterface;
 
-final readonly class SignedPayload implements PayloadTokenInterface
+final readonly class SignedPayload
 {
     public function __construct(
         private ?string $context = null,
@@ -138,6 +138,8 @@ final readonly class SignedPayload implements PayloadTokenInterface
             $keys,
             'All signed payload key candidates must be non-empty strings.',
             'At least one signed payload key candidate is required.',
+            KeyPurpose::SIGNED_PAYLOAD,
+            'sha512',
         );
     }
 
@@ -151,6 +153,8 @@ final readonly class SignedPayload implements PayloadTokenInterface
             $keys,
             'All signed payload key candidates must be non-empty strings.',
             'At least one signed payload key candidate is required.',
+            KeyPurpose::SIGNED_PAYLOAD,
+            'sha512',
         );
     }
 }

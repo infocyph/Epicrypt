@@ -4,21 +4,28 @@ declare(strict_types=1);
 
 namespace Infocyph\Epicrypt\Crypto;
 
-use Infocyph\Epicrypt\Crypto\Contract\SignatureInterface;
 use Infocyph\Epicrypt\Exception\Crypto\InvalidKeyException;
 use Infocyph\Epicrypt\Exception\Crypto\SignatureException;
 use Infocyph\Epicrypt\Internal\Base64Url;
 use Infocyph\Epicrypt\Internal\BinaryKey;
 
-final class Signature implements SignatureInterface
+final class Signature
 {
-    /**
-     * @param array<string, mixed> $context
-     */
-    public function sign(string $message, mixed $key, array $context = []): string
+    public function sign(string $message, #[\SensitiveParameter] string $key): string
     {
         try {
-            $privateKey = BinaryKey::fixedLength($key, (bool) ($context['key_is_binary'] ?? false), SODIUM_CRYPTO_SIGN_SECRETKEYBYTES, 'Private key');
+            return $this->signWithBinaryKey($message, Base64Url::decode($key));
+        } catch (SignatureException $exception) {
+            throw $exception;
+        } catch (\Throwable $exception) {
+            throw new SignatureException('Private key must be a valid signing secret key.', 0, $exception);
+        }
+    }
+
+    public function signWithBinaryKey(string $message, #[\SensitiveParameter] string $key): string
+    {
+        try {
+            $privateKey = BinaryKey::fixedLength($key, true, SODIUM_CRYPTO_SIGN_SECRETKEYBYTES, 'Private key');
         } catch (InvalidKeyException $e) {
             throw new SignatureException('Private key must be a valid signing secret key.', 0, $e);
         }
@@ -28,13 +35,21 @@ final class Signature implements SignatureInterface
         return Base64Url::encode($signature);
     }
 
-    /**
-     * @param array<string, mixed> $context
-     */
-    public function verify(string $message, string $signature, mixed $key, array $context = []): bool
+    public function verify(string $message, string $signature, string $key): bool
     {
         try {
-            $publicKey = BinaryKey::fixedLength($key, (bool) ($context['key_is_binary'] ?? false), SODIUM_CRYPTO_SIGN_PUBLICKEYBYTES, 'Public key');
+            return $this->verifyWithBinaryKey($message, $signature, Base64Url::decode($key));
+        } catch (SignatureException $exception) {
+            throw $exception;
+        } catch (\Throwable $exception) {
+            throw new SignatureException('Public key must be a valid signing public key.', 0, $exception);
+        }
+    }
+
+    public function verifyWithBinaryKey(string $message, string $signature, string $key): bool
+    {
+        try {
+            $publicKey = BinaryKey::fixedLength($key, true, SODIUM_CRYPTO_SIGN_PUBLICKEYBYTES, 'Public key');
         } catch (InvalidKeyException $e) {
             throw new SignatureException('Public key must be a valid signing public key.', 0, $e);
         }

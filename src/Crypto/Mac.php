@@ -4,19 +4,15 @@ declare(strict_types=1);
 
 namespace Infocyph\Epicrypt\Crypto;
 
-use Infocyph\Epicrypt\Crypto\Contract\MacInterface;
 use Infocyph\Epicrypt\Exception\Crypto\InvalidKeyException;
 use Infocyph\Epicrypt\Internal\Base64Url;
 use Infocyph\Epicrypt\Internal\BinaryKey;
 
-final class Mac implements MacInterface
+final class Mac
 {
-    /**
-     * @param array<string, mixed> $context
-     */
-    public function generate(string $message, string $key, array $context = []): string
+    public function generate(string $message, #[\SensitiveParameter] string $key): string
     {
-        $decodedKey = $this->decodeKey($key, (bool) ($context['key_is_binary'] ?? false));
+        $decodedKey = $this->decodeKey($key);
 
         return Base64Url::encode(sodium_crypto_auth($message, $decodedKey));
     }
@@ -28,20 +24,42 @@ final class Mac implements MacInterface
         return $asBase64Url ? Base64Url::encode($key) : $key;
     }
 
-    /**
-     * @param array<string, mixed> $context
-     */
-    public function verify(string $message, string $mac, string $key, array $context = []): bool
+    public function generateWithBinaryKey(string $message, #[\SensitiveParameter] string $key): string
     {
-        $decodedKey = $this->decodeKey($key, (bool) ($context['key_is_binary'] ?? false));
+        $this->assertBinaryKey($key);
+
+        return Base64Url::encode(sodium_crypto_auth($message, $key));
+    }
+
+    public function verify(string $message, string $mac, #[\SensitiveParameter] string $key): bool
+    {
+        $decodedKey = $this->decodeKey($key);
 
         return sodium_crypto_auth_verify(Base64Url::decode($mac), $message, $decodedKey);
     }
 
-    private function decodeKey(string $key, bool $isBinary): string
+    public function verifyWithBinaryKey(
+        string $message,
+        string $mac,
+        #[\SensitiveParameter]
+        string $key,
+    ): bool {
+        $this->assertBinaryKey($key);
+
+        return sodium_crypto_auth_verify(Base64Url::decode($mac), $message, $key);
+    }
+
+    private function assertBinaryKey(string $key): void
+    {
+        if (strlen($key) !== SODIUM_CRYPTO_AUTH_KEYBYTES) {
+            throw new InvalidKeyException('MAC key must be 32 bytes.');
+        }
+    }
+
+    private function decodeKey(string $key): string
     {
         try {
-            return BinaryKey::fixedLength($key, $isBinary, SODIUM_CRYPTO_AUTH_KEYBYTES, 'MAC key');
+            return BinaryKey::fixedLength($key, false, SODIUM_CRYPTO_AUTH_KEYBYTES, 'MAC key');
         } catch (InvalidKeyException $e) {
             throw new InvalidKeyException('MAC key must be 32 bytes.', 0, $e);
         }

@@ -6,8 +6,6 @@ namespace Infocyph\Epicrypt\Certificate\Enum;
 
 enum OpenSslRsaBits: int
 {
-    case BITS_1024 = 1024;
-
     case BITS_2048 = 2048;
 
     case BITS_3072 = 3072;

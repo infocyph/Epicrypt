@@ -5,138 +5,70 @@ declare(strict_types=1);
 namespace Infocyph\Epicrypt\Password;
 
 use Infocyph\Epicrypt\Exception\Password\PasswordHashException;
-use Infocyph\Epicrypt\Internal\SecurityPolicy;
-use Infocyph\Epicrypt\Password\Contract\PasswordHasherInterface;
 use Infocyph\Epicrypt\Password\Enum\PasswordHashAlgorithm;
-use Infocyph\Epicrypt\Security\Policy\SecurityProfile;
 
-final class PasswordHasher implements PasswordHasherInterface
+final readonly class PasswordHasher
 {
-    /**
-     * @param array<string, mixed> $options
-     */
-    public function hashPassword(#[\SensitiveParameter] string $password, array $options = []): string
-    {
-        [$algorithm, $hashOptions] = $this->resolveHashConfiguration($options);
-        $algo = $algorithm->toPasswordAlgorithm();
-        if (!in_array($algo, password_algos(), true)) {
-            throw new PasswordHashException('Unsupported password hashing algorithm.');
-        }
+    public function __construct(private PasswordHashOptions $options = new PasswordHashOptions()) {}
 
-        return password_hash($password, $algo, $hashOptions);
+    public function hashPassword(#[\SensitiveParameter] string $password): string
+    {
+        $this->assertPasswordSupported($password);
+
+        return password_hash(
+            $password,
+            $this->options->algorithm->toPasswordAlgorithm(),
+            $this->options->nativeOptions(),
+        );
     }
 
-    /**
-     * @param array<string, mixed> $options
-     */
-    public function needsRehash(string $hash, array $options = []): bool
+    public function needsRehash(string $hash): bool
     {
-        [$algorithm, $hashOptions] = $this->resolveHashConfiguration($options);
-
-        return password_needs_rehash($hash, $algorithm->toPasswordAlgorithm(), $hashOptions);
+        return password_needs_rehash(
+            $hash,
+            $this->options->algorithm->toPasswordAlgorithm(),
+            $this->options->nativeOptions(),
+        );
     }
 
-    /**
-     * @param array<string, mixed> $options
-     */
-    public function verifyAndNeedsRehash(#[\SensitiveParameter] string $password, string $hash, array $options = []): PasswordVerificationResult
-    {
-        $verified = $this->verifyPassword($password, $hash, $options);
-        if (!$verified) {
+    public function verifyAndNeedsRehash(
+        #[\SensitiveParameter]
+        string $password,
+        string $hash,
+    ): PasswordVerificationResult {
+        if (!$this->verifyPassword($password, $hash)) {
             return new PasswordVerificationResult(false, false);
         }
 
-        return new PasswordVerificationResult(true, $this->needsRehash($hash, $options));
+        return new PasswordVerificationResult(true, $this->needsRehash($hash));
     }
 
-    /**
-     * @param array<string, mixed> $options
-     */
-    public function verifyAndRehash(#[\SensitiveParameter] string $password, string $hash, array $options = []): PasswordVerificationResult
-    {
-        $result = $this->verifyAndNeedsRehash($password, $hash, $options);
+    public function verifyAndRehash(
+        #[\SensitiveParameter]
+        string $password,
+        string $hash,
+    ): PasswordVerificationResult {
+        $result = $this->verifyAndNeedsRehash($password, $hash);
         if (!$result->verified || !$result->needsRehash) {
             return $result;
         }
 
-        return new PasswordVerificationResult(
-            true,
-            true,
-            $this->hashPassword($password, $options),
-        );
+        return new PasswordVerificationResult(true, true, $this->hashPassword($password));
     }
 
-    /**
-     * @param array<string, mixed> $options
-     */
-    // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter -- Options are retained for the public contract.
-    public function verifyPassword(#[\SensitiveParameter] string $password, string $hash, array $options = []): bool
+    public function verifyPassword(#[\SensitiveParameter] string $password, string $hash): bool
     {
+        if (str_starts_with($hash, '$2') && strlen($password) > 72) {
+            return false;
+        }
+
         return password_verify($password, $hash);
     }
 
-    /**
-     * @param array<string, mixed> $options
-     */
-    private function intOption(array $options, string $key, int $default): int
+    private function assertPasswordSupported(string $password): void
     {
-        $value = $options[$key] ?? $default;
-        if (!is_int($value)) {
-            throw new PasswordHashException(sprintf('Hash option "%s" must be an integer.', $key));
+        if ($this->options->algorithm === PasswordHashAlgorithm::BCRYPT && strlen($password) > 72) {
+            throw new PasswordHashException('Bcrypt passwords cannot exceed 72 bytes.');
         }
-        if ($value < 1) {
-            throw new PasswordHashException(sprintf('Hash option "%s" must be at least 1.', $key));
-        }
-
-        return $value;
-    }
-
-    private function resolveAlgorithm(mixed $algorithm): PasswordHashAlgorithm
-    {
-        if (!($algorithm instanceof PasswordHashAlgorithm)) {
-            throw new PasswordHashException('Password hashing algorithm must be a PasswordHashAlgorithm enum.');
-        }
-
-        return $algorithm;
-    }
-
-    /**
-     * @param array<string, mixed> $options
-     * @return array{PasswordHashAlgorithm, array<string, int>}
-     */
-    private function resolveHashConfiguration(array $options): array
-    {
-        $profile = $options['profile'] ?? null;
-        if ($profile !== null && !$profile instanceof SecurityProfile) {
-            throw new PasswordHashException('Password hashing profile must be a SecurityProfile enum.');
-        }
-
-        $profileOptions = ($profile ?? SecurityProfile::MODERN)->passwordHashOptions();
-        $mergedOptions = array_replace($profileOptions, $options);
-        $algorithm = $this->resolveAlgorithm($mergedOptions['algorithm'] ?? PasswordHashAlgorithm::ARGON2ID);
-
-        return [
-            $algorithm,
-            $this->resolveHashOptions($algorithm, $mergedOptions),
-        ];
-    }
-
-    /**
-     * @param array<string, mixed> $options
-     * @return array<string, int>
-     */
-    private function resolveHashOptions(PasswordHashAlgorithm $algorithm, array $options): array
-    {
-        return match ($algorithm) {
-            PasswordHashAlgorithm::BCRYPT => [
-                'cost' => $this->intOption($options, 'cost', 12),
-            ],
-            PasswordHashAlgorithm::ARGON2I,
-            PasswordHashAlgorithm::ARGON2ID => [
-                'memory_cost' => $this->intOption($options, 'memory_cost', SecurityPolicy::PASSWORD_DEFAULT_MEMORY_COST),
-                'time_cost' => $this->intOption($options, 'time_cost', SecurityPolicy::PASSWORD_DEFAULT_TIME_COST),
-                'threads' => $this->intOption($options, 'threads', SecurityPolicy::PASSWORD_DEFAULT_THREADS),
-            ],
-        };
     }
 }

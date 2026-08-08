@@ -1,100 +1,23 @@
-Epicrypt Documentation
-======================
+Epicrypt 2.0
+============
 
-Epicrypt is a **capability-first PHP security toolkit** for modern applications.
-
-It provides security building blocks for:
-
-- cryptography
-- token security
-- password and secret protection
-- integrity verification
-- secure random generation
-- secure data protection flows
-- practical security utilities
-
-Why Epicrypt
-------------
-
-Epicrypt keeps responsibilities separated by domain (``Crypto``, ``Token``, ``Password``, etc.) and treats OpenSSL/Sodium as implementation backends inside those domains.
-
-This gives you:
-
-- cleaner APIs
-- safer defaults
-- explicit validation behavior
-- easier long-term maintainability
-
-Documentation Map
------------------
+Epicrypt provides authenticated data protection, token security, password
+security, integrity primitives, and certificate tooling for PHP 8.4 and later.
 
 .. toctree::
    :maxdepth: 2
-   :caption: Getting Started
 
-   installation
-   quickstart
    getting-started
    architecture
    security-recommendations
-   key-rotation
-
-.. toctree::
-   :maxdepth: 2
-   :caption: Capability Guides
-
-   passwords
-   tokens
-   jwt
-   data-protection
-   file-encryption
-   certificates
-   crypto
-   integrity
-   generate
-   security
-   security-model
-   key-rotation
-   migration
-
-.. toctree::
-   :maxdepth: 2
-   :caption: Domain Reference
-
-   password
-   token
    certificate
-   complete-usage-reference
-
-.. toctree::
-   :maxdepth: 1
-   :caption: Use Cases
-
-   Overview <use-cases/index>
-   use-cases/web-app-security
-   use-cases/security-complete-examples
-   use-cases/password-complete-examples
-   use-cases/api-and-token-security
-   use-cases/token-complete-examples
-   use-cases/file-and-secret-protection
-   use-cases/data-protection-complete-examples
-   use-cases/pki-and-key-exchange
-   use-cases/certificate-complete-examples
-   use-cases/crypto-complete-examples
-   use-cases/integrity-complete-examples
-   use-cases/generate-complete-examples
-
-.. toctree::
-   :maxdepth: 2
-   :caption: Operations
-
+   crypto
+   data-protection
+   generate
+   integrity
+   password
+   security
+   token
    error-handling
-   testing-and-quality
    benchmarking
-
-Package
--------
-
-- Namespace root: ``Infocyph\\Epicrypt``
-- PHP: ``>=8.4``
-- Extensions: ``ext-sodium``, ``ext-openssl``, ``ext-json``, ``ext-mbstring``, ``ext-hash``
+   testing-and-quality

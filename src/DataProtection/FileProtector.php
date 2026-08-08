@@ -4,263 +4,205 @@ declare(strict_types=1);
 
 namespace Infocyph\Epicrypt\DataProtection;
 
-use Infocyph\Epicrypt\Crypto\Enum\StreamAlgorithm;
 use Infocyph\Epicrypt\Crypto\SecretStream;
-use Infocyph\Epicrypt\Exception\Crypto\InvalidKeyException;
-use Infocyph\Epicrypt\Exception\FileAccessException;
-use Infocyph\Epicrypt\Internal\BinaryKey;
-use Infocyph\Epicrypt\Internal\KeyCandidates;
+use Infocyph\Epicrypt\Exception\Crypto\DecryptionException;
+use Infocyph\Epicrypt\Internal\Base64Url;
+use Infocyph\Epicrypt\Internal\Clock\SystemClock;
+use Infocyph\Epicrypt\Internal\Json;
+use Infocyph\Epicrypt\Security\KeyPurpose;
 use Infocyph\Epicrypt\Security\KeyRing;
-use Infocyph\Epicrypt\Security\Policy\SecurityProfile;
-use Throwable;
+use Infocyph\Pathwise\FileManager\SafeFileReader;
+use Psr\Clock\ClockInterface;
 
 final readonly class FileProtector
 {
-    public function __construct(
-        private StreamAlgorithm $algorithm = StreamAlgorithm::XCHACHA20POLY1305,
-        private bool $allowUnauthenticatedStream = false,
-        private ?\Closure $renameOperation = null,
-    ) {}
+    private const string ALGORITHM = 'xchacha20-poly1305-secretstream';
 
-    public static function forProfile(SecurityProfile $profile = SecurityProfile::MODERN): self
-    {
-        return new self($profile->defaultStreamAlgorithm());
-    }
+    private const string DOMAIN = 'file';
 
-    public function decrypt(
+    private const int MAX_PREFIX_SIZE = 32 * 1024;
+
+    public function __construct(private ClockInterface $clock = new SystemClock()) {}
+
+    public function protect(
         string $inputPath,
         string $outputPath,
+        #[\SensitiveParameter]
         string $key,
-        int $chunkSize = 8192,
-        bool $keyIsBinary = false,
-    ): void {
-        $this->assertReadableFile($inputPath);
-        $stream = new SecretStream($this->decodeKey($key, $keyIsBinary), $this->algorithm, '', $this->allowUnauthenticatedStream);
-        $stream->decrypt($inputPath, $outputPath, $chunkSize);
+        ProtectionOptions $options,
+        int $chunkSize = SecretStream::DEFAULT_CHUNK_SIZE,
+    ): ProtectionResult {
+        return $this->protectWithBinaryKey(
+            $inputPath,
+            $outputPath,
+            Base64Url::decode($key),
+            $options,
+            $chunkSize,
+        );
     }
 
-    /**
-     * @param iterable<string, string>|KeyRing $keys
-     */
-    public function decryptWithAnyKey(
+    public function protectWithBinaryKey(
         string $inputPath,
         string $outputPath,
-        iterable|KeyRing $keys,
-        int $chunkSize = 8192,
-        bool $keysAreBinary = false,
-    ): FileMigrationResult {
-        $lastException = null;
-
-        foreach ($this->orderedKeyEntries($keys) as $entry) {
-            try {
-                $this->decrypt($inputPath, $outputPath, $entry['key'], $chunkSize, $keysAreBinary);
-
-                return new FileMigrationResult($outputPath, $entry['id'], !$entry['active']);
-            } catch (Throwable $e) {
-                $lastException = $e;
-            }
-        }
-
-        throw new FileAccessException('Unable to decrypt file with any supplied key.', 0, $lastException);
-    }
-
-    public function encrypt(
-        string $inputPath,
-        string $outputPath,
+        #[\SensitiveParameter]
         string $key,
-        int $chunkSize = 8192,
-        bool $keyIsBinary = false,
-    ): int {
-        $this->assertReadableFile($inputPath);
-        $stream = new SecretStream($this->decodeKey($key, $keyIsBinary), $this->algorithm, '', $this->allowUnauthenticatedStream);
+        ProtectionOptions $options,
+        int $chunkSize = SecretStream::DEFAULT_CHUNK_SIZE,
+    ): ProtectionResult {
+        $createdAt = $this->clock->now()->getTimestamp();
+        $prefix = $this->encodePrefix($options, $createdAt);
+        new SecretStream($key, $prefix, $prefix . "\n")->encrypt($inputPath, $outputPath, $chunkSize);
 
-        return $stream->encrypt($inputPath, $outputPath, $chunkSize);
+        return new ProtectionResult(
+            $outputPath,
+            self::DOMAIN,
+            $options->purpose,
+            $createdAt,
+            $options->keyId,
+        );
     }
 
-    public function reencrypt(
+    public function protectWithKeyRing(
         string $inputPath,
         string $outputPath,
-        string $oldKey,
-        string $newKey,
-        int $chunkSize = 8192,
-        bool $oldKeyIsBinary = false,
-        bool $newKeyIsBinary = false,
-    ): FileMigrationResult {
-        $tempPath = $this->temporaryPathFor($outputPath);
+        KeyRing $keyRing,
+        ProtectionOptions $options,
+        int $chunkSize = SecretStream::DEFAULT_CHUNK_SIZE,
+    ): ProtectionResult {
+        $entry = $keyRing->activeForWrite(KeyPurpose::FILE_PROTECTION, self::ALGORITHM);
 
-        try {
-            $this->decrypt($inputPath, $tempPath, $oldKey, $chunkSize, $oldKeyIsBinary);
-            $this->encrypt($tempPath, $outputPath, $newKey, $chunkSize, $newKeyIsBinary);
-
-            return new FileMigrationResult($outputPath);
-        } finally {
-            $this->deleteIfExists($tempPath);
-        }
+        return $this->protect(
+            $inputPath,
+            $outputPath,
+            $entry->key,
+            new ProtectionOptions(
+                $options->purpose,
+                $options->additionalAuthenticatedData,
+                $entry->id,
+            ),
+            $chunkSize,
+        );
     }
 
-    /**
-     * @param iterable<string, string>|KeyRing $keys
-     */
-    public function reencryptInPlaceWithAnyKey(
-        string $path,
-        iterable|KeyRing $keys,
-        string $newKey,
-        int $chunkSize = 8192,
-        bool $keysAreBinary = false,
-        bool $newKeyIsBinary = false,
-    ): FileMigrationResult {
-        $outputPath = $this->temporaryPathFor($path . '.rotated');
-        $result = $this->reencryptWithAnyKey($path, $outputPath, $keys, $newKey, $chunkSize, $keysAreBinary, $newKeyIsBinary);
-        $backupPath = $this->temporaryPathFor($path . '.backup');
-        $backupCreated = false;
-
-        try {
-            $backupCreated = $this->createBackupIfPresent($path, $backupPath);
-            $this->finalizeRotation($outputPath, $path);
-        } catch (Throwable $e) {
-            $this->rollbackRotation($path, $outputPath, $backupPath, $backupCreated, $e);
-        } finally {
-            $this->cleanupBackupAfterSuccess($backupPath, $backupCreated, $path);
-        }
-
-        return new FileMigrationResult($path, $result->matchedKeyId, $result->usedFallbackKey);
-    }
-
-    /**
-     * @param iterable<string, string>|KeyRing $keys
-     */
-    public function reencryptWithAnyKey(
+    public function unprotect(
         string $inputPath,
         string $outputPath,
-        iterable|KeyRing $keys,
-        string $newKey,
-        int $chunkSize = 8192,
-        bool $keysAreBinary = false,
-        bool $newKeyIsBinary = false,
-    ): FileMigrationResult {
-        $tempPath = $this->temporaryPathFor($outputPath);
-        $result = $this->decryptWithAnyKey($inputPath, $tempPath, $keys, $chunkSize, $keysAreBinary);
-
-        try {
-            $this->encrypt($tempPath, $outputPath, $newKey, $chunkSize, $newKeyIsBinary);
-
-            return new FileMigrationResult($outputPath, $result->matchedKeyId, $result->usedFallbackKey);
-        } finally {
-            $this->deleteIfExists($tempPath);
-        }
+        #[\SensitiveParameter]
+        string $key,
+        ProtectionOptions $options,
+        int $chunkSize = SecretStream::DEFAULT_CHUNK_SIZE,
+    ): ProtectionResult {
+        return $this->unprotectWithBinaryKey(
+            $inputPath,
+            $outputPath,
+            Base64Url::decode($key),
+            $options,
+            $chunkSize,
+        );
     }
 
-    private function assertReadableFile(string $path): void
-    {
-        if (!file_exists($path) || !is_readable($path)) {
-            throw new FileAccessException('Input file is not readable: ' . $path);
-        }
+    public function unprotectWithBinaryKey(
+        string $inputPath,
+        string $outputPath,
+        #[\SensitiveParameter]
+        string $key,
+        ProtectionOptions $options,
+        int $chunkSize = SecretStream::DEFAULT_CHUNK_SIZE,
+    ): ProtectionResult {
+        [$prefix, $metadata] = $this->readAndValidatePrefix($inputPath, $options);
+        new SecretStream($key, $prefix, $prefix . "\n")->decrypt($inputPath, $outputPath, $chunkSize);
+
+        return new ProtectionResult(
+            $outputPath,
+            self::DOMAIN,
+            $metadata['purpose'],
+            $metadata['created_at'],
+            $metadata['kid'],
+        );
     }
 
-    private function cleanupBackupAfterSuccess(string $backupPath, bool $backupCreated, string $path): void
-    {
-        if ($backupCreated && file_exists($backupPath) && is_file($path)) {
-            $this->deleteIfExists($backupPath);
+    public function unprotectWithKeyRing(
+        string $inputPath,
+        string $outputPath,
+        KeyRing $keyRing,
+        ProtectionOptions $options,
+        int $chunkSize = SecretStream::DEFAULT_CHUNK_SIZE,
+    ): ProtectionResult {
+        [, $metadata] = $this->readAndValidatePrefix($inputPath, $options);
+        if ($metadata['kid'] === null) {
+            throw new DecryptionException('File key id is required for KeyRing decryption.');
         }
+
+        $entry = $keyRing->resolveForRead($metadata['kid'], KeyPurpose::FILE_PROTECTION, self::ALGORITHM);
+        if ($entry === null) {
+            throw new DecryptionException('File key id is not eligible for decryption.');
+        }
+
+        return $this->unprotect($inputPath, $outputPath, $entry->key, $options, $chunkSize);
     }
 
-    private function createBackupIfPresent(string $path, string $backupPath): bool
+    private function encodePrefix(ProtectionOptions $options, int $createdAt): string
     {
-        if (!file_exists($path)) {
-            return false;
-        }
-
-        if (!$this->renamePath($path, $backupPath)) {
-            throw new FileAccessException('Unable to create backup during in-place rotation: ' . $path);
-        }
-
-        return true;
-    }
-
-    private function decodeKey(string $key, bool $keyIsBinary): string
-    {
-        try {
-            return BinaryKey::fixedLength($key, $keyIsBinary, $this->algorithm->keyLength(), 'Stream key');
-        } catch (InvalidKeyException $e) {
-            throw new InvalidKeyException(sprintf('Stream key must be %d bytes.', $this->algorithm->keyLength()), 0, $e);
-        }
-    }
-
-    private function deleteIfExists(string $path): void
-    {
-        if (file_exists($path) && !unlink($path) && file_exists($path)) {
-            throw new FileAccessException('Unable to delete temporary file: ' . $path);
-        }
-    }
-
-    private function finalizeRotation(string $outputPath, string $path): void
-    {
-        if (!$this->renamePath($outputPath, $path)) {
-            throw new FileAccessException('Unable to finalize in-place rotation for file: ' . $path);
-        }
+        return ProtectedPayload::PREFIX . '.' . Base64Url::encode(Json::encode([
+            'v' => 2,
+            'domain' => self::DOMAIN,
+            'alg' => self::ALGORITHM,
+            'kid' => $options->keyId,
+            'purpose' => $options->purpose,
+            'created_at' => $createdAt,
+            'aad' => Base64Url::encode($options->additionalAuthenticatedData),
+        ]));
     }
 
     /**
-     * @param iterable<string, string>|KeyRing $keys
-     * @return list<array{id: ?string, key: string, active: bool}>
+     * @return array{string, array{v: int, domain: string, alg: string, kid: ?string, purpose: string, created_at: int, aad: string}}
      */
-    private function orderedKeyEntries(iterable|KeyRing $keys): array
+    private function readAndValidatePrefix(string $path, ProtectionOptions $options): array
     {
+        $reader = new SafeFileReader($path);
+
         try {
-            return KeyCandidates::orderedEntries(
-                $keys,
-                'All file key candidates must be non-empty strings.',
-                'At least one file key candidate is required.',
-            );
-        } catch (\InvalidArgumentException $e) {
-            throw new FileAccessException($e->getMessage(), 0, $e);
-        }
-    }
-
-    private function removePathForRollback(string $path): bool
-    {
-        if (is_file($path)) {
-            return unlink($path);
+            $firstChunk = $reader->chunks(self::MAX_PREFIX_SIZE)->current();
+        } finally {
+            $reader->releaseLock();
         }
 
-        if (is_dir($path)) {
-            return rmdir($path);
+        $newline = strpos($firstChunk, "\n");
+        if ($newline === false || $newline === 0) {
+            throw new DecryptionException('Invalid or oversized Epicrypt 2.0 file header.');
         }
 
-        return !file_exists($path);
-    }
-
-    private function renamePath(string $from, string $to): bool
-    {
-        if ($this->renameOperation instanceof \Closure) {
-            return (bool) ($this->renameOperation)($from, $to);
+        $prefix = substr($firstChunk, 0, $newline);
+        $parts = explode('.', $prefix);
+        if (count($parts) !== 2 || $parts[0] !== ProtectedPayload::PREFIX) {
+            throw new DecryptionException('Invalid Epicrypt 2.0 file framing.');
         }
 
-        return rename($from, $to);
-    }
-
-    private function rollbackRotation(string $path, string $outputPath, string $backupPath, bool $backupCreated, Throwable $cause): never
-    {
-        $this->deleteIfExists($outputPath);
-
-        if ($backupCreated && file_exists($backupPath)) {
-            if (file_exists($path) && !$this->removePathForRollback($path)) {
-                throw new FileAccessException('Rollback failed while preparing path restoration: ' . $path, 0, $cause);
-            }
-
-            if (!file_exists($path) && !$this->renamePath($backupPath, $path)) {
-                throw new FileAccessException('Rollback failed while restoring backup: ' . $path, 0, $cause);
-            }
+        $metadata = Json::decodeToArray(Base64Url::decode($parts[1]));
+        $keys = array_keys($metadata);
+        sort($keys);
+        if ($keys !== ['aad', 'alg', 'created_at', 'domain', 'kid', 'purpose', 'v']
+            || $metadata['v'] !== 2
+            || $metadata['domain'] !== self::DOMAIN
+            || $metadata['alg'] !== self::ALGORITHM
+            || $metadata['purpose'] !== $options->purpose
+            || $metadata['aad'] !== Base64Url::encode($options->additionalAuthenticatedData)
+            || !is_int($metadata['created_at'])
+            || ($metadata['kid'] !== null
+                && (!is_string($metadata['kid'])
+                    || preg_match('/\A[A-Za-z0-9_-]{1,128}\z/D', $metadata['kid']) !== 1))
+            || ($options->keyId !== null && $metadata['kid'] !== $options->keyId)) {
+            throw new DecryptionException('Invalid or mismatched Epicrypt 2.0 file metadata.');
         }
 
-        throw new FileAccessException('Unable to complete in-place file rotation.', 0, $cause);
-    }
-
-    private function temporaryPathFor(string $targetPath): string
-    {
-        $directory = dirname($targetPath);
-        $base = basename($targetPath);
-
-        return $directory . DIRECTORY_SEPARATOR . '.' . $base . '.epicrypt.' . bin2hex(random_bytes(6)) . '.tmp';
+        return [$prefix, [
+            'v' => 2,
+            'domain' => self::DOMAIN,
+            'alg' => self::ALGORITHM,
+            'kid' => $metadata['kid'],
+            'purpose' => $options->purpose,
+            'created_at' => $metadata['created_at'],
+            'aad' => Base64Url::encode($options->additionalAuthenticatedData),
+        ]];
     }
 }

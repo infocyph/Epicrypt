@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Infocyph\Epicrypt\Integrity\Support;
 
+use Infocyph\Epicrypt\Integrity\IntegrityAlgorithm;
 use Infocyph\Epicrypt\Integrity\StringHasher;
 
 /**
@@ -12,7 +13,7 @@ use Infocyph\Epicrypt\Integrity\StringHasher;
 final readonly class ContentFingerprinter
 {
     public function __construct(
-        private StringHasher $hasher = new StringHasher('sha256'),
+        private StringHasher $hasher = new StringHasher(IntegrityAlgorithm::SHA256),
     ) {}
 
     /**
@@ -22,7 +23,7 @@ final readonly class ContentFingerprinter
     {
         ksort($metadata, SORT_STRING);
 
-        $canonical = 'EPICRYPT-CONTENT-FINGERPRINT-V1';
+        $canonical = 'EPICRYPT-CONTENT-FINGERPRINT-V2';
         $canonical .= self::encodeField($content);
         $canonical .= count($metadata) . ':';
 

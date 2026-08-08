@@ -6,18 +6,23 @@ namespace Infocyph\Epicrypt\Token\Jwt;
 
 use Infocyph\Epicrypt\Exception\Token\KeyResolutionException;
 use Infocyph\Epicrypt\Internal\Base64Url;
+use Infocyph\Epicrypt\Security\KeyPurpose;
 use Infocyph\Epicrypt\Security\KeyRing;
+use Infocyph\Epicrypt\Token\Jwt\Enum\AsymmetricJwtAlgorithm;
 
 final class Jwks
 {
     /**
      * @return array{keys: list<array<string, mixed>>}
      */
-    public function exportFromKeyRing(KeyRing $keyRing): array
-    {
+    public function exportFromKeyRing(
+        KeyRing $keyRing,
+        AsymmetricJwtAlgorithm $algorithm,
+        ?string $issuer = null,
+    ): array {
         $keys = [];
-        foreach ($keyRing->keys() as $kid => $key) {
-            $keys[] = $this->exportPublicKeyToJwk($key, $kid);
+        foreach ($keyRing->readCandidates(KeyPurpose::JWT_SIGNING, $algorithm->value, $issuer) as $entry) {
+            $keys[] = $this->exportPublicKeyToJwk($entry->key, $entry->id, $algorithm);
         }
 
         return ['keys' => $keys];
@@ -26,8 +31,11 @@ final class Jwks
     /**
      * @return array<string, mixed>
      */
-    public function exportPublicKeyToJwk(string $publicKeyPem, string $kid): array
-    {
+    public function exportPublicKeyToJwk(
+        string $publicKeyPem,
+        string $kid,
+        AsymmetricJwtAlgorithm $algorithm,
+    ): array {
         $resource = openssl_pkey_get_public($publicKeyPem);
         if ($resource === false) {
             throw new KeyResolutionException('Unable to load public key for JWK export.');
@@ -40,8 +48,8 @@ final class Jwks
         $normalizedDetails = $this->stringKeyArray($details);
 
         return match ($normalizedDetails['type'] ?? null) {
-            OPENSSL_KEYTYPE_RSA => $this->exportRsa($normalizedDetails, $kid),
-            OPENSSL_KEYTYPE_EC => $this->exportEc($normalizedDetails, $kid),
+            OPENSSL_KEYTYPE_RSA => $this->exportRsa($normalizedDetails, $kid, $algorithm),
+            OPENSSL_KEYTYPE_EC => $this->exportEc($normalizedDetails, $kid, $algorithm),
             default => throw new KeyResolutionException('Unsupported public key type for JWK export.'),
         };
     }
@@ -49,16 +57,17 @@ final class Jwks
     /**
      * @param array<string, mixed> $jwk
      */
-    public function importPublicKeyFromJwk(array $jwk): string
+    public function importPublicKeyFromJwk(array $jwk, AsymmetricJwtAlgorithm $algorithm): string
     {
+        $this->validateMetadata($jwk, $algorithm);
         $kty = $jwk['kty'] ?? null;
         if (!is_string($kty) || $kty === '') {
             throw new KeyResolutionException('JWK key type "kty" is required.');
         }
 
         return match (strtoupper($kty)) {
-            'RSA' => $this->importRsa($jwk),
-            'EC' => $this->importEc($jwk),
+            'RSA' => $this->importRsa($jwk, $algorithm),
+            'EC' => $this->importEc($jwk, $algorithm),
             default => throw new KeyResolutionException(sprintf('Unsupported JWK key type "%s".', $kty)),
         };
     }
@@ -74,10 +83,23 @@ final class Jwks
             throw new KeyResolutionException('JWKS must contain a keys array.');
         }
 
+        $resolved = null;
+        $seen = [];
         foreach ($keys as $entry) {
-            if (is_array($entry) && isset($entry['kid']) && is_string($entry['kid']) && hash_equals($entry['kid'], $kid)) {
-                return $this->stringKeyArray($entry);
+            if (!is_array($entry) || !isset($entry['kid']) || !is_string($entry['kid'])) {
+                throw new KeyResolutionException('Every JWK must contain a string kid.');
             }
+            if (isset($seen[$entry['kid']])) {
+                throw new KeyResolutionException(sprintf('Duplicate JWK kid "%s".', $entry['kid']));
+            }
+            $seen[$entry['kid']] = true;
+            if (hash_equals($entry['kid'], $kid)) {
+                $resolved = $this->stringKeyArray($entry);
+            }
+        }
+
+        if ($resolved !== null) {
+            return $resolved;
         }
 
         throw new KeyResolutionException(sprintf('No JWK found for kid "%s".', $kid));
@@ -86,9 +108,22 @@ final class Jwks
     /**
      * @param array<string, mixed> $jwks
      */
-    public function resolvePublicKeyByKid(array $jwks, string $kid): string
+    public function resolvePublicKeyByKid(
+        array $jwks,
+        string $kid,
+        AsymmetricJwtAlgorithm $algorithm,
+    ): string {
+        return $this->importPublicKeyFromJwk($this->resolveByKid($jwks, $kid), $algorithm);
+    }
+
+    private function bitLength(string $unsignedInteger): int
     {
-        return $this->importPublicKeyFromJwk($this->resolveByKid($jwks, $kid));
+        $normalized = ltrim($unsignedInteger, "\x00");
+        if ($normalized === '') {
+            return 0;
+        }
+
+        return ((strlen($normalized) - 1) * 8) + strlen(decbin(ord($normalized[0])));
     }
 
     private function byte(int $value): string
@@ -98,6 +133,16 @@ final class Jwks
         }
 
         return chr($value);
+    }
+
+    private function curveOid(AsymmetricJwtAlgorithm $algorithm): string
+    {
+        return match ($algorithm) {
+            AsymmetricJwtAlgorithm::ES256 => $this->derOid('1.2.840.10045.3.1.7'),
+            AsymmetricJwtAlgorithm::ES384 => $this->derOid('1.3.132.0.34'),
+            AsymmetricJwtAlgorithm::ES512 => $this->derOid('1.3.132.0.35'),
+            default => throw new KeyResolutionException('EC JWK requires an EC JWT algorithm.'),
+        };
     }
 
     private function derBitString(string $value): string
@@ -174,7 +219,7 @@ final class Jwks
      * @param array<string, mixed> $details
      * @return array<string, mixed>
      */
-    private function exportEc(array $details, string $kid): array
+    private function exportEc(array $details, string $kid, AsymmetricJwtAlgorithm $algorithm): array
     {
         $ec = $details['ec'] ?? null;
         if (!is_array($ec) || !isset($ec['curve_name'], $ec['x'], $ec['y']) || !is_string($ec['curve_name']) || !is_string($ec['x']) || !is_string($ec['y'])) {
@@ -187,15 +232,19 @@ final class Jwks
             'secp521r1' => 'P-521',
             default => throw new KeyResolutionException('Unsupported EC curve for JWK export: ' . $ec['curve_name']),
         };
+        $expectedAlgorithm = match ($crv) {
+            'P-256' => AsymmetricJwtAlgorithm::ES256,
+            'P-384' => AsymmetricJwtAlgorithm::ES384,
+            'P-521' => AsymmetricJwtAlgorithm::ES512,
+        };
+        if ($algorithm !== $expectedAlgorithm) {
+            throw new KeyResolutionException('EC key curve does not match the intended JWT algorithm.');
+        }
 
         return [
             'kty' => 'EC',
             'kid' => $kid,
-            'alg' => match ($crv) {
-                'P-256' => 'ES256',
-                'P-384' => 'ES384',
-                'P-521' => 'ES512',
-            },
+            'alg' => $algorithm->value,
             'use' => 'sig',
             'crv' => $crv,
             'x' => Base64Url::encode($ec['x']),
@@ -207,17 +256,21 @@ final class Jwks
      * @param array<string, mixed> $details
      * @return array<string, mixed>
      */
-    private function exportRsa(array $details, string $kid): array
+    private function exportRsa(array $details, string $kid, AsymmetricJwtAlgorithm $algorithm): array
     {
         $rsa = $details['rsa'] ?? null;
         if (!is_array($rsa) || !isset($rsa['n'], $rsa['e']) || !is_string($rsa['n']) || !is_string($rsa['e'])) {
             throw new KeyResolutionException('Unable to export RSA key as JWK.');
         }
 
+        if (!str_starts_with($algorithm->value, 'RS') || !is_int($details['bits'] ?? null) || $details['bits'] < 2048) {
+            throw new KeyResolutionException('RSA JWK export requires a matching RSA algorithm and at least 2048 bits.');
+        }
+
         return [
             'kty' => 'RSA',
             'kid' => $kid,
-            'alg' => 'RS256',
+            'alg' => $algorithm->value,
             'use' => 'sig',
             'n' => Base64Url::encode($rsa['n']),
             'e' => Base64Url::encode($rsa['e']),
@@ -227,7 +280,7 @@ final class Jwks
     /**
      * @param array<string, mixed> $jwk
      */
-    private function importEc(array $jwk): string
+    private function importEc(array $jwk, AsymmetricJwtAlgorithm $algorithm): string
     {
         $x = $jwk['x'] ?? null;
         $y = $jwk['y'] ?? null;
@@ -243,17 +296,18 @@ final class Jwks
             throw new KeyResolutionException('Invalid EC JWK coordinate encoding.', 0, $e);
         }
 
-        if (strlen($xBin) !== strlen($yBin)) {
-            throw new KeyResolutionException('EC JWK coordinates must have equal size.');
+        $expected = match ($algorithm) {
+            AsymmetricJwtAlgorithm::ES256 => ['P-256', 32],
+            AsymmetricJwtAlgorithm::ES384 => ['P-384', 48],
+            AsymmetricJwtAlgorithm::ES512 => ['P-521', 66],
+            default => throw new KeyResolutionException('EC JWK requires an EC JWT algorithm.'),
+        };
+        if ($crv !== $expected[0] || strlen($xBin) !== $expected[1] || strlen($yBin) !== $expected[1]) {
+            throw new KeyResolutionException('EC JWK curve or coordinate size does not match the intended algorithm.');
         }
 
         $point = "\x04" . $xBin . $yBin;
-        $curveOid = match ($crv) {
-            'P-256' => $this->derOid('1.2.840.10045.3.1.7'),
-            'P-384' => $this->derOid('1.3.132.0.34'),
-            'P-521' => $this->derOid('1.3.132.0.35'),
-            default => throw new KeyResolutionException(sprintf('Unsupported EC curve "%s".', $crv)),
-        };
+        $curveOid = $this->curveOid($algorithm);
 
         $algorithmIdentifier = $this->derSequence(
             $this->derOid('1.2.840.10045.2.1') . $curveOid,
@@ -269,7 +323,7 @@ final class Jwks
     /**
      * @param array<string, mixed> $jwk
      */
-    private function importRsa(array $jwk): string
+    private function importRsa(array $jwk, AsymmetricJwtAlgorithm $algorithm): string
     {
         $n = $jwk['n'] ?? null;
         $e = $jwk['e'] ?? null;
@@ -282,6 +336,9 @@ final class Jwks
             $exponent = Base64Url::decode($e);
         } catch (\Throwable $exception) {
             throw new KeyResolutionException('Invalid RSA JWK numeric encoding.', 0, $exception);
+        }
+        if (!str_starts_with($algorithm->value, 'RS') || $this->bitLength($modulus) < 2048) {
+            throw new KeyResolutionException('RSA JWK requires a matching RSA algorithm and a modulus of at least 2048 bits.');
         }
 
         $rsaPublicKey = $this->derSequence(
@@ -320,5 +377,24 @@ final class Jwks
         }
 
         return $normalized;
+    }
+
+    /** @param array<string, mixed> $jwk */
+    private function validateMetadata(array $jwk, AsymmetricJwtAlgorithm $algorithm): void
+    {
+        if (($jwk['alg'] ?? null) !== $algorithm->value) {
+            throw new KeyResolutionException('JWK alg must exactly match the intended JWT algorithm.');
+        }
+        if (isset($jwk['use']) && $jwk['use'] !== 'sig') {
+            throw new KeyResolutionException('JWK use must be sig when provided.');
+        }
+        if (isset($jwk['key_ops']) && (!is_array($jwk['key_ops']) || !in_array('verify', $jwk['key_ops'], true))) {
+            throw new KeyResolutionException('JWK key_ops must contain verify when provided.');
+        }
+
+        $expectedType = str_starts_with($algorithm->value, 'RS') ? 'RSA' : 'EC';
+        if (($jwk['kty'] ?? null) !== $expectedType) {
+            throw new KeyResolutionException('JWK kty does not match the intended JWT algorithm.');
+        }
     }
 }

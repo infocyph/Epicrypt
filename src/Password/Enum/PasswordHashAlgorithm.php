@@ -15,8 +15,8 @@ enum PasswordHashAlgorithm: string
     public function toPasswordAlgorithm(): string
     {
         return match ($this) {
-            self::ARGON2ID => defined('PASSWORD_ARGON2ID') ? PASSWORD_ARGON2ID : 'argon2id',
             self::ARGON2I => defined('PASSWORD_ARGON2I') ? PASSWORD_ARGON2I : 'argon2i',
+            self::ARGON2ID => defined('PASSWORD_ARGON2ID') ? PASSWORD_ARGON2ID : 'argon2id',
             self::BCRYPT => defined('PASSWORD_BCRYPT') ? PASSWORD_BCRYPT : '2y',
         };
     }

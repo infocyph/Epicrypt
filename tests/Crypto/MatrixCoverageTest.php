@@ -11,22 +11,48 @@ use Infocyph\Epicrypt\Crypto\SecretBoxCipher;
 use Infocyph\Epicrypt\Exception\ConfigurationException;
 use Infocyph\Epicrypt\Exception\Crypto\DecryptionException;
 use Infocyph\Epicrypt\Exception\Crypto\InvalidKeyException;
+use Infocyph\Epicrypt\Exception\Crypto\InvalidNonceException;
 use Infocyph\Epicrypt\Generate\KeyMaterial\KeyMaterialGenerator;
+use Infocyph\Epicrypt\Internal\Base64Url;
 
-it('roundtrips AEAD encryption for each supported algorithm', function () {
+it('enforces the AEAD contract for each supported algorithm', function () {
     $generator = new KeyMaterialGenerator;
+    $algorithms = array_values(array_filter(
+        AeadAlgorithm::cases(),
+        static fn(AeadAlgorithm $algorithm): bool => $algorithm->isAvailable(),
+    ));
 
-    foreach (AeadAlgorithm::cases() as $algorithm) {
-        if (! $algorithm->isAvailable()) {
-            continue;
-        }
-
+    foreach ($algorithms as $algorithm) {
         $key = $generator->forAead($algorithm);
+        $binaryKey = $generator->forAead($algorithm, false);
         $cipher = new AeadCipher($algorithm);
-        $ciphertext = $cipher->encrypt('aead-matrix-payload', $key, ['aad' => 'matrix']);
-        $plaintext = $cipher->decrypt($ciphertext, $key, ['aad' => 'matrix']);
+        $ciphertext = $cipher->encrypt('aead-matrix-payload', $key, 'matrix');
+        $parts = explode('.', $ciphertext);
+        $corrupted = $parts;
+        $rawCiphertext = Base64Url::decode($corrupted[4]);
+        $rawCiphertext[0] = chr(ord($rawCiphertext[0]) ^ 1);
+        $corrupted[4] = Base64Url::encode($rawCiphertext);
+        $unsupported = $parts;
+        $unsupported[1] = 'unsupported-aead';
+        $otherAlgorithm = array_find(
+            $algorithms,
+            static fn(AeadAlgorithm $candidate): bool => $candidate !== $algorithm,
+        );
 
-        expect($plaintext)->toBe('aead-matrix-payload');
+        expect($cipher->decrypt($ciphertext, $key, 'matrix'))->toBe('aead-matrix-payload')
+            ->and(fn() => $cipher->encrypt('value', $generator->generate($algorithm->keyLength() - 1)))
+            ->toThrow(InvalidKeyException::class)
+            ->and(fn() => $cipher->encryptWithBinaryKey('value', $binaryKey, nonce: 'short'))
+            ->toThrow(InvalidNonceException::class)
+            ->and(fn() => $cipher->decrypt(implode('.', $corrupted), $key, 'matrix'))
+            ->toThrow(DecryptionException::class)
+            ->and(fn() => $cipher->decrypt(implode('.', $unsupported), $key, 'matrix'))
+            ->toThrow(DecryptionException::class);
+
+        if ($otherAlgorithm instanceof AeadAlgorithm) {
+            expect(fn() => (new AeadCipher($otherAlgorithm))->decrypt($ciphertext, $key, 'matrix'))
+                ->toThrow(DecryptionException::class);
+        }
     }
 });
 
@@ -35,8 +61,8 @@ it('roundtrips sealed box encryption', function () {
     $recipientKeypair = sodium_crypto_box_keypair_from_secretkey_and_publickey($recipient['private'], $recipient['public']);
 
     $cipher = new SealedBoxCipher;
-    $ciphertext = $cipher->encrypt('sealed-box payload', $recipient['public'], ['key_is_binary' => true]);
-    $plaintext = $cipher->decrypt($ciphertext, $recipientKeypair, ['key_is_binary' => true]);
+    $ciphertext = $cipher->encryptWithBinaryKey('sealed-box payload', $recipient['public']);
+    $plaintext = $cipher->decryptWithBinaryKey($ciphertext, $recipientKeypair);
 
     expect($plaintext)->toBe('sealed-box payload');
 });
@@ -46,14 +72,8 @@ it('roundtrips public key box encryption', function () {
     $recipient = KeyPairGenerator::sodium()->generate(asBase64Url: true);
 
     $cipher = new PublicKeyBoxCipher;
-    $ciphertext = $cipher->encrypt('public-box payload', [
-        'recipient_public' => $recipient['public'],
-        'sender_private' => $sender['private'],
-    ]);
-    $plaintext = $cipher->decrypt($ciphertext, [
-        'sender_public' => $sender['public'],
-        'recipient_private' => $recipient['private'],
-    ]);
+    $ciphertext = $cipher->encrypt('public-box payload', $recipient['public'], $sender['private']);
+    $plaintext = $cipher->decrypt($ciphertext, $sender['public'], $recipient['private']);
 
     expect($plaintext)->toBe('public-box payload');
 });
@@ -99,9 +119,9 @@ it('supports secret-box key usage in binary and base64url modes', function () {
 
     $cipher = new SecretBoxCipher;
 
-    $binaryCiphertext = $cipher->encrypt('binary-key-payload', $binaryKey, ['key_is_binary' => true]);
+    $binaryCiphertext = $cipher->encryptWithBinaryKey('binary-key-payload', $binaryKey);
     $base64Ciphertext = $cipher->encrypt('base64-key-payload', $base64Key);
 
-    expect($cipher->decrypt($binaryCiphertext, $binaryKey, ['key_is_binary' => true]))->toBe('binary-key-payload');
+    expect($cipher->decryptWithBinaryKey($binaryCiphertext, $binaryKey))->toBe('binary-key-payload');
     expect($cipher->decrypt($base64Ciphertext, $base64Key))->toBe('base64-key-payload');
 });

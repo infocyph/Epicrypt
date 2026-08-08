@@ -5,9 +5,8 @@ declare(strict_types=1);
 namespace Infocyph\Epicrypt\Password\Generator;
 
 use Infocyph\Epicrypt\Exception\Password\InvalidPasswordException;
-use Infocyph\Epicrypt\Password\Contract\PasswordGeneratorInterface;
 
-final readonly class PasswordGenerator implements PasswordGeneratorInterface
+final readonly class PasswordGenerator
 {
     private const string AMBIGUOUS_DIGIT = '01689';
 
@@ -23,22 +22,13 @@ final readonly class PasswordGenerator implements PasswordGeneratorInterface
 
     private const string UPPER = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
 
-    /**
-     * @param array<string, mixed> $options
-     */
-    public function generate(int $length = 16, array $options = []): string
+    public function generate(int $length = 16, PasswordPolicy $policy = new PasswordPolicy()): string
     {
-        $policy = new PasswordPolicy(
-            minLength: $this->intOption($options, 'min_length', 12),
-            requireUpper: $this->boolOption($options, 'require_upper', true),
-            requireLower: $this->boolOption($options, 'require_lower', true),
-            requireDigit: $this->boolOption($options, 'require_digit', true),
-            requireSymbol: $this->boolOption($options, 'require_symbol', true),
-            includeAmbiguous: $this->boolOption($options, 'include_ambiguous', false),
-        );
-
         if ($length < $policy->minLength) {
             throw new InvalidPasswordException(sprintf('Password length must be at least %d.', $policy->minLength));
+        }
+        if ($length < $policy->requiredCharacterClasses()) {
+            throw new InvalidPasswordException('Password length cannot satisfy all required character classes.');
         }
 
         $upper = $policy->includeAmbiguous ? self::UPPER . self::AMBIGUOUS_UPPER : self::UPPER;
@@ -80,32 +70,6 @@ final readonly class PasswordGenerator implements PasswordGeneratorInterface
         $passwordChars = $this->secureShuffle($passwordChars);
 
         return implode('', $passwordChars);
-    }
-
-    /**
-     * @param array<string, mixed> $options
-     */
-    private function boolOption(array $options, string $key, bool $default): bool
-    {
-        $value = $options[$key] ?? $default;
-        if (!is_bool($value)) {
-            throw new InvalidPasswordException(sprintf('Option "%s" must be a boolean.', $key));
-        }
-
-        return $value;
-    }
-
-    /**
-     * @param array<string, mixed> $options
-     */
-    private function intOption(array $options, string $key, int $default): int
-    {
-        $value = $options[$key] ?? $default;
-        if (!is_int($value)) {
-            throw new InvalidPasswordException(sprintf('Option "%s" must be an integer.', $key));
-        }
-
-        return $value;
     }
 
     private function pick(string $characters): string

@@ -16,11 +16,11 @@ it('encrypts and decrypts with AEAD services', function () {
 
     $cipher = new AeadCipher;
 
-    $ciphertext = $cipher->encrypt('epicrypt-aead', $key, ['aad' => 'meta']);
+    $ciphertext = $cipher->encrypt('epicrypt-aead', $key, 'meta');
     $segments = explode('.', $ciphertext);
-    $plaintext = $cipher->decrypt($ciphertext, $key, ['aad' => 'meta']);
+    $plaintext = $cipher->decrypt($ciphertext, $key, 'meta');
 
-    expect($ciphertext)->toStartWith('epc1.');
+    expect($ciphertext)->toStartWith('epc2.');
     expect($segments)->toHaveCount(5);
     expect($segments[1])->toBe('xchacha20-poly1305-ietf');
     expect($segments[2])->toBe('_');
@@ -30,12 +30,12 @@ it('encrypts and decrypts with AEAD services', function () {
 it('rejects tampered aead payload algorithm identifiers', function () {
     $key = (new KeyMaterialGenerator)->generate(SODIUM_CRYPTO_AEAD_XCHACHA20POLY1305_IETF_KEYBYTES);
     $cipher = new AeadCipher;
-    $ciphertext = $cipher->encrypt('epicrypt-aead', $key, ['aad' => 'meta']);
+    $ciphertext = $cipher->encrypt('epicrypt-aead', $key, 'meta');
     $segments = explode('.', $ciphertext);
     $segments[1] = 'unknown-algorithm';
     $tamperedCiphertext = implode('.', $segments);
 
-    expect(fn () => $cipher->decrypt($tamperedCiphertext, $key, ['aad' => 'meta']))
+    expect(fn () => $cipher->decrypt($tamperedCiphertext, $key, 'meta'))
         ->toThrow(DecryptionException::class);
 });
 

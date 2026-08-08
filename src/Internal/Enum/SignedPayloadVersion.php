@@ -6,5 +6,5 @@ namespace Infocyph\Epicrypt\Internal\Enum;
 
 enum SignedPayloadVersion: int
 {
-    case V1 = 1;
+    case V2 = 2;
 }

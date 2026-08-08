@@ -17,13 +17,13 @@
         "php": ">=8.4",
         "ext-hash": "*",
         "ext-json": "*",
-        "ext-mbstring": "*",
         "ext-openssl": "*",
         "ext-sodium": "*",
-        "infocyph/pathwise": "^2.5.3"
+        "infocyph/pathwise": "^3.0",
+        "psr/clock": "^1.0"
     },
     "require-dev": {
-        "infocyph/phpforge": "dev-main"
+        "infocyph/phpforge": "dev-main@dev"
     },
     "minimum-stability": "stable",
     "prefer-stable": true,

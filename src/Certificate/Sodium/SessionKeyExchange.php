@@ -6,12 +6,11 @@ namespace Infocyph\Epicrypt\Certificate\Sodium;
 
 use Infocyph\Epicrypt\Certificate\Contract\KeyExchangeInterface;
 use Infocyph\Epicrypt\Exception\Crypto\InvalidKeyException;
-use Infocyph\Epicrypt\Internal\Base64Url;
 use Infocyph\Epicrypt\Internal\BinaryKey;
 
 final class SessionKeyExchange implements KeyExchangeInterface
 {
-    public function derive(string $privateKey, string $publicKey, bool $keysAreBinary = false): string
+    public function deriveSharedSecret(string $privateKey, string $publicKey, bool $keysAreBinary): string
     {
         try {
             $private = BinaryKey::fixedLength($privateKey, $keysAreBinary, SODIUM_CRYPTO_BOX_SECRETKEYBYTES, 'Private key');
@@ -20,8 +19,6 @@ final class SessionKeyExchange implements KeyExchangeInterface
             throw new InvalidKeyException('Sodium key exchange requires valid curve25519 private/public keys.', 0, $e);
         }
 
-        $secret = sodium_crypto_scalarmult($private, $public);
-
-        return $keysAreBinary ? $secret : Base64Url::encode($secret);
+        return sodium_crypto_scalarmult($private, $public);
     }
 }

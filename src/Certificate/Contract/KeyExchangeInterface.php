@@ -6,5 +6,5 @@ namespace Infocyph\Epicrypt\Certificate\Contract;
 
 interface KeyExchangeInterface
 {
-    public function derive(string $privateKey, string $publicKey, bool $keysAreBinary = false): string;
+    public function deriveSharedSecret(string $privateKey, string $publicKey, bool $keysAreBinary): string;
 }
