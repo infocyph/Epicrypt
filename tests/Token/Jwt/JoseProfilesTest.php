@@ -53,6 +53,11 @@ it('issues and validates replay-safe DPoP proofs with token binding', function (
 
             return true;
         }
+
+        public function isRevoked(string $issuer, string $jwtId, int $expiresAt): bool
+        {
+            return $issuer === '' || $jwtId === '' || $expiresAt < 1;
+        }
     };
     $dpop = new DpopProof();
     $proof = $dpop->issue(
@@ -66,7 +71,7 @@ it('issues and validates replay-safe DPoP proofs with token binding', function (
         issuedAt: 1_700_000_000,
         jwtId: 'proof-1',
     );
-    expect($dpop->verify(
+    $verified = $dpop->verifyResult(
         $proof,
         'POST',
         'https://api.example/resource?different=query',
@@ -75,7 +80,10 @@ it('issues and validates replay-safe DPoP proofs with token binding', function (
         accessToken: 'access-token',
         nonce: 'server-nonce',
         now: 1_700_000_010,
-    ))->toHaveKey('jti', 'proof-1');
+    );
+    expect($verified['claims'])->toHaveKey('jti', 'proof-1')
+        ->and($verified['keyThumbprint'])->toBe((new Jwks())->thumbprint($jwk))
+        ->and($verified['publicJwk'])->toBe($jwk);
     expect(fn() => $dpop->verify(
         $proof,
         'POST',

@@ -177,7 +177,7 @@ Never log the keypairs or directional keys. Raw X25519 through
 caller-defined transcript salt and versioned HKDF context.
 
 OpenSSL ECDH with context-bound HKDF
------------------------------------
+------------------------------------
 
 .. code-block:: php
 

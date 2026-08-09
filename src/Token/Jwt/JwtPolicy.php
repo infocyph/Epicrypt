@@ -102,6 +102,15 @@ final readonly class JwtPolicy
         return new self($issuer, $audience, 'epicrypt-action+jwt', replayMode: JwtReplayMode::SINGLE_USE);
     }
 
+    public function acceptsType(string $type): bool
+    {
+        if ($this->profile === JwtProfile::OAUTH_ACCESS_TOKEN) {
+            return in_array(strtolower($type), ['at+jwt', 'application/at+jwt'], true);
+        }
+
+        return hash_equals($this->expectedType, $type);
+    }
+
     public function requires(string $claim): bool
     {
         return isset($this->requiredClaimSet[$claim]);

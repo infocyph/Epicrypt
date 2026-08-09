@@ -12,7 +12,9 @@ use Infocyph\Epicrypt\Token\Jwt\Support\JwtToken;
 
 final class DpopProof
 {
-    /** @param array<string, mixed> $publicJwk */
+    /**
+     * @param array<string, mixed> $publicJwk
+     */
     public function issue(
         string $method,
         string $uri,
@@ -58,13 +60,46 @@ final class DpopProof
         }
     }
 
-    /** @return array<string, mixed> */
+    /**
+     * @return array<string, mixed>
+     */
     public function verify(
+        #[\SensitiveParameter]
         string $proof,
         string $method,
         string $uri,
         AsymmetricJwtAlgorithm $algorithm,
         JwtReplayStoreInterface $replayStore,
+        #[\SensitiveParameter]
+        ?string $accessToken = null,
+        ?string $nonce = null,
+        int $maximumAgeSeconds = 300,
+        ?int $now = null,
+    ): array {
+        return $this->verifyResult(
+            $proof,
+            $method,
+            $uri,
+            $algorithm,
+            $replayStore,
+            $accessToken,
+            $nonce,
+            $maximumAgeSeconds,
+            $now,
+        )['claims'];
+    }
+
+    /**
+     * @return array{claims: array<string, mixed>, publicJwk: array<string, mixed>, keyThumbprint: string}
+     */
+    public function verifyResult(
+        #[\SensitiveParameter]
+        string $proof,
+        string $method,
+        string $uri,
+        AsymmetricJwtAlgorithm $algorithm,
+        JwtReplayStoreInterface $replayStore,
+        #[\SensitiveParameter]
         ?string $accessToken = null,
         ?string $nonce = null,
         int $maximumAgeSeconds = 300,
@@ -98,7 +133,7 @@ final class DpopProof
             throw new InvalidTokenException('DPoP proof was already consumed.');
         }
 
-        return $claims;
+        return ['claims' => $claims, 'publicJwk' => $jwk, 'keyThumbprint' => $thumbprint];
     }
 
     /** @param array<string, mixed> $jwk */

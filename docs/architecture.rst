@@ -51,9 +51,16 @@ Contracts live with the capability that owns the behavior.
 
 Examples:
 
-- ``Crypto\\Contract\\*``
-- ``Token\\Contract\\*``
-- ``Certificate\\Contract\\*``
+- ``Certificate\\Contract\\KeyExchangeInterface`` selects a key-exchange
+  provider.
+- ``Token\\Jwt\\JwtReplayStoreInterface`` owns atomic single-use and denylist
+  state shared by every verifier.
+- ``Token\\Opaque\\RefreshTokenStoreInterface`` owns durable, transactional
+  refresh-token rotation and family revocation.
+
+Persistence implementations remain application-owned. Epicrypt defines the
+security contract and orchestration but does not silently substitute a
+process-local store where cross-worker atomicity is required.
 
 Public vs Internal
 ------------------

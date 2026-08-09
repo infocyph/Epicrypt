@@ -17,6 +17,7 @@ use Infocyph\Epicrypt\Token\Jwt\Enum\SymmetricJwtAlgorithm;
 use Infocyph\Epicrypt\Token\Jwt\JwtClaims;
 use Infocyph\Epicrypt\Token\Jwt\JwtFailureReason;
 use Infocyph\Epicrypt\Token\Jwt\JwtPolicy;
+use Infocyph\Epicrypt\Token\Jwt\JwtReplayMode;
 use Infocyph\Epicrypt\Token\Jwt\JwtReplayStoreInterface;
 use Infocyph\Epicrypt\Token\Jwt\SymmetricJwt;
 use Psr\Clock\ClockInterface;
@@ -118,6 +119,11 @@ it('uses atomic replay consumption after successful validation', function () {
 
             return true;
         }
+
+        public function isRevoked(string $issuer, string $jwtId, int $expiresAt): bool
+        {
+            return $issuer === '' || $jwtId === '' || $expiresAt < 1;
+        }
     };
     $key = random_bytes(64);
     $policy = JwtPolicy::passwordReset('issuer', 'web');
@@ -126,6 +132,53 @@ it('uses atomic replay consumption after successful validation', function () {
 
     expect($verifier->verify($token))->toBeTrue()
         ->and($verifier->verifyResult($token)->failureReason)->toBe(JwtFailureReason::REPLAYED);
+});
+
+it('checks denylisted JWTs without consuming ordinary repeatable access tokens', function () {
+    $store = new class implements JwtReplayStoreInterface {
+        /** @var array<string, true> */
+        public array $revoked = [];
+
+        public int $consumed = 0;
+
+        public function consume(string $issuer, string $jwtId, int $expiresAt): bool
+        {
+            if ($issuer === '' || $jwtId === '' || $expiresAt < 1) {
+                return false;
+            }
+            $this->consumed++;
+
+            return true;
+        }
+
+        public function isRevoked(string $issuer, string $jwtId, int $expiresAt): bool
+        {
+            return $expiresAt < 1 || isset($this->revoked[$issuer."\0".$jwtId]);
+        }
+    };
+    $key = random_bytes(64);
+    $claims = JwtClaims::issue('issuer', 'user', ['api'], 300);
+    $policy = new JwtPolicy('issuer', 'api', 'at+jwt', replayMode: JwtReplayMode::DENYLIST);
+    $token = SymmetricJwt::issuer($key, 'at+jwt')->issue($claims);
+    $verifier = SymmetricJwt::verifier($key, $policy, replayStore: $store);
+
+    expect($verifier->verify($token))->toBeTrue()
+        ->and($verifier->verify($token))->toBeTrue()
+        ->and($store->consumed)->toBe(0);
+
+    $store->revoked['issuer'."\0".$claims->jwtId] = true;
+    expect($verifier->verifyResult($token)->failureReason)->toBe(JwtFailureReason::REPLAYED)
+        ->and($store->consumed)->toBe(0);
+
+    $asymmetricClaims = JwtClaims::issue('issuer', 'user', ['api'], 300);
+    $keys = KeyPairGenerator::openSsl(type: OpenSslKeyType::EC)->generate();
+    $asymmetricToken = AsymmetricJwt::issuer($keys['private'], 'at+jwt')->issue($asymmetricClaims);
+    $asymmetricVerifier = AsymmetricJwt::verifier($keys['public'], $policy, replayStore: $store);
+    expect($asymmetricVerifier->verify($asymmetricToken))->toBeTrue()
+        ->and($asymmetricVerifier->verify($asymmetricToken))->toBeTrue();
+    $store->revoked['issuer'."\0".$asymmetricClaims->jwtId] = true;
+    expect($asymmetricVerifier->verifyResult($asymmetricToken)->failureReason)->toBe(JwtFailureReason::REPLAYED)
+        ->and($store->consumed)->toBe(0);
 });
 
 it('enforces temporal boundaries and normalizes scope', function () {
@@ -179,6 +232,16 @@ it('supports generic JWT claim shapes and the strict OAuth access-token profile'
     $oauthPolicy = JwtPolicy::oauthAccessToken('issuer', 'api');
     expect(SymmetricJwt::verifier($key, $oauthPolicy)->verify($oauth))->toBeTrue()
         ->and($oauthClaims->custom['scope'])->toBe('orders:read orders:write')
+        ->and(SymmetricJwt::verifier($key, $oauthPolicy)->verify($sign([
+            'iss' => 'issuer',
+            'sub' => 'subject',
+            'aud' => 'api',
+            'exp' => $now + 300,
+            'iat' => $now,
+            'jti' => 'external-token-with-full-media-type',
+            'client_id' => 'web-client',
+            'scope' => 'orders:read',
+        ], 'application/at+jwt')))->toBeTrue()
         ->and(SymmetricJwt::verifier($key, $oauthPolicy)->verifyResult($sign([
             'iss' => 'issuer',
             'sub' => 'subject',
@@ -187,6 +250,10 @@ it('supports generic JWT claim shapes and the strict OAuth access-token profile'
             'iat' => $now,
             'jti' => 'external-token-id',
         ], 'at+jwt'))->failureReason)->toBe(JwtFailureReason::INVALID_CLIENT_ID);
+
+    $keys = KeyPairGenerator::openSsl(type: OpenSslKeyType::EC)->generate();
+    $asymmetric = AsymmetricJwt::issuer($keys['private'], 'application/at+jwt')->issue($oauthClaims);
+    expect(AsymmetricJwt::verifier($keys['public'], $oauthPolicy)->verify($asymmetric))->toBeTrue();
 });
 
 it('returns precise failures for temporal and identity policy boundaries', function () {
