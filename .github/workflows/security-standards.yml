@@ -79,90 +79,40 @@ jobs:
   aegis-modern-libsodium:
     name: "AEGIS on libsodium 1.0.22"
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 10
     permissions:
       contents: read
     env:
-      LD_LIBRARY_PATH: /usr/local/lib
-      PKG_CONFIG_PATH: /usr/local/lib/pkgconfig
+      AEGIS_RUNTIME: "php:8.4-cli-alpine@sha256:26e3f1de7f6aa3e8ea15584d803c5e088c57df89ff02a3ecf2dc855a4282d8d7"
     steps:
       - uses: actions/checkout@v7
-      - name: Install PHP build dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends \
-            autoconf \
-            bison \
-            build-essential \
-            file \
-            libcurl4-openssl-dev \
-            libonig-dev \
-            libreadline-dev \
-            libsqlite3-dev \
-            libssl-dev \
-            libxml2-dev \
-            pkg-config \
-            re2c \
-            zlib1g-dev
-      - name: Build pinned modern libsodium
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.4"
+          extensions: "hash, json, openssl, sodium"
+          coverage: none
+          tools: composer:v2
         env:
-          LIBSODIUM_VERSION: "1.0.22"
-          LIBSODIUM_SHA256: "adbdd8f16149e81ac6078a03aca6fc03b592b89ef7b5ed83841c086191be3349"
-        run: |
-          curl --fail --silent --show-error --location --output libsodium.tar.gz "https://download.libsodium.org/libsodium/releases/libsodium-${LIBSODIUM_VERSION}.tar.gz"
-          echo "${LIBSODIUM_SHA256}  libsodium.tar.gz" | sha256sum --check --strict
-          tar --extract --gzip --file libsodium.tar.gz
-          cd "libsodium-${LIBSODIUM_VERSION}"
-          ./configure --prefix=/usr/local
-          make --jobs=2
-          sudo make install
-          sudo ldconfig
-      - name: Build PHP against the pinned libsodium
-        env:
-          PHP_VERSION: "8.4.24"
-          PHP_SHA256: "e127be09a8506f4327c5cfa78a614b00d210714484ec215ce0011b4a03c00731"
-        run: |
-          curl --fail --silent --show-error --location --output php.tar.xz "https://www.php.net/distributions/php-${PHP_VERSION}.tar.xz"
-          echo "${PHP_SHA256}  php.tar.xz" | sha256sum --check --strict
-          tar --extract --xz --file php.tar.xz
-          cd "php-${PHP_VERSION}"
-          LDFLAGS="-Wl,-rpath,/usr/local/lib" ./configure \
-            --prefix="${RUNNER_TEMP}/php-aegis" \
-            --with-config-file-path="${RUNNER_TEMP}/php-aegis/etc" \
-            --disable-cgi \
-            --disable-phpdbg \
-            --enable-mbstring \
-            --enable-pcntl \
-            --with-curl \
-            --with-openssl \
-            --with-readline \
-            --with-sodium \
-            --with-zlib
-          make --jobs=2
-          make install
-          echo "${RUNNER_TEMP}/php-aegis/bin" >> "$GITHUB_PATH"
-      - name: Install pinned Composer
-        env:
-          COMPOSER_VERSION: "2.10.2"
-          COMPOSER_SHA256: "5ee7125f8a30a34d246cefdc0bc85b8a783b28f2aec968994118512350d28027"
-        run: |
-          curl --fail --silent --show-error --location --output "${RUNNER_TEMP}/php-aegis/bin/composer" "https://getcomposer.org/download/${COMPOSER_VERSION}/composer.phar"
-          echo "${COMPOSER_SHA256}  ${RUNNER_TEMP}/php-aegis/bin/composer" | sha256sum --check --strict
-          chmod 0755 "${RUNNER_TEMP}/php-aegis/bin/composer"
-      - name: Require the modern linked runtime
-        run: |
-          php --ri sodium
-          php -r 'printf("PHP=%s libsodium=%s sodium=%s AEGIS-128L=%s AEGIS-256=%s\n", PHP_VERSION, SODIUM_LIBRARY_VERSION, extension_loaded("sodium") ? "loaded" : "missing", function_exists("sodium_crypto_aead_aegis128l_encrypt") ? "yes" : "no", function_exists("sodium_crypto_aead_aegis256_encrypt") ? "yes" : "no");'
-          php -r 'exit(version_compare(SODIUM_LIBRARY_VERSION, "1.0.19", ">=") && function_exists("sodium_crypto_aead_aegis128l_encrypt") && function_exists("sodium_crypto_aead_aegis256_encrypt") ? 0 : 1);'
+          fail-fast: true
       - name: Install dependencies
         run: composer install --no-interaction --no-progress --prefer-dist
+      - name: Require the modern linked runtime
+        run: |
+          docker pull "$AEGIS_RUNTIME"
+          docker run --rm "$AEGIS_RUNTIME" php --ri sodium
+          docker run --rm "$AEGIS_RUNTIME" php -r 'printf("PHP=%s libsodium=%s sodium=%s AEGIS-128L=%s AEGIS-256=%s\n", PHP_VERSION, SODIUM_LIBRARY_VERSION, extension_loaded("sodium") ? "loaded" : "missing", function_exists("sodium_crypto_aead_aegis128l_encrypt") ? "yes" : "no", function_exists("sodium_crypto_aead_aegis256_encrypt") ? "yes" : "no");'
+          docker run --rm "$AEGIS_RUNTIME" php -r 'exit(version_compare(SODIUM_LIBRARY_VERSION, "1.0.19", ">=") && function_exists("sodium_crypto_aead_aegis128l_encrypt") && function_exists("sodium_crypto_aead_aegis256_encrypt") ? 0 : 1);'
       - name: Run mandatory positive AEGIS tests
-        env:
-          EPICRYPT_REQUIRE_AEGIS: "1"
         run: >-
-          vendor/bin/pest
+          docker run --rm
+          --workdir /workspace
+          --volume "$GITHUB_WORKSPACE:/workspace:ro"
+          --env EPICRYPT_REQUIRE_AEGIS=1
+          "$AEGIS_RUNTIME"
+          php vendor/bin/pest
           --configuration vendor/infocyph/phpforge/resources/pest.xml
-          --bootstrap "$GITHUB_WORKSPACE/vendor/autoload.php"
+          --bootstrap /workspace/vendor/autoload.php
+          --cache-directory=/tmp/pest-cache
           tests/Certificate/SodiumAdvancedTest.php
           --filter=AEGIS
           --fail-on-skipped
