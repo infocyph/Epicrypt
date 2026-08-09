@@ -5,6 +5,71 @@ This domain provides purpose-bound application tokens, signed URLs, CSRF
 tokens, and policy-aware key rotation. These values authenticate data but do
 not make their contents secret.
 
+Complete path: issue and consume a single-use password reset
+------------------------------------------------------------
+
+The signed token proves purpose, subject and expiration. The application adds
+single-use state by storing only a digest and consuming it in the same database
+transaction that replaces the password hash.
+
+.. code-block:: php
+
+   <?php
+
+   declare(strict_types=1);
+
+   use Infocyph\Epicrypt\Generate\KeyMaterial\KeyMaterialGenerator;
+   use Infocyph\Epicrypt\Password\Generator\PasswordPolicy;
+   use Infocyph\Epicrypt\Password\PasswordHasher;
+   use Infocyph\Epicrypt\Password\PasswordPolicyValidator;
+   use Infocyph\Epicrypt\Security\PasswordResetToken;
+
+   $ttlSeconds = 1800;
+   $resetSecret = new KeyMaterialGenerator()->forMasterSecret(asBase64Url: false);
+   $passwordResets = new PasswordResetToken($resetSecret, $ttlSeconds);
+
+   // Request endpoint: return the same response whether or not the user exists.
+   if ($user !== null) {
+       $resetToken = $passwordResets->issue($user->id);
+       $resetDigest = hash('sha256', $resetToken);
+       $resetTokenStore->create($resetDigest, $user->id, time() + $ttlSeconds);
+       $resetUrl = 'https://accounts.example/reset?user=' . rawurlencode($user->id)
+           . '&token=' . rawurlencode($resetToken);
+       $mailQueue->sendPasswordReset($user->email, $resetUrl);
+   }
+   $httpResponse->acceptPasswordResetRequest();
+
+   // Redemption endpoint: validate before entering the short write transaction.
+   if (!$passwordResets->verify($presentedResetToken, $presentedUserId)) {
+       throw new RuntimeException('Password reset request rejected.');
+   }
+   $policy = new PasswordPolicy(minLength: 16, includeAmbiguous: true);
+   $passwordPolicy = new PasswordPolicyValidator();
+   if (!$passwordPolicy->validate($newPassword, $policy)->valid
+       || $compromisedPasswords->isCompromised($newPassword)) {
+       throw new DomainException('New password does not satisfy policy.');
+   }
+   $newPasswordHash = new PasswordHasher()->hashPassword($newPassword);
+   $presentedDigest = hash('sha256', $presentedResetToken);
+
+   $database->transaction(function () use (
+       $resetTokenStore,
+       $users,
+       $sessions,
+       $presentedDigest,
+       $presentedUserId,
+       $newPasswordHash,
+   ): void {
+       if (!$resetTokenStore->consume($presentedDigest, $presentedUserId)) {
+           throw new RuntimeException('Password reset request rejected.');
+       }
+       $users->replacePasswordHash($presentedUserId, $newPasswordHash);
+       $sessions->revokeAllForUser($presentedUserId);
+   });
+
+Expire stored digests at the token expiration time. Never store or log the raw
+token, and never send the new password through email or a background job.
+
 Create a method- and host-bound download URL
 --------------------------------------------
 

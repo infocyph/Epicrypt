@@ -200,9 +200,11 @@ if (!$rotation->rotated) {
 $replacementRefreshToken = $rotation->token;
 ```
 
-The [token storage guide](https://docs.infocyph.com/projects/Epicrypt/token-storage.html)
-defines the required schema, atomic rotation sequence, reuse response, DPoP
-binding, and revocation behavior. Raw refresh tokens must never be stored.
+The [complete OAuth lifecycle](https://docs.infocyph.com/projects/Epicrypt/oauth-lifecycle.html)
+connects initial issuance, API verification, DPoP, rotation and revocation. The
+[token storage guide](https://docs.infocyph.com/projects/Epicrypt/token-storage.html)
+defines the required schema and atomic transaction. Raw refresh tokens must
+never be stored.
 
 ### Generate certificate with SAN
 

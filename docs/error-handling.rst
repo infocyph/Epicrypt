@@ -5,6 +5,46 @@ Epicrypt provides a capability-aware exception hierarchy under:
 
 - ``Infocyph\\Epicrypt\\Exception``
 
+Complete path: map a protected read at the service boundary
+-----------------------------------------------------------
+
+Catch precise failures where the application can make a safe decision. Return
+generic client messages while retaining structured internal diagnostics that
+do not contain ciphertext, keys or plaintext.
+
+.. code-block:: php
+
+   <?php
+
+   declare(strict_types=1);
+
+   use Infocyph\Epicrypt\DataProtection\ProtectionOptions;
+   use Infocyph\Epicrypt\DataProtection\StringProtector;
+   use Infocyph\Epicrypt\Exception\ConfigurationException;
+   use Infocyph\Epicrypt\Exception\Crypto\DecryptionException;
+   use Infocyph\Epicrypt\Exception\EpicryptException;
+
+   try {
+       $profile = StringProtector::create()->unprotect(
+           $storedCiphertext,
+           $dataProtectionKey,
+           new ProtectionOptions('customer/profile/v1', 'tenant=42;customer=1847'),
+       );
+   } catch (DecryptionException $exception) {
+       $securityEvents->protectedPayloadRejected('customer/profile/v1');
+       throw new RuntimeException('Stored profile is unavailable.');
+   } catch (ConfigurationException $exception) {
+       $operations->reportDeploymentConfigurationFailure($exception);
+       throw new RuntimeException('Service configuration is invalid.');
+   } catch (EpicryptException $exception) {
+       $operations->reportCryptographicFailure($exception);
+       throw new RuntimeException('Security operation failed.');
+   }
+
+Do not retry deterministic authentication or configuration failures. Retry
+only an independently identified transient storage or network operation, with
+an explicit bound and idempotency protection where required.
+
 Root
 ----
 

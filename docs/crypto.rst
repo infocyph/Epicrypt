@@ -4,6 +4,66 @@ Cryptographic primitives
 Use this lower-level domain when a higher-level ``DataProtection``, ``Token``,
 ``Password``, or ``Security`` capability does not fit the protocol.
 
+Complete path: sign and encrypt a service message
+-------------------------------------------------
+
+The sender signs the exact payload with its Ed25519 key, then anonymously seals
+the signed envelope to the recipient's X25519 box key. The recipient decrypts
+first and accepts the message only after verifying the signature with a pinned
+sender public key.
+
+.. code-block:: php
+
+   <?php
+
+   declare(strict_types=1);
+
+   use Infocyph\Epicrypt\Certificate\KeyPairGenerator;
+   use Infocyph\Epicrypt\Crypto\SealedBoxCipher;
+   use Infocyph\Epicrypt\Crypto\Signature;
+
+   $senderSigningKeys = KeyPairGenerator::sodiumSign()->generate(asBase64Url: true);
+   $recipientKeyPair = sodium_crypto_box_keypair();
+   $recipientPublicKey = sodium_bin2base64(
+       sodium_crypto_box_publickey($recipientKeyPair),
+       SODIUM_BASE64_VARIANT_URLSAFE_NO_PADDING,
+   );
+   $encodedRecipientKeyPair = sodium_bin2base64(
+       $recipientKeyPair,
+       SODIUM_BASE64_VARIANT_URLSAFE_NO_PADDING,
+   );
+
+   $payload = json_encode([
+       'message_id' => 'msg-1847',
+       'operation' => 'release-order',
+       'order_id' => 'order-42',
+   ], JSON_THROW_ON_ERROR);
+   $signatures = new Signature();
+   $signature = $signatures->sign($payload, $senderSigningKeys['private']);
+   $envelope = json_encode([
+       'payload' => $payload,
+       'signature' => $signature,
+   ], JSON_THROW_ON_ERROR);
+   $ciphertext = new SealedBoxCipher()->encrypt($envelope, $recipientPublicKey);
+
+   $opened = new SealedBoxCipher()->decrypt($ciphertext, $encodedRecipientKeyPair);
+   $decoded = json_decode($opened, true, flags: JSON_THROW_ON_ERROR);
+   if (!is_string($decoded['payload'] ?? null)
+       || !is_string($decoded['signature'] ?? null)
+       || !$signatures->verify(
+           $decoded['payload'],
+           $decoded['signature'],
+           $senderSigningKeys['public'],
+       )) {
+       throw new RuntimeException('Encrypted service message rejected.');
+   }
+
+   $trustedMessage = json_decode($decoded['payload'], true, flags: JSON_THROW_ON_ERROR);
+
+Provision the recipient private key and pinned sender public key independently.
+A sealed box hides the message from everyone except the recipient; the detached
+signature supplies sender authentication and auditability.
+
 AEAD
 ----
 

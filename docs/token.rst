@@ -66,6 +66,10 @@ The RFC 9068 policy accepts the equivalent ``at+jwt`` and
 Single-use password-reset, email-verification, and action JWT policies require
 an atomic ``JwtReplayStoreInterface`` implementation.
 
+For one cohesive authorization-server-to-resource-server walkthrough, including
+initial issuance, refresh rotation, scope enforcement, DPoP, logout and
+grant-wide revocation, see :doc:`oauth-lifecycle`.
+
 Use symmetric JWT inside one trust boundary
 -------------------------------------------
 
