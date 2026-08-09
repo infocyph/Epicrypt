@@ -155,11 +155,54 @@ use Infocyph\Epicrypt\Token\Jwt\JwtPolicy;
 use Infocyph\Epicrypt\Token\Jwt\SymmetricJwt;
 
 $key = SymmetricJwt::generateBinaryKey();
-$claims = JwtClaims::issue('issuer-service', 'user-1', ['api'], 600);
+$claims = JwtClaims::issue(
+    'issuer-service',
+    'user-1',
+    ['api'],
+    600,
+    ['client_id' => 'web-client', 'scope' => 'profile:read'],
+);
 $token = SymmetricJwt::issuer($key, 'at+jwt')->issue($claims);
-$verifier = SymmetricJwt::verifier($key, JwtPolicy::accessToken('issuer-service', 'api'));
+$verifier = SymmetricJwt::verifier($key, JwtPolicy::oauthAccessToken('issuer-service', 'api'));
 $ok = $verifier->verify($token);
 ```
+
+### Issue and rotate an OAuth refresh token
+
+```php
+<?php
+
+declare(strict_types=1);
+
+use Infocyph\Epicrypt\Token\Opaque\RefreshTokenGrant;
+use Infocyph\Epicrypt\Token\Opaque\RefreshTokenManager;
+
+// Implement RefreshTokenStoreInterface with one durable database transaction.
+$refreshTokens = new RefreshTokenManager($refreshTokenStore);
+$refreshToken = $refreshTokens->issue(new RefreshTokenGrant(
+    id: 'authorization-grant-42',
+    subject: 'user-1',
+    clientId: 'web-client',
+    audiences: ['api'],
+    scopes: ['profile:read', 'orders:read'],
+    expiresAt: time() + 90 * 24 * 60 * 60,
+));
+
+$rotation = $refreshTokens->rotate(
+    $presentedRefreshToken,
+    'web-client',
+    requestedScopes: ['profile:read'],
+);
+if (!$rotation->rotated) {
+    throw new RuntimeException('Map every failure status to invalid_grant.');
+}
+
+$replacementRefreshToken = $rotation->token;
+```
+
+The [token storage guide](https://docs.infocyph.com/projects/Epicrypt/token-storage.html)
+defines the required schema, atomic rotation sequence, reuse response, DPoP
+binding, and revocation behavior. Raw refresh tokens must never be stored.
 
 ### Generate certificate with SAN
 

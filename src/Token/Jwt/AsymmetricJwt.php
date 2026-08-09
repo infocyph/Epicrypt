@@ -142,7 +142,7 @@ final readonly class AsymmetricJwt
         if ($validation instanceof JwtFailureReason) {
             return JwtVerificationResult::failure($validation);
         }
-        if (!$this->consumeReplay($validation['issuer'], $validation['jwt_id'], $validation['expires_at'])) {
+        if (!$this->passesReplayPolicy($validation['issuer'], $validation['jwt_id'], $validation['expires_at'])) {
             return JwtVerificationResult::failure(JwtFailureReason::REPLAYED);
         }
 
@@ -169,15 +169,6 @@ final readonly class AsymmetricJwt
         }
 
         return $configured;
-    }
-
-    private function consumeReplay(string $issuer, string $jwtId, int $expiresAt): bool
-    {
-        if ($this->policy?->replayMode === JwtReplayMode::NONE) {
-            return true;
-        }
-
-        return $this->replayStore?->consume($issuer, $jwtId, $expiresAt) === true;
     }
 
     /** @return non-empty-string */
@@ -207,6 +198,15 @@ final readonly class AsymmetricJwt
         $this->validateKeyDetails($details);
 
         return $key;
+    }
+
+    private function passesReplayPolicy(string $issuer, string $jwtId, int $expiresAt): bool
+    {
+        return match ($this->policy?->replayMode) {
+            null, JwtReplayMode::NONE => true,
+            JwtReplayMode::DENYLIST => $this->replayStore?->isRevoked($issuer, $jwtId, $expiresAt) === false,
+            JwtReplayMode::SINGLE_USE => $this->replayStore?->consume($issuer, $jwtId, $expiresAt) === true,
+        };
     }
 
     /** @return array{?string, ?string, ?JwtFailureReason} */
@@ -294,7 +294,7 @@ final readonly class AsymmetricJwt
         if ($header['alg'] !== $this->algorithm->value) {
             return JwtFailureReason::ALGORITHM_MISMATCH;
         }
-        if (!hash_equals($this->type, $header['typ'])) {
+        if ($this->policy?->acceptsType($header['typ']) !== true) {
             return JwtFailureReason::INVALID_TYPE;
         }
         if (isset($header['cty']) || isset($header['crit'])) {

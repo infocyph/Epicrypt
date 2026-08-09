@@ -18,6 +18,6 @@ security, integrity primitives, and certificate tooling for PHP 8.4 and later.
    password
    security
    token
+   token-storage
    error-handling
    benchmarking
-   testing-and-quality

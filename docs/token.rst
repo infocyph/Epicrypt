@@ -39,7 +39,10 @@ public key, so they can verify tokens without gaining issuance authority.
        subject: 'user-42',
        audiences: ['orders-api'],
        ttlSeconds: 300,
-       custom: ['scope' => 'orders:read orders:write'],
+       custom: [
+           'client_id' => 'browser-client',
+           'scope' => 'orders:read orders:write',
+       ],
    );
 
    $token = AsymmetricJwt::issuer(
@@ -50,7 +53,7 @@ public key, so they can verify tokens without gaining issuance authority.
 
    $result = AsymmetricJwt::verifier(
        $signingKeys['public'],
-       JwtPolicy::accessToken('https://auth.example.com', 'orders-api'),
+       JwtPolicy::oauthAccessToken('https://auth.example.com', 'orders-api'),
    )->verifyResult($token);
 
    if (!$result->valid) {
@@ -58,6 +61,8 @@ public key, so they can verify tokens without gaining issuance authority.
    }
 
 Use ``KeyRing`` or ``Jwks`` to resolve a verified ``kid`` during rotation.
+The RFC 9068 policy accepts the equivalent ``at+jwt`` and
+``application/at+jwt`` media types while rejecting every unrelated type.
 Single-use password-reset, email-verification, and action JWT policies require
 an atomic ``JwtReplayStoreInterface`` implementation.
 
@@ -141,11 +146,19 @@ to the token header's algorithm.
        algorithm: AsymmetricJwtAlgorithm::RS384,
    );
 
-Issue and store an opaque refresh token
----------------------------------------
+Issue and rotate an opaque refresh token
+----------------------------------------
 
-Store only the digest. Return the original token once to the client, then
-compare a presented token with ``verify()``.
+``RefreshTokenManager`` owns secure generation, client and optional DPoP
+binding, absolute and inactivity expiration, family rotation, reuse response,
+and revocation orchestration. The application supplies a durable
+``RefreshTokenStoreInterface`` implementation because the consume-and-replace
+operation must be one database transaction across every application worker.
+
+The store must place a unique constraint on ``digest``, retain consumed token
+records until the grant expires, and lock the current record or use an
+equivalent compare-and-swap operation. On reuse it must revoke the complete
+family in the same transaction. It must never persist the raw token.
 
 .. code-block:: php
 
@@ -153,15 +166,64 @@ compare a presented token with ``verify()``.
 
    declare(strict_types=1);
 
-   use Infocyph\Epicrypt\Token\Opaque\OpaqueToken;
+   use Infocyph\Epicrypt\Token\Opaque\RefreshTokenGrant;
+   use Infocyph\Epicrypt\Token\Opaque\RefreshTokenManager;
+   use Infocyph\Epicrypt\Token\Opaque\RefreshTokenRotationStatus;
 
-   $opaque = new OpaqueToken();
-   $refreshToken = $opaque->issue();
-   $storedDigest = $opaque->hash($refreshToken);
+   // $refreshTokenStore is the application's transactional database adapter.
+   $refreshTokens = new RefreshTokenManager($refreshTokenStore);
+   $grant = new RefreshTokenGrant(
+       id: $authorizationGrantId,
+       subject: 'user-42',
+       clientId: 'browser-client',
+       audiences: ['orders-api'],
+       scopes: ['orders:read', 'orders:write'],
+       expiresAt: time() + 90 * 24 * 60 * 60,
+       dpopKeyThumbprint: $proofKeyThumbprint,
+   );
+   $refreshToken = $refreshTokens->issue($grant);
 
-   if (!$opaque->verify($presentedRefreshToken, $storedDigest)) {
+   // Return $refreshToken once over TLS; never log it or put it in a URL.
+   $rotation = $refreshTokens->rotate(
+       $presentedRefreshToken,
+       $authenticatedClientId,
+       $presentedDpopKeyThumbprint,
+       requestedScopes: ['orders:read'],
+   );
+   if (!$rotation->rotated) {
+       if ($rotation->status === RefreshTokenRotationStatus::REUSED) {
+           $securityEvents->refreshTokenReuse($authorizationGrantId);
+       }
+
+       // Map every failure status to OAuth invalid_grant at the HTTP boundary.
        throw new RuntimeException('Refresh token rejected.');
    }
+
+   $replacementRefreshToken = $rotation->token;
+   $authorizedGrant = $rotation->grant; // Mint only equal or narrower access.
+
+On logout, call ``revoke($presentedRefreshToken)``. On password change,
+account disablement, or another grant-wide security event, call
+``revokeGrant($authorizationGrantId)``. ``CLIENT_MISMATCH`` and
+``SENDER_MISMATCH`` do not consume the legitimate token. ``REUSED`` means the
+store has already revoked the complete family.
+
+``OpaqueToken`` remains available for isolated high-entropy opaque identifiers.
+It enforces 43 to 128 Base64URL characters. Do not use digest comparison alone
+as an OAuth refresh-token lifecycle.
+
+See :doc:`token-storage` for the complete public-type inventory, a relational
+schema, transaction sequence, status handling, and deployment checklist.
+
+Implement JWT replay and denylist storage
+-----------------------------------------
+
+``JwtReplayStoreInterface::consume()`` is an atomic insert-if-absent operation
+for single-use JWTs and DPoP proofs. ``isRevoked()`` is a non-consuming lookup
+for repeatable but revocable JWTs. A ``DENYLIST`` policy therefore permits
+repeated access-token use until the application adds its ``iss`` and ``jti`` to
+the shared store; ``SINGLE_USE`` accepts exactly one successful verification.
+Both checks occur only after signature, header, claim, and time validation.
 
 Sign short-lived application state
 -----------------------------------
@@ -380,7 +442,7 @@ atomic replay store and also checks the access token's ``cnf.jkt``.
        accessToken: $accessToken,
        nonce: $serverNonce,
    );
-   $claims = $dpop->verify(
+   $verifiedProof = $dpop->verifyResult(
        $proof,
        'POST',
        'https://api.example/orders',
@@ -389,4 +451,11 @@ atomic replay store and also checks the access token's ``cnf.jkt``.
        accessToken: $accessToken,
        nonce: $serverNonce,
    );
-   $dpop->validateAccessTokenBinding($verifiedAccessTokenClaims, $proofPublicJwk);
+   $dpop->validateAccessTokenBinding(
+       $verifiedAccessTokenClaims,
+       $verifiedProof['publicJwk'],
+   );
+
+For a DPoP-bound refresh request, pass
+``$verifiedProof['keyThumbprint']`` to ``RefreshTokenManager::rotate()``. The
+manager compares it with the grant binding before the store consumes the token.
