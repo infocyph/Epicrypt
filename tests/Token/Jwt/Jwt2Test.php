@@ -43,7 +43,14 @@ it('issues and verifies every configured HS RS and ES algorithm', function () {
     }
 
     $rsa = KeyPairGenerator::openSsl(OpenSslRsaBits::BITS_2048)->generate();
-    foreach ([AsymmetricJwtAlgorithm::RS256, AsymmetricJwtAlgorithm::RS384, AsymmetricJwtAlgorithm::RS512] as $algorithm) {
+    foreach ([
+        AsymmetricJwtAlgorithm::RS256,
+        AsymmetricJwtAlgorithm::RS384,
+        AsymmetricJwtAlgorithm::RS512,
+        AsymmetricJwtAlgorithm::PS256,
+        AsymmetricJwtAlgorithm::PS384,
+        AsymmetricJwtAlgorithm::PS512,
+    ] as $algorithm) {
         $token = AsymmetricJwt::issuer($rsa['private'], 'at+jwt', algorithm: $algorithm)->issue($claims);
         expect(AsymmetricJwt::verifier($rsa['public'], $policy, $algorithm)->verify($token))->toBeTrue();
     }
@@ -63,6 +70,10 @@ it('issues and verifies every configured HS RS and ES algorithm', function () {
         $token = AsymmetricJwt::issuer($pair['private'], 'at+jwt', algorithm: $algorithm)->issue($claims);
         expect(AsymmetricJwt::verifier($pair['public'], $policy, $algorithm)->verify($token))->toBeTrue();
     }
+
+    $ed25519 = KeyPairGenerator::sodiumSign()->generate();
+    $eddsa = AsymmetricJwt::issuer($ed25519['private'], 'at+jwt', algorithm: AsymmetricJwtAlgorithm::EDDSA)->issue($claims);
+    expect(AsymmetricJwt::verifier($ed25519['public'], $policy, AsymmetricJwtAlgorithm::EDDSA)->verify($eddsa))->toBeTrue();
 });
 
 it('rejects weak keys, algorithm confusion, invalid type, and unknown kid', function () {
@@ -135,12 +146,47 @@ it('enforces temporal boundaries and normalizes scope', function () {
         sodium_bin2base64(random_bytes(24), SODIUM_BASE64_VARIANT_URLSAFE_NO_PADDING),
         ['scope' => 'read write'],
     );
-    expect($claims->custom['scope'])->toBe(['read', 'write']);
+    expect($claims->custom['scope'])->toBe('read write');
 
     $token = SymmetricJwt::issuer($key, 'at+jwt')->issue($claims);
     $policy = new JwtPolicy('issuer', 'api', 'at+jwt', leewaySeconds: 0);
     expect(SymmetricJwt::verifier($key, $policy, clock: $clock)->verifyResult($token)->failureReason)
         ->toBe(JwtFailureReason::EXPIRED);
+});
+
+it('supports generic JWT claim shapes and the strict OAuth access-token profile', function () {
+    $key = random_bytes(64);
+    $encode = static fn(string $value): string => sodium_bin2base64($value, SODIUM_BASE64_VARIANT_URLSAFE_NO_PADDING);
+    $sign = static function (array $claims, string $type = 'JWT') use ($key, $encode): string {
+        $header = $encode(json_encode(['alg' => 'HS512', 'typ' => $type], JSON_THROW_ON_ERROR));
+        $payload = $encode(json_encode($claims, JSON_THROW_ON_ERROR));
+
+        return $header . '.' . $payload . '.' . $encode(hash_hmac('sha512', $header . '.' . $payload, $key, true));
+    };
+    $now = time();
+    $generic = $sign(['iss' => 'issuer', 'aud' => 'api', 'exp' => (float) ($now + 300)]);
+
+    expect(SymmetricJwt::verifier($key, JwtPolicy::generic('issuer', 'api'))->verify($generic))->toBeTrue();
+
+    $oauthClaims = JwtClaims::issue(
+        'issuer',
+        'subject',
+        ['api'],
+        300,
+        ['client_id' => 'web-client', 'scope' => ['orders:read', 'orders:write']],
+    );
+    $oauth = SymmetricJwt::issuer($key, 'at+jwt')->issue($oauthClaims);
+    $oauthPolicy = JwtPolicy::oauthAccessToken('issuer', 'api');
+    expect(SymmetricJwt::verifier($key, $oauthPolicy)->verify($oauth))->toBeTrue()
+        ->and($oauthClaims->custom['scope'])->toBe('orders:read orders:write')
+        ->and(SymmetricJwt::verifier($key, $oauthPolicy)->verifyResult($sign([
+            'iss' => 'issuer',
+            'sub' => 'subject',
+            'aud' => 'api',
+            'exp' => $now + 300,
+            'iat' => $now,
+            'jti' => 'external-token-id',
+        ], 'at+jwt'))->failureReason)->toBe(JwtFailureReason::INVALID_CLIENT_ID);
 });
 
 it('returns precise failures for temporal and identity policy boundaries', function () {
@@ -232,7 +278,7 @@ it('rejects malformed compact JSON and missing registered claims', function () {
     $verifier = SymmetricJwt::verifier($key, $policy);
 
     expect($verifier->verifyResult($token($duplicate))->failureReason)->toBe(JwtFailureReason::MALFORMED)
-        ->and($verifier->verifyResult($token($missing))->failureReason)->toBe(JwtFailureReason::MALFORMED)
+        ->and($verifier->verifyResult($token($missing))->failureReason)->toBe(JwtFailureReason::INVALID_JTI)
         ->and($verifier->verifyResult($token($invalidUtf8))->failureReason)->toBe(JwtFailureReason::MALFORMED)
         ->and($verifier->verifyResult($token($nestedDuplicate))->failureReason)->toBe(JwtFailureReason::MALFORMED)
         ->and($verifier->verify($token($repeatedAcrossObjects)))->toBeTrue()

@@ -71,7 +71,14 @@ final class TokenBench
         }
 
         $rsa = KeyPairGenerator::openSsl(OpenSslRsaBits::BITS_2048)->generate();
-        foreach ([AsymmetricJwtAlgorithm::RS256, AsymmetricJwtAlgorithm::RS384, AsymmetricJwtAlgorithm::RS512] as $algorithm) {
+        foreach ([
+            AsymmetricJwtAlgorithm::RS256,
+            AsymmetricJwtAlgorithm::RS384,
+            AsymmetricJwtAlgorithm::RS512,
+            AsymmetricJwtAlgorithm::PS256,
+            AsymmetricJwtAlgorithm::PS384,
+            AsymmetricJwtAlgorithm::PS512,
+        ] as $algorithm) {
             $this->prepareAsymmetric($algorithm, $rsa, $policy);
         }
         $curves = [
@@ -87,6 +94,11 @@ final class TokenBench
             )->generate();
             $this->prepareAsymmetric(AsymmetricJwtAlgorithm::from($algorithmValue), $pair, $policy);
         }
+        $this->prepareAsymmetric(
+            AsymmetricJwtAlgorithm::EDDSA,
+            KeyPairGenerator::sodiumSign()->generate(),
+            $policy,
+        );
 
         $key = SymmetricJwt::generateBinaryKey();
         $this->ring = new KeyRing([

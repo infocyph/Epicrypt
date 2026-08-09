@@ -6,9 +6,6 @@ namespace Infocyph\Epicrypt\Generate\KeyMaterial;
 
 use Infocyph\Epicrypt\Exception\ConfigurationException;
 
-/**
- * @internal
- */
 final readonly class KeyDerivationContext
 {
     public function __construct(

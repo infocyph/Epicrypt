@@ -1,125 +1,150 @@
-Security Domain
-===============
+Application security
+====================
 
-Namespace: ``Infocyph\\Epicrypt\\Security``
+This domain provides purpose-bound application tokens, signed URLs, CSRF
+tokens, and policy-aware key rotation. These values authenticate data but do
+not make their contents secret.
 
-Scope
------
+Create a method- and host-bound download URL
+--------------------------------------------
 
-- signed URLs
-- CSRF token management
-- password reset tokens
-- email verification tokens
-- remember tokens
-- action tokens
-- key rotation helper
-- key-ring metadata for rotation windows and purpose-scoped key usage
-
-Signed URLs
------------
+Both generation and verification must use the same options. An allowlist
+prevents an attacker from asking the signer to produce a valid URL for an
+untrusted host.
 
 .. code-block:: php
 
+   <?php
+
+   declare(strict_types=1);
+
+   use Infocyph\Epicrypt\Generate\KeyMaterial\KeyMaterialGenerator;
    use Infocyph\Epicrypt\Security\SignedUrl;
    use Infocyph\Epicrypt\Security\SignedUrlOptions;
 
-   $signed = new SignedUrl('url-secret');
+   $secret = new KeyMaterialGenerator()->forMasterSecret(asBase64Url: false);
    $options = new SignedUrlOptions(
        method: 'GET',
        bindHost: true,
        bindScheme: true,
-       allowArrayParameters: false,
-       allowedHosts: ['example.com'],
+       allowedHosts: ['downloads.example.com'],
+   );
+   $signer = new SignedUrl($secret);
+   $url = $signer->generate(
+       'https://downloads.example.com/report',
+       ['file' => 'report-1847.csv'],
+       expiresAt: time() + 300,
+       options: $options,
    );
 
-   $url = $signed->generate('https://example.com/download', ['file' => 'report.csv'], time() + 300, $options);
+   $result = $signer->verifyResult($url, $options);
+   if (!$result->verified) {
+       throw new RuntimeException($result->expired ? 'Link expired.' : 'Invalid link.');
+   }
 
-   $isValid = $signed->verify($url);
-   $result = $signed->verifyResult($url, $options);
+Protect a browser session from CSRF
+-----------------------------------
 
-``verifyResult()`` exposes ``verified``, ``expired``, ``invalidSignature``, ``expiresAt`` and ``version``.
-
-CSRF
-----
+Issue a token into the rendered form and verify it against the same server-side
+session identifier when the form is submitted.
 
 .. code-block:: php
 
+   <?php
+
+   declare(strict_types=1);
+
+   use Infocyph\Epicrypt\Generate\KeyMaterial\KeyMaterialGenerator;
    use Infocyph\Epicrypt\Security\CsrfTokenManager;
 
-   $csrf = new CsrfTokenManager('csrf-secret', 3600);
-   $token = $csrf->issueToken('session-id');
-   $isValid = $csrf->verifyToken('session-id', $token);
+   $secret = new KeyMaterialGenerator()->forMasterSecret(asBase64Url: false);
+   $csrf = new CsrfTokenManager($secret, ttlSeconds: 3600);
+   $formToken = $csrf->issueToken($sessionId);
 
-Purpose-Bound Tokens
---------------------
+   if (!$csrf->verifyToken($sessionId, $submittedToken)) {
+       throw new RuntimeException('CSRF validation failed.');
+   }
+
+Issue purpose-bound account tokens
+----------------------------------
+
+Each helper binds a distinct purpose into the authenticated payload, so a
+password-reset token cannot be replayed as an email-verification token.
 
 .. code-block:: php
 
-   use Infocyph\Epicrypt\Security\PasswordResetToken;
-   use Infocyph\Epicrypt\Security\EmailVerificationToken;
-   use Infocyph\Epicrypt\Security\RememberToken;
+   <?php
+
+   declare(strict_types=1);
+
+   use Infocyph\Epicrypt\Generate\KeyMaterial\KeyMaterialGenerator;
    use Infocyph\Epicrypt\Security\ActionToken;
+   use Infocyph\Epicrypt\Security\EmailVerificationToken;
+   use Infocyph\Epicrypt\Security\PasswordResetToken;
+   use Infocyph\Epicrypt\Security\RememberToken;
 
-   $reset = new PasswordResetToken('token-secret', 1800);
-   $resetToken = $reset->issue('user-1');
-   $resetOk = $reset->verify($resetToken, 'user-1');
+   $secret = new KeyMaterialGenerator()->forMasterSecret(asBase64Url: false);
 
-   $email = new EmailVerificationToken('token-secret', 86400);
-   $emailToken = $email->issue('user-1', 'user@example.com');
-   $emailOk = $email->verify($emailToken, 'user@example.com');
+   $reset = new PasswordResetToken($secret);
+   $resetToken = $reset->issue('user-42');
+   $resetAllowed = $reset->verify($resetToken, 'user-42');
 
-   $remember = new RememberToken('token-secret', 1209600);
-   $rememberToken = $remember->issue('user-1', 'device-1');
-   $rememberOk = $remember->verify($rememberToken, 'user-1', 'device-1');
+   $email = new EmailVerificationToken($secret);
+   $emailToken = $email->issue('user-42', 'user@example.com');
+   $emailAllowed = $email->verify($emailToken, 'user@example.com');
 
-   $action = new ActionToken('token-secret', 900);
-   $actionToken = $action->issue('user-1', 'delete-account');
-   $actionOk = $action->verify($actionToken, 'user-1', 'delete-account');
+   $remember = new RememberToken($secret);
+   $rememberToken = $remember->issue('user-42', 'device-a7f3');
+   $rememberAllowed = $remember->verify($rememberToken, 'user-42', 'device-a7f3');
 
-Key Rotation Helper
--------------------
+   $action = new ActionToken($secret);
+   $actionToken = $action->issue('user-42', 'delete-account');
+   $actionAllowed = $action->verify($actionToken, 'user-42', 'delete-account');
+
+These helpers validate integrity, expiry, and expected claims. Applications
+must still enforce single use when the workflow requires it.
+
+Rotate signing keys with a typed KeyRing
+----------------------------------------
+
+``KeyRingEntry`` constrains every key by status, purpose, algorithm, validity
+window, and optional issuer. Retired and disabled keys are never eligible.
 
 .. code-block:: php
 
-   use Infocyph\Epicrypt\Security\KeyRotationHelper;
+   <?php
 
-   $keys = [
-       'k1' => 'previous-key',
-       'k2' => 'active-key',
-   ];
+   declare(strict_types=1);
+
+   use Infocyph\Epicrypt\Generate\KeyMaterial\KeyMaterialGenerator;
+   use Infocyph\Epicrypt\Security\KeyPurpose;
+   use Infocyph\Epicrypt\Security\KeyRing;
+   use Infocyph\Epicrypt\Security\KeyRingEntry;
+   use Infocyph\Epicrypt\Security\KeyRotationHelper;
+   use Infocyph\Epicrypt\Security\KeyStatus;
+
+   $keys = new KeyMaterialGenerator();
+   $ring = new KeyRing([
+       new KeyRingEntry(
+           id: 'signing-2026-08',
+           key: $keys->forMasterSecret(asBase64Url: false),
+           status: KeyStatus::ACTIVE,
+           purpose: KeyPurpose::KEY_ROTATION,
+           algorithm: 'sha512',
+       ),
+       new KeyRingEntry(
+           id: 'signing-2026-05',
+           key: $_ENV['PREVIOUS_SIGNING_KEY'],
+           status: KeyStatus::FALLBACK,
+           purpose: KeyPurpose::KEY_ROTATION,
+           algorithm: 'sha512',
+       ),
+   ]);
 
    $rotation = new KeyRotationHelper();
-   $signature = $rotation->sign('payload', 'k2', $keys);
+   $signature = $rotation->signWithKeyRing('deployment-manifest-v7', $ring);
+   $result = $rotation->verifyResult('deployment-manifest-v7', $signature, $ring);
 
-   $isValidWithKid = $rotation->verify('payload', $signature, $keys, 'k2');
-   $isValidAgainstSet = $rotation->verify('payload', $signature, $keys);
-   $result = $rotation->verifyResult('payload', $signature, $keys);
-
-``verifyResult()`` returns ``KeyVerificationResult`` with ``verified``, ``matchedKeyId`` and ``usedFallbackKey``.
-
-KeyRing Metadata
-----------------
-
-Use metadata entries when keys have status, validity windows or scope constraints.
-
-.. code-block:: php
-
-   use Infocyph\Epicrypt\Security\KeyRing;
-
-   $ring = new KeyRing([
-       'k2026-05' => [
-           'key' => 'active-key',
-           'status' => KeyRing::STATUS_ACTIVE,
-           'not_before' => 1767225600,
-           'not_after' => 1798761600,
-           'purpose' => 'jwt-signing',
-       ],
-       'k2025-12' => [
-           'key' => 'fallback-key',
-           'status' => KeyRing::STATUS_FALLBACK,
-           'purpose' => 'jwt-signing',
-       ],
-   ], 'k2026-05');
-
-   $activeKey = $ring->activeKey();
-   $ordered = $ring->orderedEntries('jwt-signing', time());
+``$result->matchedKeyId`` identifies the verifier key and
+``$result->usedFallbackKey`` tells the application that the signed value should
+be renewed under the active key.

@@ -3,6 +3,7 @@
 .phpunit.cache
 .vscode
 .windsurf
+node_modules
 *~
 *.patch
 *.txt

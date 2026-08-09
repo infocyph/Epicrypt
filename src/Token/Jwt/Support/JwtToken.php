@@ -15,6 +15,18 @@ final class JwtToken
 {
     public const int MAX_TOKEN_SIZE = 16 * 1024;
 
+    /** @return array<string, mixed> */
+    public static function decodeJsonObject(string $json, string $name): array
+    {
+        try {
+            self::rejectDuplicateObjectKeys($json);
+
+            return Json::decodeToArray($json);
+        } catch (Throwable $exception) {
+            throw new InvalidTokenException(sprintf('Invalid JWT %s.', $name), 0, $exception);
+        }
+    }
+
     /**
      * @param array<string, mixed> $header
      * @param array<string, mixed> $payload
@@ -59,10 +71,7 @@ final class JwtToken
     private static function decodeSegment(string $encodedSegment, string $name): array
     {
         try {
-            $json = Base64Url::decode($encodedSegment);
-            self::rejectDuplicateObjectKeys($json);
-
-            return Json::decodeToArray($json);
+            return self::decodeJsonObject(Base64Url::decode($encodedSegment), $name);
         } catch (Throwable $exception) {
             throw new InvalidTokenException(sprintf('Invalid JWT %s.', $name), 0, $exception);
         }
@@ -125,15 +134,16 @@ final class JwtToken
             if (!is_string($key)) {
                 throw new JsonException('JSON object key must be a string.');
             }
-            $object = array_pop($objects);
-            if ($object === null) {
+            $objectIndex = count($objects) - 1;
+            if ($objectIndex < 0) {
                 throw new JsonException('JSON object key is outside an object.');
             }
+            $object = $objects[$objectIndex];
             if (isset($object[$key])) {
                 throw new JsonException('Duplicate JSON object key.');
             }
             $object[$key] = true;
-            $objects[] = $object;
+            $objects[$objectIndex] = $object;
         }
     }
 }

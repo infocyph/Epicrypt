@@ -1,0 +1,11 @@
+{
+  "name": "epicrypt-release-tests",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "jose": "6.2.8"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

@@ -20,10 +20,16 @@
         "ext-openssl": "*",
         "ext-sodium": "*",
         "infocyph/pathwise": "^3.0",
-        "psr/clock": "^1.0"
+        "phpseclib/phpseclib": "^3.0",
+        "psr/clock": "^1.0",
+        "psr/http-client": "^1.0",
+        "psr/http-factory": "^1.0",
+        "psr/simple-cache": "^3.0"
     },
     "require-dev": {
-        "infocyph/phpforge": "dev-main@dev"
+        "infocyph/phpforge": "dev-main@dev",
+        "nyholm/psr7": "^1.8",
+        "php-http/mock-client": "^1.6"
     },
     "minimum-stability": "stable",
     "prefer-stable": true,

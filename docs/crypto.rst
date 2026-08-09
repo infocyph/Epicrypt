@@ -1,123 +1,194 @@
-Crypto Domain
-=============
+Cryptographic primitives
+========================
 
-Namespace: ``Infocyph\\Epicrypt\\Crypto``
+Use this lower-level domain when a higher-level ``DataProtection``, ``Token``,
+``Password``, or ``Security`` capability does not fit the protocol.
 
-Scope
------
+AEAD
+----
 
-Direct cryptographic primitives and operations:
+``AeadCipher`` defaults to XChaCha20-Poly1305. The approved explicit choices
+are AES-256-GCM, ChaCha20-Poly1305, ChaCha20-Poly1305-IETF,
+XChaCha20-Poly1305-IETF, AEGIS-128L, and AEGIS-256. AES-256-GCM additionally
+requires platform hardware support. AEGIS requires libsodium 1.0.19 or newer;
+an unavailable explicit selection fails without downgrade.
 
-- AEAD
-- secret-box
-- public-key box
-- sealed-box
-- detached signature
-- MAC
-- stream encryption
-- binary codec
-
-This is the lower-level surface of Epicrypt.
-
-For most new applications, prefer the higher-level ``Password``, ``Token``, ``DataProtection`` and ``Security`` domains first, then drop down into ``Crypto`` only when you truly need primitive-level control.
-
-AEAD Cipher
------------
+This recipe encrypts a payment-provider credential and binds the ciphertext to
+the immutable merchant record and schema version.
 
 .. code-block:: php
+
+   <?php
+
+   declare(strict_types=1);
+
+   use Infocyph\Epicrypt\Crypto\AeadCipher;
+   use Infocyph\Epicrypt\Generate\KeyMaterial\KeyMaterialGenerator;
+
+   $key = new KeyMaterialGenerator()->forAead();
+   $aad = 'merchant=1847;field=provider-token;schema=1';
+   $cipher = new AeadCipher(); // XChaCha20-Poly1305
+
+   $storedCiphertext = $cipher->encrypt($providerToken, $key, $aad, keyId: 'merchant-2026-08');
+   $restoredToken = $cipher->decrypt($storedCiphertext, $key, $aad);
+
+Explicit selection is reserved for protocol interoperability:
+
+.. code-block:: php
+
+   <?php
+
+   declare(strict_types=1);
 
    use Infocyph\Epicrypt\Crypto\AeadCipher;
    use Infocyph\Epicrypt\Crypto\Enum\AeadAlgorithm;
-   use Infocyph\Epicrypt\Generate\KeyMaterial\KeyMaterialGenerator;
 
-   $key = (new KeyMaterialGenerator())
-       ->generate(SODIUM_CRYPTO_AEAD_XCHACHA20POLY1305_IETF_KEYBYTES);
+   $aes = new AeadCipher(AeadAlgorithm::AES_256_GCM);
 
-   $cipher = new AeadCipher(AeadAlgorithm::XCHACHA20_POLY1305_IETF);
-   $encrypted = $cipher->encrypt('message', $key, 'ctx');
-   $plain = $cipher->decrypt($encrypted, $key, 'ctx');
-
-Supported AEAD algorithms:
-
-- ``aes-256-gcm``
-- ``chacha20-poly1305``
-- ``chacha20-poly1305-ietf``
-- ``xchacha20-poly1305-ietf``
-
-SecretBox Cipher
-----------------
+Runtime-gated AEGIS selection is explicit:
 
 .. code-block:: php
 
-   use Infocyph\Epicrypt\Crypto\SecretBoxCipher;
-   use Infocyph\Epicrypt\Generate\KeyMaterial\KeyMaterialGenerator;
+   <?php
 
-   $key = (new KeyMaterialGenerator())->generate(SODIUM_CRYPTO_SECRETBOX_KEYBYTES);
-   $cipher = new SecretBoxCipher();
+   declare(strict_types=1);
 
-   $encrypted = $cipher->encrypt('message', $key);
-   $plain = $cipher->decrypt($encrypted, $key);
+   use Infocyph\Epicrypt\Crypto\AeadCipher;
+   use Infocyph\Epicrypt\Crypto\Enum\AeadAlgorithm;
 
-PublicKeyBox Cipher
--------------------
+   $algorithm = AeadAlgorithm::AEGIS_256;
+   if (!$algorithm->isAvailable()) {
+       throw new RuntimeException('This deployment does not provide AEGIS-256.');
+   }
+   $key = random_bytes($algorithm->keyLength());
+   $cipher = new AeadCipher($algorithm);
+   $payload = $cipher->encryptWithBinaryKey($record, $key, 'telemetry-record/v1');
+   $record = $cipher->decryptWithBinaryKey($payload, $key, 'telemetry-record/v1');
+
+Shared-key and public-key boxes
+-------------------------------
+
+Use ``SecretBoxCipher`` for a shared-key Sodium secret-box protocol,
+``PublicKeyBoxCipher`` when sender and recipient identities are both known, and
+``SealedBoxCipher`` when an anonymous sender only has the recipient public key.
 
 .. code-block:: php
+
+   <?php
+
+   declare(strict_types=1);
 
    use Infocyph\Epicrypt\Certificate\KeyPairGenerator;
    use Infocyph\Epicrypt\Crypto\PublicKeyBoxCipher;
 
-   $sender = KeyPairGenerator::sodium()->generate(asBase64Url: true);
-   $recipient = KeyPairGenerator::sodium()->generate(asBase64Url: true);
+   $dispatch = KeyPairGenerator::sodium()->generate(asBase64Url: true);
+   $warehouse = KeyPairGenerator::sodium()->generate(asBase64Url: true);
+   $box = new PublicKeyBoxCipher();
 
-   $cipher = new PublicKeyBoxCipher();
-   $encrypted = $cipher->encrypt('message', $recipient['public'], $sender['private']);
-   $plain = $cipher->decrypt($encrypted, $sender['public'], $recipient['private']);
+   $message = $box->encrypt(
+       $shippingInstruction,
+       $warehouse['public'],
+       $dispatch['private'],
+   );
+   $instruction = $box->decrypt(
+       $message,
+       $dispatch['public'],
+       $warehouse['private'],
+   );
 
-SealedBox Cipher
-----------------
+``SecretBoxCipher`` and ``SealedBoxCipher`` expose the same explicit
+``encrypt()``/``decrypt()`` shape for their respective key material.
 
 .. code-block:: php
+
+   <?php
+
+   declare(strict_types=1);
 
    use Infocyph\Epicrypt\Crypto\SealedBoxCipher;
+   use Infocyph\Epicrypt\Crypto\SecretBoxCipher;
+   use Infocyph\Epicrypt\Generate\KeyMaterial\KeyMaterialGenerator;
 
-   $keypair = sodium_crypto_box_keypair();
-   $public = sodium_bin2base64(sodium_crypto_box_publickey($keypair), SODIUM_BASE64_VARIANT_URLSAFE_NO_PADDING);
-   $pair = sodium_bin2base64($keypair, SODIUM_BASE64_VARIANT_URLSAFE_NO_PADDING);
+   $sharedKey = new KeyMaterialGenerator()->forSecretBox();
+   $secretBox = new SecretBoxCipher();
+   $stored = $secretBox->encrypt('shared deployment secret', $sharedKey);
+   $restored = $secretBox->decrypt($stored, $sharedKey);
 
-   $cipher = new SealedBoxCipher();
-   $encrypted = $cipher->encrypt('message', $public);
-   $plain = $cipher->decrypt($encrypted, $pair);
+   $recipientPair = sodium_crypto_box_keypair();
+   $recipientPublic = sodium_bin2base64(
+       sodium_crypto_box_publickey($recipientPair),
+       SODIUM_BASE64_VARIANT_URLSAFE_NO_PADDING,
+   );
+   $encodedPair = sodium_bin2base64($recipientPair, SODIUM_BASE64_VARIANT_URLSAFE_NO_PADDING);
+   $sealedBox = new SealedBoxCipher();
+   $sealed = $sealedBox->encrypt('anonymous incident report', $recipientPublic);
+   $report = $sealedBox->decrypt($sealed, $encodedPair);
 
-MAC and Signature
------------------
+Detached signatures and MACs
+-----------------------------
+
+Use a detached signature when verifiers must not possess signing authority.
+Use a MAC when both parties are trusted to share the same secret.
 
 .. code-block:: php
+
+   <?php
+
+   declare(strict_types=1);
 
    use Infocyph\Epicrypt\Certificate\KeyPairGenerator;
    use Infocyph\Epicrypt\Crypto\Mac;
    use Infocyph\Epicrypt\Crypto\Signature;
 
+   $manifest = '{"release":"2026.08","sha512":"..."}';
+   $releaseKeys = KeyPairGenerator::sodiumSign()->generate(asBase64Url: true);
+   $signature = new Signature()->sign($manifest, $releaseKeys['private']);
+   $trusted = new Signature()->verify($manifest, $signature, $releaseKeys['public']);
+
    $mac = new Mac();
-   $macKey = $mac->generateKey();
-   $tag = $mac->generate('message', $macKey);
-   $isMacValid = $mac->verify('message', $tag, $macKey);
+   $webhookKey = $mac->generateKey();
+   $tag = $mac->generate($manifest, $webhookKey);
+   $authenticated = $mac->verify($manifest, $tag, $webhookKey);
 
-   $keys = KeyPairGenerator::sodiumSign()->generate(asBase64Url: true);
-   $sig = new Signature();
-   $detached = $sig->sign('message', $keys['private']);
-   $isSigValid = $sig->verify('message', $detached, $keys['public']);
+Authenticated file streaming
+----------------------------
 
-SecretStream (File Streaming)
------------------------------
+``SecretStream`` is the specialized XChaCha20-Poly1305 primitive behind
+``DataProtection\FileProtector``. Prefer ``FileProtector`` for application
+files because it also authenticates purpose, AAD, key ID, and framing metadata.
 
-``SecretStream`` is optimized for chunked file encryption/decryption and powers ``DataProtection\\FileProtector``.
+.. code-block:: php
 
-- algorithm: authenticated XChaCha20-Poly1305 SecretStream only
-- chunk sizes must be between 1 byte and 16 MiB; the benchmark-selected default is 64 KiB
-- output is staged in the destination directory and committed only after the complete operation succeeds
-- existing destinations use atomic replacement where supported and backup/rollback replacement on Windows
+   <?php
 
-Binary Codec
-------------
+   declare(strict_types=1);
 
-``BinaryCodec`` wraps Base64URL encode/decode helpers.
+   use Infocyph\Epicrypt\Crypto\SecretStream;
+   use Infocyph\Epicrypt\Generate\KeyMaterial\KeyMaterialGenerator;
+
+   $binaryKey = new KeyMaterialGenerator()->forSecretStream(asBase64Url: false);
+   $stream = new SecretStream($binaryKey, additionalData: 'video-export/v1');
+   $stream->encrypt('/exports/video.mp4', '/exports/video.mp4.encrypted');
+   $stream->decrypt('/exports/video.mp4.encrypted', '/restore/video.mp4');
+
+Chunk sizes are limited to 1 byte through 16 MiB; the default is 64 KiB.
+Destinations are staged and committed only after complete success.
+
+Binary encoding
+---------------
+
+``BinaryCodec`` provides explicit Base64URL encoding and decoding for protocol
+boundaries. Do not confuse encoded text with raw binary key material; methods
+whose names include ``BinaryKey`` intentionally require raw bytes.
+
+.. code-block:: php
+
+   <?php
+
+   declare(strict_types=1);
+
+   use Infocyph\Epicrypt\Crypto\BinaryCodec;
+
+   $codec = new BinaryCodec();
+   $transportValue = $codec->encode($binaryProtocolValue);
+   $binaryProtocolValue = $codec->decode($transportValue);

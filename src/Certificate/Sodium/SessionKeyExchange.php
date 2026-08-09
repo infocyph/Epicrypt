@@ -10,6 +10,17 @@ use Infocyph\Epicrypt\Internal\BinaryKey;
 
 final class SessionKeyExchange implements KeyExchangeInterface
 {
+    public function clientSessionKeys(
+        #[\SensitiveParameter]
+        string $clientKeyPair,
+        string $serverPublicKey,
+    ): DirectionalSessionKeys {
+        $this->validateKxInputs($clientKeyPair, $serverPublicKey);
+        [$receive, $transmit] = sodium_crypto_kx_client_session_keys($clientKeyPair, $serverPublicKey);
+
+        return new DirectionalSessionKeys($receive, $transmit);
+    }
+
     public function deriveSharedSecret(string $privateKey, string $publicKey, bool $keysAreBinary): string
     {
         try {
@@ -20,5 +31,28 @@ final class SessionKeyExchange implements KeyExchangeInterface
         }
 
         return sodium_crypto_scalarmult($private, $public);
+    }
+
+    public function generateKeyPair(): string
+    {
+        return sodium_crypto_kx_keypair();
+    }
+
+    public function serverSessionKeys(
+        #[\SensitiveParameter]
+        string $serverKeyPair,
+        string $clientPublicKey,
+    ): DirectionalSessionKeys {
+        $this->validateKxInputs($serverKeyPair, $clientPublicKey);
+        [$receive, $transmit] = sodium_crypto_kx_server_session_keys($serverKeyPair, $clientPublicKey);
+
+        return new DirectionalSessionKeys($receive, $transmit);
+    }
+
+    private function validateKxInputs(string $keyPair, string $peerPublicKey): void
+    {
+        if (strlen($keyPair) !== SODIUM_CRYPTO_KX_KEYPAIRBYTES || strlen($peerPublicKey) !== SODIUM_CRYPTO_KX_PUBLICKEYBYTES) {
+            throw new InvalidKeyException('Sodium crypto_kx requires an exact keypair and peer public key.');
+        }
     }
 }

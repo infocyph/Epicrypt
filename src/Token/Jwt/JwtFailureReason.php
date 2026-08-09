@@ -12,6 +12,8 @@ enum JwtFailureReason
 
     case INVALID_AUDIENCE;
 
+    case INVALID_CLIENT_ID;
+
     case INVALID_CUSTOM_CLAIM;
 
     case INVALID_ISSUER;
@@ -19,6 +21,8 @@ enum JwtFailureReason
     case INVALID_JTI;
 
     case INVALID_LIFETIME;
+
+    case INVALID_SCOPE;
 
     case INVALID_SIGNATURE;
 
