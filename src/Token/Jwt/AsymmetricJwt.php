@@ -13,6 +13,10 @@ use Infocyph\Epicrypt\Security\KeyRing;
 use Infocyph\Epicrypt\Token\Jwt\Enum\AsymmetricJwtAlgorithm;
 use Infocyph\Epicrypt\Token\Jwt\Support\JwtToken;
 use OpenSSLAsymmetricKey;
+use phpseclib3\Crypt\PublicKeyLoader;
+use phpseclib3\Crypt\RSA;
+use phpseclib3\Crypt\RSA\PrivateKey as RsaPrivateKey;
+use phpseclib3\Crypt\RSA\PublicKey as RsaPublicKey;
 use Psr\Clock\ClockInterface;
 use Throwable;
 
@@ -45,7 +49,7 @@ final readonly class AsymmetricJwt
             throw new ConfigurationException('A replay store is required by the selected JWT replay policy.');
         }
         if (is_string($this->key)) {
-            $this->loadAndValidateKey($this->key, $this->mode === self::ISSUER);
+            $this->validateKey($this->key, $this->mode === self::ISSUER);
         }
     }
 
@@ -85,10 +89,7 @@ final readonly class AsymmetricJwt
         }
         [$encodedHeader, $encodedPayload] = JwtToken::encodeSegments($header, $claims->toArray());
         $input = $encodedHeader . '.' . $encodedPayload;
-        $privateKey = $this->loadAndValidateKey($this->key, true);
-        if (!openssl_sign($input, $signature, $privateKey, $this->algorithm->opensslAlgorithm()) || !is_string($signature)) {
-            throw new ConfigurationException('JWT signing failed.');
-        }
+        $signature = $this->sign($input, $this->key);
 
         $ecdsaLength = $this->algorithm->ecdsaSignatureLength();
         if ($ecdsaLength !== null) {
@@ -125,7 +126,6 @@ final readonly class AsymmetricJwt
         }
 
         try {
-            $publicKey = $this->loadAndValidateKey($resolvedKey, false);
             $ecdsaLength = $this->algorithm->ecdsaSignatureLength();
             if ($ecdsaLength !== null) {
                 $signature = new EcdsaSignatureConverter()->toAsn1($signature, $ecdsaLength);
@@ -134,7 +134,7 @@ final readonly class AsymmetricJwt
             return JwtVerificationResult::failure(JwtFailureReason::KEY_NOT_USABLE);
         }
 
-        if (openssl_verify($encodedHeader . '.' . $encodedPayload, $signature, $publicKey, $this->algorithm->opensslAlgorithm()) !== 1) {
+        if (!$this->verifySignature($encodedHeader . '.' . $encodedPayload, $signature, $resolvedKey)) {
             return JwtVerificationResult::failure(JwtFailureReason::INVALID_SIGNATURE);
         }
 
@@ -149,6 +149,28 @@ final readonly class AsymmetricJwt
         return JwtVerificationResult::success($claims, $header, $matchedKeyId);
     }
 
+    private function configureRsaPss(RsaPrivateKey|RsaPublicKey $key): RsaPrivateKey|RsaPublicKey
+    {
+        $configured = $key->withPadding(RSA::SIGNATURE_PSS);
+        if (!$configured instanceof RsaPrivateKey && !$configured instanceof RsaPublicKey) {
+            throw new ConfigurationException('Unable to configure RSA-PSS padding.');
+        }
+        $configured = $configured->withHash($this->algorithm->hashAlgorithm());
+        if (!$configured instanceof RsaPrivateKey && !$configured instanceof RsaPublicKey) {
+            throw new ConfigurationException('Unable to configure RSA-PSS hash.');
+        }
+        $configured = $configured->withMGFHash($this->algorithm->hashAlgorithm());
+        if (!$configured instanceof RsaPrivateKey && !$configured instanceof RsaPublicKey) {
+            throw new ConfigurationException('Unable to configure RSA-PSS MGF hash.');
+        }
+        $configured = $configured->withSaltLength(strlen(hash($this->algorithm->hashAlgorithm(), '', true)));
+        if (!$configured instanceof RsaPrivateKey && !$configured instanceof RsaPublicKey) {
+            throw new ConfigurationException('Unable to configure RSA-PSS salt length.');
+        }
+
+        return $configured;
+    }
+
     private function consumeReplay(string $issuer, string $jwtId, int $expiresAt): bool
     {
         if ($this->policy?->replayMode === JwtReplayMode::NONE) {
@@ -156,6 +178,17 @@ final readonly class AsymmetricJwt
         }
 
         return $this->replayStore?->consume($issuer, $jwtId, $expiresAt) === true;
+    }
+
+    /** @return non-empty-string */
+    private function edDsaKey(string $key, bool $private): string
+    {
+        $expected = $private ? SODIUM_CRYPTO_SIGN_SECRETKEYBYTES : SODIUM_CRYPTO_SIGN_PUBLICKEYBYTES;
+        if (strlen($key) !== $expected) {
+            throw new ConfigurationException(sprintf('EdDSA %s keys must contain exactly %d raw bytes.', $private ? 'private' : 'public', $expected));
+        }
+
+        return $key;
     }
 
     private function loadAndValidateKey(string $pem, bool $private): OpenSSLAsymmetricKey
@@ -198,6 +231,55 @@ final readonly class AsymmetricJwt
             : [null, null, JwtFailureReason::UNKNOWN_KEY];
     }
 
+    private function rsaPssPrivateKey(string $key): RsaPrivateKey
+    {
+        $resource = openssl_pkey_get_private($key, $this->passphrase ?? '');
+        if (!$resource instanceof OpenSSLAsymmetricKey || !openssl_pkey_export($resource, $normalizedKey) || !is_string($normalizedKey)) {
+            throw new ConfigurationException('Unable to normalize RSA-PSS private key material.');
+        }
+        $loaded = PublicKeyLoader::loadPrivateKey($normalizedKey);
+        if (!$loaded instanceof RsaPrivateKey) {
+            throw new ConfigurationException('RSA-PSS signing requires an RSA private key.');
+        }
+        $configured = $this->configureRsaPss($loaded);
+        if (!$configured instanceof RsaPrivateKey) {
+            throw new ConfigurationException('Unable to configure RSA-PSS private key.');
+        }
+
+        return $configured;
+    }
+
+    private function rsaPssPublicKey(string $key): RsaPublicKey
+    {
+        $loaded = PublicKeyLoader::loadPublicKey($key);
+        if (!$loaded instanceof RsaPublicKey) {
+            throw new ConfigurationException('RSA-PSS verification requires an RSA public key.');
+        }
+        $configured = $this->configureRsaPss($loaded);
+        if (!$configured instanceof RsaPublicKey) {
+            throw new ConfigurationException('Unable to configure RSA-PSS public key.');
+        }
+
+        return $configured;
+    }
+
+    private function sign(string $input, string $privateKey): string
+    {
+        if ($this->algorithm->isEdDsa()) {
+            return sodium_crypto_sign_detached($input, $this->edDsaKey($privateKey, true));
+        }
+        if ($this->algorithm->isRsaPss()) {
+            return $this->rsaPssPrivateKey($privateKey)->sign($input);
+        }
+
+        $key = $this->loadAndValidateKey($privateKey, true);
+        if (!openssl_sign($input, $signature, $key, $this->algorithm->opensslAlgorithm()) || !is_string($signature)) {
+            throw new ConfigurationException('JWT signing failed.');
+        }
+
+        return $signature;
+    }
+
     /**
      * @param array<string, mixed> $header
      */
@@ -225,12 +307,25 @@ final readonly class AsymmetricJwt
         return null;
     }
 
+    private function validateKey(string $key, bool $private): void
+    {
+        if ($this->algorithm->isEdDsa()) {
+            $this->edDsaKey($key, $private);
+
+            return;
+        }
+        $this->loadAndValidateKey($key, $private);
+        if ($this->algorithm->isRsaPss()) {
+            $private ? $this->rsaPssPrivateKey($key) : $this->rsaPssPublicKey($key);
+        }
+    }
+
     /**
      * @param array<mixed, mixed> $details
      */
     private function validateKeyDetails(array $details): void
     {
-        if (str_starts_with($this->algorithm->value, 'RS')) {
+        if (str_starts_with($this->algorithm->value, 'RS') || str_starts_with($this->algorithm->value, 'PS')) {
             if (($details['type'] ?? null) !== OPENSSL_KEYTYPE_RSA || !is_int($details['bits'] ?? null) || $details['bits'] < 2048) {
                 throw new ConfigurationException('RSA JWT keys must contain at least 2048 bits.');
             }
@@ -242,6 +337,10 @@ final readonly class AsymmetricJwt
             AsymmetricJwtAlgorithm::ES256 => ['prime256v1', 'secp256r1'],
             AsymmetricJwtAlgorithm::ES384 => ['secp384r1'],
             AsymmetricJwtAlgorithm::ES512 => ['secp521r1'],
+            AsymmetricJwtAlgorithm::EDDSA => [],
+            AsymmetricJwtAlgorithm::PS256,
+            AsymmetricJwtAlgorithm::PS384,
+            AsymmetricJwtAlgorithm::PS512,
             AsymmetricJwtAlgorithm::RS256,
             AsymmetricJwtAlgorithm::RS384,
             AsymmetricJwtAlgorithm::RS512 => [],
@@ -251,5 +350,26 @@ final readonly class AsymmetricJwt
         if (($details['type'] ?? null) !== OPENSSL_KEYTYPE_EC || !is_string($curve) || !in_array($curve, $expectedCurve, true)) {
             throw new ConfigurationException('EC JWT key curve does not match the configured algorithm.');
         }
+    }
+
+    private function verifySignature(string $input, string $signature, string $publicKey): bool
+    {
+        if ($this->algorithm->isEdDsa()) {
+            if (strlen($signature) !== SODIUM_CRYPTO_SIGN_BYTES) {
+                return false;
+            }
+
+            return sodium_crypto_sign_verify_detached($signature, $input, $this->edDsaKey($publicKey, false));
+        }
+        if ($this->algorithm->isRsaPss()) {
+            return $this->rsaPssPublicKey($publicKey)->verify($input, $signature);
+        }
+
+        return openssl_verify(
+            $input,
+            $signature,
+            $this->loadAndValidateKey($publicKey, false),
+            $this->algorithm->opensslAlgorithm(),
+        ) === 1;
     }
 }

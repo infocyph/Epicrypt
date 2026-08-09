@@ -112,7 +112,7 @@ final readonly class JwtClaims
                 throw new ConfigurationException(sprintf('Custom claim "%s" is reserved.', $name));
             }
             $value = match ($name) {
-                'scope' => self::normalizeStringList($value, 'scope'),
+                'scope' => implode(' ', self::normalizeStringList($value, 'scope')),
                 'roles' => self::normalizeStringList($value, 'roles', false),
                 'email' => is_string($value) && strlen($value) <= 254 && filter_var($value, FILTER_VALIDATE_EMAIL) !== false
                     ? $value

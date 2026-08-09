@@ -3,6 +3,7 @@
 .phpunit.cache
 .vscode
 .windsurf
+node_modules
 *~
 *.patch
 *.txt
@@ -19,3 +20,4 @@ vendor
 d2utmp*
 plan.md
 epicrypt.md
+package-lock.json

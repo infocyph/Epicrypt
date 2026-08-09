@@ -17,7 +17,12 @@ use Infocyph\Epicrypt\Internal\VersionedPayload;
 
 final readonly class AeadCipher
 {
-    public function __construct(private AeadAlgorithm $algorithm = AeadAlgorithm::XCHACHA20_POLY1305_IETF) {}
+    private bool $available;
+
+    public function __construct(private AeadAlgorithm $algorithm = AeadAlgorithm::XCHACHA20_POLY1305_IETF)
+    {
+        $this->available = $algorithm->isAvailable();
+    }
 
     public function decrypt(string $ciphertext, string $key, string $aad = ''): string
     {
@@ -96,8 +101,8 @@ final readonly class AeadCipher
 
     private function assertAlgorithmAvailability(): void
     {
-        if (!$this->algorithm->isAvailable()) {
-            throw new CryptoException('AES-256-GCM hardware support is not available.');
+        if (!$this->available) {
+            throw new CryptoException(sprintf('%s is not available in the linked libsodium runtime.', $this->algorithm->value));
         }
     }
 
@@ -132,6 +137,23 @@ final readonly class AeadCipher
         return $result;
     }
 
+    private function runOptionalSodiumAead(
+        string $prefix,
+        string $input,
+        string $aad,
+        string $nonce,
+        string $key,
+        bool $decrypt,
+    ): string|false {
+        $function = $prefix . ($decrypt ? '_decrypt' : '_encrypt');
+        if (!is_callable($function)) {
+            throw new CryptoException(sprintf('%s is unavailable.', $this->algorithm->value));
+        }
+        $result = $function($input, $aad, $nonce, $key);
+
+        return is_string($result) ? $result : false;
+    }
+
     private function runRawOperation(string $input, string $aad, string $nonce, string $key, bool $decrypt): string|false
     {
         return match ($this->algorithm) {
@@ -147,6 +169,8 @@ final readonly class AeadCipher
             AeadAlgorithm::XCHACHA20_POLY1305_IETF => $decrypt
                 ? sodium_crypto_aead_xchacha20poly1305_ietf_decrypt($input, $aad, $nonce, $key)
                 : sodium_crypto_aead_xchacha20poly1305_ietf_encrypt($input, $aad, $nonce, $key),
+            AeadAlgorithm::AEGIS_128L => $this->runOptionalSodiumAead('sodium_crypto_aead_aegis128l', $input, $aad, $nonce, $key, $decrypt),
+            AeadAlgorithm::AEGIS_256 => $this->runOptionalSodiumAead('sodium_crypto_aead_aegis256', $input, $aad, $nonce, $key, $decrypt),
         };
     }
 

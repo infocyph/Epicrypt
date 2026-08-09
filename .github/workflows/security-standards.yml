@@ -24,7 +24,13 @@ jobs:
       psalm_threads: "1"
       run_analysis: true
       run_svg_report: true
-      fail_on_skipped_tests: false
+      fail_on_skipped_tests: true
+      run_clean_install: true
+      benchmark_composer_script: ""
+      benchmark_result_file: ""
+      benchmark_baseline_file: ""
+      benchmark_max_regression_percent: 2
+      benchmark_stable_environment: false
       enable_redis_service: false
       enable_valkey_service: false
       enable_memcached_service: false
@@ -38,3 +44,110 @@ jobs:
       service_db_password: "phpforge"
       artifact_retention_days: 61
 
+  jose-interoperability:
+    name: "Independent JOSE interoperability"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.4"
+          extensions: "hash, json, openssl, sodium"
+          coverage: none
+          tools: composer:v2
+          fail-fast: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Install PHP dependencies
+        run: composer install --no-interaction --no-progress --prefer-dist
+      - name: Install and audit the independent JOSE implementation
+        run: |
+          npm ci --ignore-scripts
+          npm audit --audit-level=high
+      - name: Verify bidirectional JOSE interoperability
+        run: |
+          php tests/Interop/epicrypt.php produce "${{ runner.temp }}/epicrypt-jose.json"
+          node tests/Interop/jose.mjs "${{ runner.temp }}/epicrypt-jose.json" "${{ runner.temp }}/independent-jose.json"
+          php tests/Interop/epicrypt.php consume "${{ runner.temp }}/epicrypt-jose.json" "${{ runner.temp }}/independent-jose.json"
+
+  aegis-modern-libsodium:
+    name: "AEGIS on libsodium 1.0.22"
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build pinned modern libsodium
+        env:
+          LIBSODIUM_VERSION: "1.0.22"
+          LIBSODIUM_SHA256: "adbdd8f16149e81ac6078a03aca6fc03b592b89ef7b5ed83841c086191be3349"
+        run: |
+          curl --fail --silent --show-error --location --output libsodium.tar.gz "https://download.libsodium.org/libsodium/releases/libsodium-${LIBSODIUM_VERSION}.tar.gz"
+          echo "${LIBSODIUM_SHA256}  libsodium.tar.gz" | sha256sum --check --strict
+          tar --extract --gzip --file libsodium.tar.gz
+          cd "libsodium-${LIBSODIUM_VERSION}"
+          ./configure --prefix=/usr/local
+          make --jobs=2
+          sudo make install
+          sudo ldconfig
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.4"
+          extensions: ":sodium, sodium-php/php-src@php-8.4.24, hash, json, openssl"
+          coverage: none
+          tools: composer:v2
+          fail-fast: true
+        env:
+          SODIUM_PATH: ext/sodium
+          SODIUM_CONFIGURE_PREFIX_OPTS: "PKG_CONFIG_PATH=/usr/local/lib/pkgconfig"
+          SODIUM_CONFIGURE_OPTS: "--with-sodium"
+      - name: Require the modern linked runtime
+        run: |
+          php -r 'exit(version_compare(SODIUM_LIBRARY_VERSION, "1.0.19", ">=") && function_exists("sodium_crypto_aead_aegis128l_encrypt") && function_exists("sodium_crypto_aead_aegis256_encrypt") ? 0 : 1);'
+          php --ri sodium
+      - name: Install dependencies
+        run: composer install --no-interaction --no-progress --prefer-dist
+      - name: Run mandatory positive AEGIS tests
+        env:
+          EPICRYPT_REQUIRE_AEGIS: "1"
+        run: >-
+          vendor/bin/pest
+          --configuration vendor/infocyph/phpforge/resources/pest.xml
+          --bootstrap "$GITHUB_WORKSPACE/vendor/autoload.php"
+          tests/Certificate/SodiumAdvancedTest.php
+          --filter=AEGIS
+          --fail-on-skipped
+
+  mutation-security-critical:
+    name: "Security-critical mutation testing"
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.4"
+          extensions: "hash, json, openssl, sodium"
+          coverage: pcov
+          tools: composer:v2
+          fail-fast: true
+      - name: Install dependencies
+        run: composer install --no-interaction --no-progress --prefer-dist
+      - name: Apply the pinned PHPUnit 14 coverage compatibility patch
+        run: |
+          test "$(composer show pestphp/pest-plugin-mutate --format=json | jq --raw-output '.versions[0]')" = "v5.0.1"
+          patch --batch --forward --strip=1 --directory=vendor/pestphp/pest-plugin-mutate < .github/patches/pest-mutate-phpunit14.diff
+      - name: Materialize the PHPForge Pest template for mutation workers
+        run: cp vendor/infocyph/phpforge/resources/pest.xml pest.xml
+      - name: Enforce the measured mutation-score floor
+        run: >-
+          vendor/bin/pest --configuration pest.xml --cache-directory="${{ runner.temp }}/pest-cache" --mutate --parallel --min=66
+          --class='Infocyph\Epicrypt\Crypto\AeadCipher,Infocyph\Epicrypt\DataProtection\StringProtector,Infocyph\Epicrypt\DataProtection\EnvelopeProtector,Infocyph\Epicrypt\DataProtection\FileProtector,Infocyph\Epicrypt\Password\PasswordHasher,Infocyph\Epicrypt\Token\Jwt\Jws,Infocyph\Epicrypt\Token\Jwt\Jwe,Infocyph\Epicrypt\Token\Jwt\JwtValidator,Infocyph\Epicrypt\Security\KeyRing'
