@@ -11,6 +11,94 @@ purpose, creation time, and caller AAD are authenticated.
 SecretStream, the appropriate bounded-memory primitive for files. Its default
 chunk size is 64 KiB.
 
+Complete path: protect, read, and renew a rotated database value
+----------------------------------------------------------------
+
+Provision keys once and keep them in a secret manager. During rotation, the
+new key becomes active while the previous key remains a read-only fallback.
+After a successful read, renew ciphertext that was protected by the old key.
+
+.. code-block:: php
+
+   <?php
+
+   declare(strict_types=1);
+
+   use Infocyph\Epicrypt\DataProtection\ProtectionAlgorithm;
+   use Infocyph\Epicrypt\DataProtection\ProtectionOptions;
+   use Infocyph\Epicrypt\DataProtection\StringProtector;
+   use Infocyph\Epicrypt\Generate\KeyMaterial\KeyMaterialGenerator;
+   use Infocyph\Epicrypt\Security\KeyPurpose;
+   use Infocyph\Epicrypt\Security\KeyRing;
+   use Infocyph\Epicrypt\Security\KeyRingEntry;
+   use Infocyph\Epicrypt\Security\KeyStatus;
+
+   $algorithm = ProtectionAlgorithm::XCHACHA20_POLY1305;
+   $oldKey = new KeyMaterialGenerator()->generate($algorithm->keyLength());
+   $newKey = new KeyMaterialGenerator()->generate($algorithm->keyLength());
+   $options = new ProtectionOptions(
+       purpose: 'customer/tax-id/v1',
+       additionalAuthenticatedData: 'tenant=42;customer=1847',
+   );
+   $protector = StringProtector::create($algorithm);
+
+   $initialRing = new KeyRing([
+       new KeyRingEntry(
+           'dp-2026-05',
+           $oldKey,
+           KeyStatus::ACTIVE,
+           KeyPurpose::DATA_PROTECTION,
+           $algorithm->value,
+       ),
+   ]);
+   $storedCiphertext = $protector->protectWithKeyRing(
+       '123-45-6789',
+       $initialRing,
+       $options,
+   );
+
+   $rotatedRing = new KeyRing([
+       new KeyRingEntry(
+           'dp-2026-08',
+           $newKey,
+           KeyStatus::ACTIVE,
+           KeyPurpose::DATA_PROTECTION,
+           $algorithm->value,
+       ),
+       new KeyRingEntry(
+           'dp-2026-05',
+           $oldKey,
+           KeyStatus::FALLBACK,
+           KeyPurpose::DATA_PROTECTION,
+           $algorithm->value,
+       ),
+   ]);
+   $read = $protector->unprotectWithKeyRing(
+       $storedCiphertext,
+       $rotatedRing,
+       $options,
+   );
+   if ($read->keyId !== 'dp-2026-08') {
+       $storedCiphertext = $protector->protectWithKeyRing(
+           $read->value,
+           $rotatedRing,
+           $options,
+       );
+       $customerRepository->replaceTaxIdCiphertext(1847, $storedCiphertext);
+   }
+
+   $confirmed = $protector->unprotectWithKeyRing(
+       $storedCiphertext,
+       $rotatedRing,
+       $options,
+   );
+   if (!hash_equals('123-45-6789', $confirmed->value)) {
+       throw new RuntimeException('Protected value renewal failed.');
+   }
+
+Remove the fallback only after every retained payload has been renewed or aged
+out. Changing purpose, AAD, algorithm or key ID causes authentication failure.
+
 Protect a database field
 ------------------------
 

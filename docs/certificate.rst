@@ -6,6 +6,91 @@ signing key pairs, PKCS#12 bundles, and authenticated peer key agreement.
 OpenSSL RSA generation defaults to 3072 bits; EC generation defaults to
 ``prime256v1``. RSA-1024 is not supported.
 
+Complete path: create a CA, issue a leaf, and validate deployment
+-----------------------------------------------------------------
+
+This self-contained workflow creates a private CA, accepts a service CSR,
+issues a constrained leaf certificate, and performs the checks needed before
+deployment. In production, generate and operate the CA in dedicated protected
+infrastructure rather than in the application process.
+
+.. code-block:: php
+
+   <?php
+
+   declare(strict_types=1);
+
+   use Infocyph\Epicrypt\Certificate\CertificateChainVerifier;
+   use Infocyph\Epicrypt\Certificate\CertificateExpiry;
+   use Infocyph\Epicrypt\Certificate\CertificateFingerprint;
+   use Infocyph\Epicrypt\Certificate\CertificateKeyMatcher;
+   use Infocyph\Epicrypt\Certificate\CertificateOptions;
+   use Infocyph\Epicrypt\Certificate\Enum\ExtendedKeyUsage;
+   use Infocyph\Epicrypt\Certificate\Enum\KeyUsage;
+   use Infocyph\Epicrypt\Certificate\KeyPairGenerator;
+   use Infocyph\Epicrypt\Certificate\OpenSSL\CertificateAuthority;
+   use Infocyph\Epicrypt\Certificate\OpenSSL\CertificateBuilder;
+   use Infocyph\Epicrypt\Certificate\OpenSSL\CsrBuilder;
+
+   $caKeys = KeyPairGenerator::openSsl()->generate($caPrivateKeyPassphrase);
+   $caOptions = new CertificateOptions(
+       days: 3650,
+       keyUsage: [KeyUsage::KEY_CERT_SIGN, KeyUsage::CRL_SIGN],
+       isCa: true,
+   );
+   $caCertificate = new CertificateBuilder()->selfSign(
+       ['commonName' => 'Example Internal Root CA', 'organizationName' => 'Example Inc.'],
+       $caKeys['private'],
+       passphrase: $caPrivateKeyPassphrase,
+       options: $caOptions,
+   );
+
+   $serviceKeys = KeyPairGenerator::openSsl()->generate($serviceKeyPassphrase);
+   $leafOptions = new CertificateOptions(
+       days: 90,
+       sanDns: ['orders.internal.example'],
+       keyUsage: [KeyUsage::DIGITAL_SIGNATURE, KeyUsage::KEY_ENCIPHERMENT],
+       extendedKeyUsage: [ExtendedKeyUsage::SERVER_AUTH],
+   );
+   $csr = new CsrBuilder()->build(
+       ['commonName' => 'orders.internal.example', 'organizationName' => 'Example Inc.'],
+       $serviceKeys['private'],
+       $serviceKeyPassphrase,
+       $leafOptions,
+   );
+   $serviceCertificate = new CertificateAuthority()->signCsr(
+       $csr,
+       $caCertificate,
+       $caKeys['private'],
+       $leafOptions,
+       $caPrivateKeyPassphrase,
+   );
+
+   $chainValid = new CertificateChainVerifier()->verify(
+       $serviceCertificate,
+       [$caCertificate],
+   );
+   $keyMatches = new CertificateKeyMatcher()->privateKeyMatches(
+       $serviceCertificate,
+       $serviceKeys['private'],
+       $serviceKeyPassphrase,
+   );
+   $expiresTooSoon = new CertificateExpiry()->isExpired(
+       $serviceCertificate,
+       leewaySeconds: 14 * 86400,
+   );
+   if (!$chainValid || !$keyMatches || $expiresTooSoon) {
+       throw new RuntimeException('Certificate deployment validation failed.');
+   }
+
+   $deploymentFingerprint = new CertificateFingerprint()->fingerprint(
+       $serviceCertificate,
+   );
+
+Deploy the leaf certificate, encrypted leaf private key, and required chain;
+publish or pin the SHA-256 fingerprint through a trusted channel. Never deploy
+the CA private key with the service.
+
 Issue a short-lived service certificate
 ----------------------------------------
 

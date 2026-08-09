@@ -68,6 +68,9 @@ Public vs Internal
 - Capability entry/service classes are public API surface.
 - ``Support`` and ``Internal`` classes are implementation details unless explicitly documented as public.
 - ``Internal\\SignedPayloadCodec`` is a shared internal primitive used across domains.
+- Each public capability guide includes one complete-path integration workflow.
+  ``Internal`` has no consumer example because applications must not depend on
+  it directly.
 
 Security Design Principles
 --------------------------

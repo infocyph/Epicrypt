@@ -6,6 +6,63 @@ compatible deployments; bcrypt is explicit-only and rejects passwords longer
 than 72 bytes. Never encrypt passwords or use a fast general-purpose digest as
 a password hash.
 
+Complete path: register, authenticate, and upgrade credentials
+--------------------------------------------------------------
+
+The application validates policy and breach status at registration, stores only
+the encoded Argon2id hash, and performs a compare-and-swap rehash after a
+successful login. ``$compromisedPasswords`` implements
+``CompromisedPasswordCheckerInterface`` and ``$users`` is the application
+repository.
+
+.. code-block:: php
+
+   <?php
+
+   declare(strict_types=1);
+
+   use Infocyph\Epicrypt\Password\Generator\PasswordPolicy;
+   use Infocyph\Epicrypt\Password\PasswordHasher;
+   use Infocyph\Epicrypt\Password\PasswordPolicyValidator;
+
+   $policy = new PasswordPolicy(minLength: 16, includeAmbiguous: true);
+   $policyResult = new PasswordPolicyValidator()->validate(
+       $registrationPassword,
+       $policy,
+   );
+   if (!$policyResult->valid
+       || $compromisedPasswords->isCompromised($registrationPassword)) {
+       throw new DomainException('Password does not satisfy registration policy.');
+   }
+
+   $hasher = new PasswordHasher(); // Argon2id
+   $users->create(
+       $normalizedLogin,
+       $hasher->hashPassword($registrationPassword),
+   );
+
+   // Later, on login, use one generic response for unknown users and bad hashes.
+   $user = $users->findForAuthentication($normalizedLogin);
+   $storedHash = $user?->passwordHash ?? $dummyArgon2idHash;
+   $verification = $hasher->verifyAndRehash($loginPassword, $storedHash);
+   if ($user === null || !$verification->verified) {
+       throw new RuntimeException('Invalid credentials.');
+   }
+   if ($verification->rehashedHash !== null) {
+       $users->replacePasswordHashIfCurrent(
+           $user->id,
+           $storedHash,
+           $verification->rehashedHash,
+       );
+   }
+
+   $sessions->rotateAfterAuthentication($user->id);
+
+Provision ``$dummyArgon2idHash`` under the same deployment policy so the unknown
+account path still performs password verification. Apply endpoint rate limits
+and capacity-plan the intentional Argon2id cost; never reduce it merely to
+increase login throughput.
+
 Register, log in, and upgrade a stored hash
 -------------------------------------------
 

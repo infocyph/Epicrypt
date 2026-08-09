@@ -4,6 +4,27 @@ Epicrypt 2.0
 Epicrypt provides authenticated data protection, token security, password
 security, integrity primitives, and certificate tooling for PHP 8.4 and later.
 
+Complete-path examples
+----------------------
+
+- :doc:`certificate`: create a CA, issue a service certificate, and validate it
+  before deployment.
+- :doc:`crypto`: sign, encrypt, decrypt, and authenticate a service message.
+- :doc:`data-protection`: protect a database value and renew it through key
+  rotation.
+- :doc:`generate`: derive purpose-isolated keys and use them for protection and
+  authentication.
+- :doc:`integrity`: publish and verify a signed release manifest and artifact.
+- :doc:`password`: register, authenticate, and transparently rehash a password.
+- :doc:`security`: issue and atomically consume a single-use password-reset
+  token.
+- :doc:`oauth-lifecycle`: issue and verify access tokens, rotate refresh tokens,
+  bind DPoP, narrow scopes, and revoke authorization.
+- :doc:`error-handling`: map cryptographic failures at an application boundary.
+
+``Internal`` is not a consumer capability and intentionally has no public
+integration example.
+
 .. toctree::
    :maxdepth: 2
 
@@ -18,6 +39,7 @@ security, integrity primitives, and certificate tooling for PHP 8.4 and later.
    password
    security
    token
+   oauth-lifecycle
    token-storage
    error-handling
    benchmarking
