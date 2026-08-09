@@ -41,6 +41,9 @@ it('rejects corruption, truncation, trailing data, and source destination collis
     $prefixLength = strpos($original, "\n") + 1;
     $finalFrameLength = (200_000 % (64 * 1024)) + SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_ABYTES;
     $finalFrame = substr($original, -$finalFrameLength);
+    $corruptedFrame = $original;
+    $corruptionOffset = strlen($corruptedFrame) - 20;
+    $corruptedFrame[$corruptionOffset] = chr(ord($corruptedFrame[$corruptionOffset]) ^ 1);
 
     $invalidPayloads = [
         'trailing bytes' => $original . 'x',
@@ -48,7 +51,7 @@ it('rejects corruption, truncation, trailing data, and source destination collis
         'missing final frame' => substr($original, 0, -$finalFrameLength),
         'truncated header' => substr($original, 0, $prefixLength + 10),
         'truncated frame' => substr($original, 0, -1),
-        'corrupted frame' => substr_replace($original, 'x', -20, 1),
+        'corrupted frame' => $corruptedFrame,
     ];
     foreach ($invalidPayloads as $invalid) {
         file_put_contents($encrypted, $invalid);
