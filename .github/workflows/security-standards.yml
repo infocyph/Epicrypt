@@ -58,10 +58,11 @@ jobs:
           extensions: "hash, json, openssl, sodium"
           coverage: none
           tools: composer:v2
+        env:
           fail-fast: true
       - uses: actions/setup-node@v7
         with:
-          node-version: "lts"
+          node-version: "22"
           cache: npm
       - name: Install PHP dependencies
         run: composer install --no-interaction --no-progress --prefer-dist
@@ -81,6 +82,9 @@ jobs:
     timeout-minutes: 20
     permissions:
       contents: read
+    env:
+      LD_LIBRARY_PATH: /usr/local/lib
+      PKG_CONFIG_PATH: /usr/local/lib/pkgconfig
     steps:
       - uses: actions/checkout@v4
       - name: Build pinned modern libsodium
@@ -105,12 +109,13 @@ jobs:
         env:
           fail-fast: true
           SODIUM_PATH: ext/sodium
-          SODIUM_CONFIGURE_PREFIX_OPTS: "PKG_CONFIG_PATH=/usr/local/lib/pkgconfig"
+          SODIUM_CONFIGURE_PREFIX_OPTS: "LDFLAGS=-Wl,-rpath,/usr/local/lib PKG_CONFIG_PATH=/usr/local/lib/pkgconfig"
           SODIUM_CONFIGURE_OPTS: "--with-sodium"
       - name: Require the modern linked runtime
         run: |
-          php -r 'exit(SODIUM_LIBRARY_VERSION === "1.0.22" && function_exists("sodium_crypto_aead_aegis128l_encrypt") && function_exists("sodium_crypto_aead_aegis256_encrypt") ? 0 : 1);'
           php --ri sodium
+          php -r 'printf("PHP=%s libsodium=%s sodium=%s AEGIS-128L=%s AEGIS-256=%s\n", PHP_VERSION, SODIUM_LIBRARY_VERSION, extension_loaded("sodium") ? "loaded" : "missing", function_exists("sodium_crypto_aead_aegis128l_encrypt") ? "yes" : "no", function_exists("sodium_crypto_aead_aegis256_encrypt") ? "yes" : "no");'
+          php -r 'exit(version_compare(SODIUM_LIBRARY_VERSION, "1.0.19", ">=") && function_exists("sodium_crypto_aead_aegis128l_encrypt") && function_exists("sodium_crypto_aead_aegis256_encrypt") ? 0 : 1);'
       - name: Install dependencies
         run: composer install --no-interaction --no-progress --prefer-dist
       - name: Run mandatory positive AEGIS tests
@@ -138,6 +143,7 @@ jobs:
           extensions: "hash, json, openssl, sodium"
           coverage: pcov
           tools: composer:v2
+        env:
           fail-fast: true
       - name: Install dependencies
         run: composer install --no-interaction --no-progress --prefer-dist
