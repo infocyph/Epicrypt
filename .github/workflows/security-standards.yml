@@ -118,11 +118,23 @@ jobs:
           --fail-on-skipped
 
   mutation-security-critical:
-    name: "Security-critical mutation testing"
+    name: "Security-critical mutation testing (${{ matrix.shard }})"
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 10
     permissions:
       contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - shard: data-protection
+            classes: 'Infocyph\Epicrypt\Crypto\AeadCipher,Infocyph\Epicrypt\DataProtection\StringProtector,Infocyph\Epicrypt\DataProtection\EnvelopeProtector,Infocyph\Epicrypt\DataProtection\FileProtector'
+          - shard: jwe
+            classes: 'Infocyph\Epicrypt\Token\Jwt\Jwe'
+          - shard: jws
+            classes: 'Infocyph\Epicrypt\Token\Jwt\Jws'
+          - shard: validation-policy
+            classes: 'Infocyph\Epicrypt\Password\PasswordHasher,Infocyph\Epicrypt\Token\Jwt\JwtValidator,Infocyph\Epicrypt\Security\KeyRing'
     steps:
       - uses: actions/checkout@v7
       - uses: shivammathur/setup-php@v2
@@ -139,9 +151,16 @@ jobs:
         run: |
           test "$(composer show pestphp/pest-plugin-mutate --format=json | jq --raw-output '.versions[0]')" = "v5.0.1"
           patch --batch --forward --strip=1 --directory=vendor/pestphp/pest-plugin-mutate < .github/patches/pest-mutate-phpunit14.diff
+      - name: Restore mutation-generation cache
+        uses: actions/cache@v5
+        with:
+          path: vendor/pestphp/pest-plugin-mutate/.temp
+          key: "pest-mutate-${{ runner.os }}-php84-${{ matrix.shard }}-${{ hashFiles('composer.lock', '.github/patches/pest-mutate-phpunit14.diff', 'src/**/*.php') }}"
+          restore-keys: |
+            pest-mutate-${{ runner.os }}-php84-${{ matrix.shard }}-
       - name: Materialize the PHPForge Pest template for mutation workers
         run: cp vendor/infocyph/phpforge/resources/pest.xml pest.xml
       - name: Enforce the measured mutation-score floor
         run: >-
-          vendor/bin/pest --configuration pest.xml --cache-directory="${{ runner.temp }}/pest-cache" --mutate --parallel --min=66
-          --class='Infocyph\Epicrypt\Crypto\AeadCipher,Infocyph\Epicrypt\DataProtection\StringProtector,Infocyph\Epicrypt\DataProtection\EnvelopeProtector,Infocyph\Epicrypt\DataProtection\FileProtector,Infocyph\Epicrypt\Password\PasswordHasher,Infocyph\Epicrypt\Token\Jwt\Jws,Infocyph\Epicrypt\Token\Jwt\Jwe,Infocyph\Epicrypt\Token\Jwt\JwtValidator,Infocyph\Epicrypt\Security\KeyRing'
+          vendor/bin/pest --configuration pest.xml --cache-directory="${{ runner.temp }}/pest-cache" --mutate --parallel --processes=4 --min=66
+          --class="${{ matrix.classes }}"
