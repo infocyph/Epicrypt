@@ -52,6 +52,9 @@ final class EcdsaSignatureConverter
 
     private function encodeLength(int $length): string
     {
+        if ($length < 0 || $length > 0xffff) {
+            throw new SignatureEncodingException('ECDSA DER length encoding is unsupported.');
+        }
         if ($length < 0x80) {
             return chr($length);
         }

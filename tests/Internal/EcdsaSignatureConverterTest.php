@@ -17,6 +17,14 @@ it('throws typed exception for invalid jose signature length', function () {
     expect(fn () => $converter->toAsn1(random_bytes(10), 64))->toThrow(SignatureEncodingException::class);
 });
 
+it('rejects DER lengths outside the supported two-octet encoding', function () {
+    $converter = new EcdsaSignatureConverter();
+    $oversized = str_repeat("\x01", 65_536);
+
+    expect(fn () => $converter->toAsn1($oversized, strlen($oversized)))
+        ->toThrow(SignatureEncodingException::class);
+});
+
 it('round trips canonical ECDSA signatures and rejects non-canonical DER', function () {
     $converter = new EcdsaSignatureConverter();
     $raw = str_repeat("\x01", 32).str_repeat("\x80", 32);
