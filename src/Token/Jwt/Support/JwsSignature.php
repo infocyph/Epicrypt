@@ -28,7 +28,7 @@ final readonly class JwsSignature
         $this->validateKey();
     }
 
-    public function sign(string $input): string
+    public function sign(#[\SensitiveParameter] string $input): string
     {
         if (!$this->signing) {
             throw new ConfigurationException('JWS signature backend is not configured for signing.');
@@ -51,7 +51,7 @@ final readonly class JwsSignature
         return $length === null ? $signature : new EcdsaSignatureConverter()->fromAsn1($signature, $length);
     }
 
-    public function verify(string $input, string $signature): bool
+    public function verify(#[\SensitiveParameter] string $input, string $signature): bool
     {
         if ($this->signing) {
             throw new ConfigurationException('JWS signature backend is not configured for verification.');
@@ -74,8 +74,10 @@ final readonly class JwsSignature
         return openssl_verify($input, $signature, $this->opensslKey(), $this->algorithm->opensslAlgorithm()) === 1;
     }
 
-    private function configuredPss(RsaPrivateKey|RsaPublicKey $key): RsaPrivateKey|RsaPublicKey
-    {
+    private function configuredPss(
+        #[\SensitiveParameter]
+        RsaPrivateKey|RsaPublicKey $key,
+    ): RsaPrivateKey|RsaPublicKey {
         if (!$this->algorithm instanceof AsymmetricJwtAlgorithm) {
             throw new ConfigurationException('RSA-PSS requires an asymmetric algorithm.');
         }

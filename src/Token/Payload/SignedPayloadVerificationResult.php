@@ -11,6 +11,7 @@ final readonly class SignedPayloadVerificationResult
      */
     public function __construct(
         public bool $verified,
+        #[\SensitiveParameter]
         public array $claims = [],
         public ?string $matchedKeyId = null,
         public bool $usedFallbackKey = false,

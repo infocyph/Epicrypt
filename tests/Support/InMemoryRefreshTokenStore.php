@@ -17,7 +17,7 @@ final class InMemoryRefreshTokenStore implements RefreshTokenStoreInterface
     /** @var array<string, true> */
     private array $revokedFamilies = [];
 
-    public function create(RefreshTokenRecord $record): bool
+    public function create(#[\SensitiveParameter] RefreshTokenRecord $record): bool
     {
         if (isset($this->records[$record->digest])) {
             return false;

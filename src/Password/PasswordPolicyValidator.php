@@ -37,7 +37,8 @@ final readonly class PasswordPolicyValidator
             $violations[] = 'missing_symbol';
         }
 
-        if (!$policy->includeAmbiguous && preg_match('/[Il]/', $password) === 1) {
+        $ambiguousPattern = '/[' . preg_quote(PasswordPolicy::AMBIGUOUS_CHARACTERS, '/') . ']/';
+        if (!$policy->includeAmbiguous && preg_match($ambiguousPattern, $password) === 1) {
             $violations[] = 'contains_ambiguous';
         }
 

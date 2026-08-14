@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Infocyph\Epicrypt\Certificate;
 
+use Infocyph\Epicrypt\Certificate\Enum\CertificatePurpose;
 use Infocyph\Epicrypt\Exception\ConfigurationException;
 
 final class CertificateChainVerifier
@@ -11,8 +12,11 @@ final class CertificateChainVerifier
     /**
      * @param list<string> $caCertificatesPem
      */
-    public function verify(string $certificatePem, array $caCertificatesPem): bool
-    {
+    public function verify(
+        string $certificatePem,
+        array $caCertificatesPem,
+        CertificatePurpose $purpose = CertificatePurpose::SSL_SERVER,
+    ): bool {
         if ($caCertificatesPem === []) {
             throw new ConfigurationException('At least one CA certificate is required for chain verification.');
         }
@@ -28,7 +32,7 @@ final class CertificateChainVerifier
                 $tempCaFiles[] = $tempPath;
             }
 
-            $result = openssl_x509_checkpurpose($certificatePem, X509_PURPOSE_SSL_SERVER, $tempCaFiles);
+            $result = openssl_x509_checkpurpose($certificatePem, $purpose->value, $tempCaFiles);
             if ($result === false) {
                 throw new ConfigurationException('Certificate chain verification failed to execute.');
             }

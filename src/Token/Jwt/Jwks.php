@@ -34,6 +34,7 @@ final class Jwks
      * @return array{keys: list<array<string, mixed>>}
      */
     public function exportFromKeyRing(
+        #[\SensitiveParameter]
         KeyRing $keyRing,
         AsymmetricJwtAlgorithm $algorithm,
         ?string $issuer = null,
@@ -50,8 +51,12 @@ final class Jwks
      * @param non-empty-list<AsymmetricJwtAlgorithm> $algorithms
      * @return array{keys: list<array<string, mixed>>}
      */
-    public function exportMixedFromKeyRing(KeyRing $keyRing, array $algorithms, ?string $issuer = null): array
-    {
+    public function exportMixedFromKeyRing(
+        #[\SensitiveParameter]
+        KeyRing $keyRing,
+        array $algorithms,
+        ?string $issuer = null,
+    ): array {
         $keys = [];
         $seen = [];
         foreach ($algorithms as $algorithm) {
@@ -135,7 +140,7 @@ final class Jwks
     }
 
     /** @return array<string, mixed> */
-    public function exportSymmetricKey(
+    public function exportSymmetricSecretJwk(
         #[\SensitiveParameter]
         string $key,
         string $kid,
@@ -201,7 +206,7 @@ final class Jwks
     }
 
     /** @param array<string, mixed> $jwk */
-    public function importSymmetricKey(array $jwk, string $algorithm, string $use = 'sig'): string
+    public function importSymmetricKey(#[\SensitiveParameter] array $jwk, string $algorithm, string $use = 'sig'): string
     {
         $operation = $use === 'sig' ? 'verify' : 'decrypt';
         if (($jwk['kty'] ?? null) !== 'oct' || ($jwk['alg'] ?? null) !== $algorithm

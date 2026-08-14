@@ -21,16 +21,14 @@ them makes existing protected data unreadable or unverifiable.
    use Infocyph\Epicrypt\Crypto\Mac;
    use Infocyph\Epicrypt\DataProtection\ProtectionOptions;
    use Infocyph\Epicrypt\DataProtection\StringProtector;
-   use Infocyph\Epicrypt\Generate\KeyMaterial\KeyDerivationContext;
    use Infocyph\Epicrypt\Generate\KeyMaterial\KeyDeriver;
    use Infocyph\Epicrypt\Generate\KeyMaterial\KeyMaterialGenerator;
 
    // Provision once and store only in the deployment secret manager.
    $rootKey = new KeyMaterialGenerator()->forMasterSecret();
-   $context = new KeyDerivationContext(sodiumContext: 'APPKEY01');
    $deriver = new KeyDeriver();
-   $customerDataKey = $deriver->subkey($rootKey, 1, context: $context);
-   $auditMacKey = $deriver->subkey($rootKey, 2, context: $context);
+   $customerDataKey = $deriver->subkey($rootKey, 1, context: 'APPKEY01');
+   $auditMacKey = $deriver->subkey($rootKey, 2, context: 'APPKEY01');
 
    $options = new ProtectionOptions(
        'customer/profile/v1',
@@ -98,21 +96,23 @@ bytes and the numeric IDs must remain stable for the lifetime of stored data.
 
    declare(strict_types=1);
 
-   use Infocyph\Epicrypt\Generate\KeyMaterial\KeyDerivationContext;
    use Infocyph\Epicrypt\Generate\KeyMaterial\KeyDeriver;
    use Infocyph\Epicrypt\Generate\KeyMaterial\KeyMaterialGenerator;
 
    $rootKey = new KeyMaterialGenerator()->forMasterSecret();
    $deriver = new KeyDeriver();
-   $context = new KeyDerivationContext(sodiumContext: 'EPAPP001');
-
-   $customerDataKey = $deriver->subkey($rootKey, subkeyId: 1, context: $context);
-   $auditLogKey = $deriver->subkey($rootKey, subkeyId: 2, context: $context);
+   $customerDataKey = $deriver->subkey($rootKey, subkeyId: 1, context: 'EPAPP001');
+   $auditLogKey = $deriver->subkey($rootKey, subkeyId: 2, context: 'EPAPP001');
 
    if (hash_equals($customerDataKey, $auditLogKey)) {
        throw new RuntimeException('Purpose-isolated subkeys must differ.');
    }
 
-For HKDF, set a unique non-empty ``info`` value for each purpose. For password
-derivation, ``deriveFromPassword()`` uses Argon2id and expects a Sodium pwhash
-salt; do not substitute fast HKDF for password stretching.
+``subkey()`` and ``hkdf()`` accept and return Base64URL key material;
+``subkeyBinary()`` and ``hkdfBinary()`` are the explicit raw-byte variants.
+HKDF supports only ``HkdfAlgorithm::SHA256``, ``SHA384``, and ``SHA512`` and
+defaults to SHA-256; set a unique non-empty ``info`` value for each purpose.
+``deriveFromPassword()`` uses
+Argon2id with a Base64URL Sodium pwhash salt, while
+``deriveBinaryFromPassword()`` is the raw-byte variant. Never substitute fast
+HKDF for password stretching.

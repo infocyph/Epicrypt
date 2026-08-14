@@ -99,12 +99,12 @@ final readonly class AsymmetricJwt
         return $input . '.' . Base64Url::encode($signature);
     }
 
-    public function verify(string $token): bool
+    public function verify(#[\SensitiveParameter] string $token): bool
     {
         return $this->verifyResult($token)->valid;
     }
 
-    public function verifyResult(string $token): JwtVerificationResult
+    public function verifyResult(#[\SensitiveParameter] string $token): JwtVerificationResult
     {
         if ($this->mode !== self::VERIFIER || $this->policy === null) {
             throw new ConfigurationException('This JWT instance is not configured for verification.');
@@ -131,7 +131,7 @@ final readonly class AsymmetricJwt
                 $signature = new EcdsaSignatureConverter()->toAsn1($signature, $ecdsaLength);
             }
         } catch (Throwable) {
-            return JwtVerificationResult::failure(JwtFailureReason::KEY_NOT_USABLE);
+            return JwtVerificationResult::failure(JwtFailureReason::INVALID_SIGNATURE);
         }
 
         if (!$this->verifySignature($encodedHeader . '.' . $encodedPayload, $signature, $resolvedKey)) {
@@ -149,8 +149,10 @@ final readonly class AsymmetricJwt
         return JwtVerificationResult::success($claims, $header, $matchedKeyId);
     }
 
-    private function configureRsaPss(RsaPrivateKey|RsaPublicKey $key): RsaPrivateKey|RsaPublicKey
-    {
+    private function configureRsaPss(
+        #[\SensitiveParameter]
+        RsaPrivateKey|RsaPublicKey $key,
+    ): RsaPrivateKey|RsaPublicKey {
         $configured = $key->withPadding(RSA::SIGNATURE_PSS);
         if (!$configured instanceof RsaPrivateKey && !$configured instanceof RsaPublicKey) {
             throw new ConfigurationException('Unable to configure RSA-PSS padding.');
@@ -172,7 +174,7 @@ final readonly class AsymmetricJwt
     }
 
     /** @return non-empty-string */
-    private function edDsaKey(string $key, bool $private): string
+    private function edDsaKey(#[\SensitiveParameter] string $key, bool $private): string
     {
         $expected = $private ? SODIUM_CRYPTO_SIGN_SECRETKEYBYTES : SODIUM_CRYPTO_SIGN_PUBLICKEYBYTES;
         if (strlen($key) !== $expected) {
@@ -182,7 +184,7 @@ final readonly class AsymmetricJwt
         return $key;
     }
 
-    private function loadAndValidateKey(string $pem, bool $private): OpenSSLAsymmetricKey
+    private function loadAndValidateKey(#[\SensitiveParameter] string $pem, bool $private): OpenSSLAsymmetricKey
     {
         $key = $private
             ? openssl_pkey_get_private($pem, $this->passphrase ?? '')
@@ -213,7 +215,7 @@ final readonly class AsymmetricJwt
     private function resolveKey(mixed $keyId): array
     {
         if (is_string($this->key)) {
-            return [$this->key, is_string($keyId) ? $keyId : null, null];
+            return [$this->key, null, null];
         }
         if (!is_string($keyId) || $keyId === '') {
             return [null, null, JwtFailureReason::UNKNOWN_KEY];
@@ -231,7 +233,7 @@ final readonly class AsymmetricJwt
             : [null, null, JwtFailureReason::UNKNOWN_KEY];
     }
 
-    private function rsaPssPrivateKey(string $key): RsaPrivateKey
+    private function rsaPssPrivateKey(#[\SensitiveParameter] string $key): RsaPrivateKey
     {
         $resource = openssl_pkey_get_private($key, $this->passphrase ?? '');
         if (!$resource instanceof OpenSSLAsymmetricKey || !openssl_pkey_export($resource, $normalizedKey) || !is_string($normalizedKey)) {
@@ -263,7 +265,7 @@ final readonly class AsymmetricJwt
         return $configured;
     }
 
-    private function sign(string $input, string $privateKey): string
+    private function sign(#[\SensitiveParameter] string $input, #[\SensitiveParameter] string $privateKey): string
     {
         if ($this->algorithm->isEdDsa()) {
             return sodium_crypto_sign_detached($input, $this->edDsaKey($privateKey, true));
@@ -307,7 +309,7 @@ final readonly class AsymmetricJwt
         return null;
     }
 
-    private function validateKey(string $key, bool $private): void
+    private function validateKey(#[\SensitiveParameter] string $key, bool $private): void
     {
         if ($this->algorithm->isEdDsa()) {
             $this->edDsaKey($key, $private);
@@ -352,7 +354,7 @@ final readonly class AsymmetricJwt
         }
     }
 
-    private function verifySignature(string $input, string $signature, string $publicKey): bool
+    private function verifySignature(#[\SensitiveParameter] string $input, string $signature, string $publicKey): bool
     {
         if ($this->algorithm->isEdDsa()) {
             if (strlen($signature) !== SODIUM_CRYPTO_SIGN_BYTES) {

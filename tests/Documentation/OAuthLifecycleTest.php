@@ -2,7 +2,6 @@
 
 declare(strict_types=1);
 
-use Infocyph\Epicrypt\Certificate\Enum\OpenSslKeyType;
 use Infocyph\Epicrypt\Certificate\KeyPairGenerator;
 use Infocyph\Epicrypt\Tests\Support\InMemoryRefreshTokenStore;
 use Infocyph\Epicrypt\Token\Jwt\AsymmetricJwt;
@@ -13,7 +12,7 @@ use Infocyph\Epicrypt\Token\Opaque\RefreshTokenManager;
 use Infocyph\Epicrypt\Token\Opaque\RefreshTokenRotationStatus;
 
 it('executes the documented OAuth access and refresh token lifecycle', function () {
-    $signingKeys = KeyPairGenerator::openSsl(type: OpenSslKeyType::EC)->generate();
+    $signingKeys = KeyPairGenerator::ec()->generate();
     $issuer = AsymmetricJwt::issuer($signingKeys['private'], 'at+jwt', 'oauth-signing-2026-08');
     $verifier = AsymmetricJwt::verifier(
         $signingKeys['public'],

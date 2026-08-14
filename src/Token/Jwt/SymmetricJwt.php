@@ -94,12 +94,12 @@ final readonly class SymmetricJwt
         return $input . '.' . Base64Url::encode($signature);
     }
 
-    public function verify(string $token): bool
+    public function verify(#[\SensitiveParameter] string $token): bool
     {
         return $this->verifyResult($token)->valid;
     }
 
-    public function verifyResult(string $token): JwtVerificationResult
+    public function verifyResult(#[\SensitiveParameter] string $token): JwtVerificationResult
     {
         if ($this->mode !== self::VERIFIER || $this->policy === null) {
             throw new ConfigurationException('This JWT instance is not configured for verification.');
@@ -141,7 +141,7 @@ final readonly class SymmetricJwt
         return JwtVerificationResult::success($claims, $header, $matchedKeyId);
     }
 
-    private static function assertKeySize(string $key, SymmetricJwtAlgorithm $algorithm): void
+    private static function assertKeySize(#[\SensitiveParameter] string $key, SymmetricJwtAlgorithm $algorithm): void
     {
         $minimum = self::minimumKeyBytes($algorithm);
         if (strlen($key) < $minimum) {
@@ -172,7 +172,7 @@ final readonly class SymmetricJwt
     private function resolveKey(mixed $keyId): array
     {
         if (is_string($this->key)) {
-            return [$this->key, is_string($keyId) ? $keyId : null, null];
+            return [$this->key, null, null];
         }
         if (!is_string($keyId) || $keyId === '') {
             return [null, null, JwtFailureReason::UNKNOWN_KEY];

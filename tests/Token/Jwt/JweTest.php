@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 use Infocyph\Epicrypt\Certificate\Enum\OpenSslRsaBits;
 use Infocyph\Epicrypt\Certificate\KeyPairGenerator;
+use Infocyph\Epicrypt\Exception\ConfigurationException;
 use Infocyph\Epicrypt\Exception\Token\InvalidTokenException;
+use Infocyph\Epicrypt\Internal\Base64Url;
 use Infocyph\Epicrypt\Token\Jwt\Enum\JweKeyManagementAlgorithm;
 use Infocyph\Epicrypt\Token\Jwt\Jwe;
 use Infocyph\Epicrypt\Token\Jwt\Support\AesKeyWrap;
@@ -17,6 +19,69 @@ it('matches the RFC 3394 AES-256 key-wrap vector', function () {
 
     expect($wrap->wrap($kek, $key))->toBe($expected)
         ->and($wrap->unwrap($kek, $expected))->toBe($key);
+});
+
+it('bounds and validates standard general JWE recipients', function () {
+    $key = random_bytes(32);
+    $jwe = new Jwe($key, JweKeyManagementAlgorithm::A256KW);
+
+    expect(fn () => $jwe->encryptGeneral('payload', []))->toThrow(ConfigurationException::class)
+        ->and(fn () => $jwe->encryptGeneral(
+            'payload',
+            array_map(
+                static fn (int $index): array => ['key' => random_bytes(32), 'kid' => 'recipient-'.$index],
+                range(1, 33),
+            ),
+        ))->toThrow(ConfigurationException::class)
+        ->and(fn () => $jwe->encryptGeneral('payload', [
+            ['key' => random_bytes(32), 'kid' => 'duplicate'],
+            ['key' => random_bytes(32), 'kid' => 'duplicate'],
+        ]))->toThrow(ConfigurationException::class)
+        ->and(fn () => new Jwe($key)->encryptGeneral('payload', [['key' => $key, 'kid' => 'one']]))
+        ->toThrow(ConfigurationException::class);
+});
+
+it('rejects JWE critical compression overlap and corrupt authenticated fields', function () {
+    $key = random_bytes(32);
+    $jwe = new Jwe($key, JweKeyManagementAlgorithm::A256KW);
+
+    expect(fn () => $jwe->encryptCompact('payload', ['crit' => ['exp']]))
+        ->toThrow(ConfigurationException::class)
+        ->and(fn () => $jwe->encryptCompact('payload', ['zip' => 'DEF']))
+        ->toThrow(ConfigurationException::class);
+
+    $valid = $jwe->encryptCompact('payload');
+    foreach ([1, 2, 3, 4] as $segment) {
+        $parts = explode('.', $valid);
+        $parts[$segment] = substr($parts[$segment], 0, -1).($parts[$segment][-1] === 'A' ? 'B' : 'A');
+        expect(fn () => $jwe->decryptCompact(implode('.', $parts)))
+            ->toThrow(InvalidTokenException::class);
+    }
+
+    $general = json_decode($jwe->encryptGeneral('payload', [['key' => $key, 'kid' => 'one']]), true, 32, JSON_THROW_ON_ERROR);
+    $general['unprotected'] = ['alg' => 'A256KW'];
+    expect(fn () => $jwe->decryptGeneral(json_encode($general, JSON_THROW_ON_ERROR), 'one'))
+        ->toThrow(InvalidTokenException::class);
+});
+
+it('rejects malformed ECDH agreement party info and ephemeral keys', function () {
+    $pair = KeyPairGenerator::sodium()->generate();
+    $issuer = new Jwe($pair['public'], JweKeyManagementAlgorithm::ECDH_ES_A256KW);
+    $recipient = new Jwe($pair['private'], JweKeyManagementAlgorithm::ECDH_ES_A256KW);
+    $parts = explode('.', $issuer->encryptCompact('payload'));
+    $header = json_decode(Base64Url::decode($parts[0]), true, 32, JSON_THROW_ON_ERROR);
+
+    foreach ([
+        ['apu' => '%'],
+        ['apv' => '%'],
+        ['epk' => ['kty' => 'OKP', 'crv' => 'X25519', 'x' => 'short']],
+    ] as $replacement) {
+        $modified = array_replace($header, $replacement);
+        $candidate = $parts;
+        $candidate[0] = Base64Url::encode(json_encode($modified, JSON_THROW_ON_ERROR));
+        expect(fn () => $recipient->decryptCompact(implode('.', $candidate)))
+            ->toThrow(InvalidTokenException::class);
+    }
 });
 
 it('round trips symmetric compact and flattened JWE serializations', function (JweKeyManagementAlgorithm $algorithm) {
@@ -40,7 +105,7 @@ it('round trips symmetric compact and flattened JWE serializations', function (J
 ]);
 
 it('round trips RSA OAEP 256 JWE', function () {
-    $pair = KeyPairGenerator::openSsl(OpenSslRsaBits::BITS_2048)->generate();
+    $pair = KeyPairGenerator::rsa(OpenSslRsaBits::BITS_2048)->generate();
     $encrypted = new Jwe($pair['public'], JweKeyManagementAlgorithm::RSA_OAEP_256);
     $decrypted = new Jwe($pair['private'], JweKeyManagementAlgorithm::RSA_OAEP_256);
     $token = $encrypted->encryptCompact('rsa protected');
@@ -74,6 +139,9 @@ it('supports authenticated recipient selection and nested sign then encrypt', fu
 
     expect((new Jwe($second, JweKeyManagementAlgorithm::A256KW))->decryptGeneral($general, 'second'))
         ->toBe('shared record');
+    $document = json_decode($general, true, 16, JSON_THROW_ON_ERROR);
+    $protected = json_decode(\Infocyph\Epicrypt\Internal\Base64Url::decode($document['protected']), true, 16, JSON_THROW_ON_ERROR);
+    expect($protected)->not->toHaveKey('kids');
 
     $nested = new Jwe(random_bytes(32));
     $outer = $nested->encryptNested('header.claims.signature');

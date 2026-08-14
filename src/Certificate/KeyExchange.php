@@ -40,6 +40,18 @@ final readonly class KeyExchange
     }
 
     public function deriveBinaryKey(
+        #[\SensitiveParameter]
+        string $privateKey,
+        string $publicKey,
+        int $length,
+        string $context,
+        string $salt = '',
+    ): string {
+        return $this->derive($privateKey, $publicKey, $length, $context, $salt, false);
+    }
+
+    public function deriveBinaryKeyFromBinaryKeys(
+        #[\SensitiveParameter]
         string $privateKey,
         string $publicKey,
         int $length,
@@ -50,6 +62,7 @@ final readonly class KeyExchange
     }
 
     public function deriveKey(
+        #[\SensitiveParameter]
         string $privateKey,
         string $publicKey,
         int $length,
@@ -59,13 +72,25 @@ final readonly class KeyExchange
         return Base64Url::encode($this->derive($privateKey, $publicKey, $length, $context, $salt, false));
     }
 
+    public function deriveKeyFromBinaryKeys(
+        #[\SensitiveParameter]
+        string $privateKey,
+        string $publicKey,
+        int $length,
+        string $context,
+        string $salt = '',
+    ): string {
+        return Base64Url::encode($this->derive($privateKey, $publicKey, $length, $context, $salt, true));
+    }
+
     private function derive(
+        #[\SensitiveParameter]
         string $privateKey,
         string $publicKey,
         int $length,
         string $context,
         string $salt,
-        bool $keysAreBinary,
+        bool $binaryInput,
     ): string {
         if ($length < 16 || $length > 64) {
             throw new ConfigurationException('Derived key length must be between 16 and 64 bytes.');
@@ -74,7 +99,9 @@ final readonly class KeyExchange
             throw new ConfigurationException('Key derivation context must be non-empty and cannot contain NUL.');
         }
 
-        $secret = $this->backend->deriveSharedSecret($privateKey, $publicKey, $keysAreBinary);
+        $secret = $binaryInput
+            ? $this->backend->deriveSharedSecretFromBinaryKeys($privateKey, $publicKey)
+            : $this->backend->deriveSharedSecret($privateKey, $publicKey);
 
         try {
             return hash_hkdf('sha512', $secret, $length, $context, $salt);

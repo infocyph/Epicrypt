@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 use Infocyph\Epicrypt\Certificate\Enum\OpenSslRsaBits;
 use Infocyph\Epicrypt\Certificate\Enum\OpenSslCurveName;
-use Infocyph\Epicrypt\Certificate\Enum\OpenSslKeyType;
 use Infocyph\Epicrypt\Certificate\KeyPairGenerator;
 use Infocyph\Epicrypt\Certificate\OpenSSL\CertificateBuilder;
 use Infocyph\Epicrypt\Exception\Token\KeyResolutionException;
@@ -19,7 +18,7 @@ use Infocyph\Epicrypt\Token\Jwt\JwtClaims;
 use Infocyph\Epicrypt\Token\Jwt\JwtPolicy;
 
 it('exports algorithm-bound eligible JWKS keys and verifies imported keys', function () {
-    $pair = KeyPairGenerator::openSsl(OpenSslRsaBits::BITS_2048)->generate();
+    $pair = KeyPairGenerator::rsa(OpenSslRsaBits::BITS_2048)->generate();
     $ring = new KeyRing([
         new KeyRingEntry('rsa1', $pair['public'], KeyStatus::ACTIVE, KeyPurpose::JWT_SIGNING, 'RS256', issuer: 'issuer'),
         new KeyRingEntry('old', $pair['public'], KeyStatus::RETIRED, KeyPurpose::JWT_SIGNING, 'RS256', issuer: 'issuer'),
@@ -40,14 +39,14 @@ it('supports OKP, oct, thumbprints and mixed algorithm sets', function () {
     $ed = KeyPairGenerator::sodiumSign()->generate();
     $okp = $jwks->exportOkpPublicKey($ed['public'], 'ed-1');
     $secret = random_bytes(64);
-    $oct = $jwks->exportSymmetricKey($secret, 'shared-1', 'HS512');
+    $oct = $jwks->exportSymmetricSecretJwk($secret, 'shared-1', 'HS512');
 
     expect($jwks->importOkpPublicKey($okp, 'EdDSA', 'Ed25519'))->toBe($ed['public'])
         ->and($jwks->importSymmetricKey($oct, 'HS512'))->toBe($secret)
         ->and($jwks->thumbprint($okp))->toHaveLength(43)
         ->and($jwks->thumbprintUri($okp))->toStartWith('urn:ietf:params:oauth:jwk-thumbprint:sha-256:');
 
-    $rsa = KeyPairGenerator::openSsl(OpenSslRsaBits::BITS_2048)->generate();
+    $rsa = KeyPairGenerator::rsa(OpenSslRsaBits::BITS_2048)->generate();
     $ring = new KeyRing([
         new KeyRingEntry('rs', $rsa['public'], KeyStatus::ACTIVE, KeyPurpose::JWT_SIGNING, 'RS256', issuer: 'issuer'),
         new KeyRingEntry('ps', $rsa['public'], KeyStatus::ACTIVE, KeyPurpose::JWT_SIGNING, 'PS256', issuer: 'issuer'),
@@ -60,7 +59,7 @@ it('supports OKP, oct, thumbprints and mixed algorithm sets', function () {
 });
 
 it('rejects duplicate kid and incompatible JWK metadata', function () {
-    $pair = KeyPairGenerator::openSsl(OpenSslRsaBits::BITS_2048)->generate();
+    $pair = KeyPairGenerator::rsa(OpenSslRsaBits::BITS_2048)->generate();
     $jwk = new Jwks()->exportPublicKeyToJwk($pair['public'], 'same', AsymmetricJwtAlgorithm::RS256);
     $jwks = new Jwks();
 
@@ -91,11 +90,7 @@ it('rejects duplicate kid and incompatible JWK metadata', function () {
         AsymmetricJwtAlgorithm::RS256,
     ))->toThrow(KeyResolutionException::class);
 
-    $ecPair = KeyPairGenerator::openSsl(
-        OpenSslRsaBits::BITS_3072,
-        OpenSslKeyType::EC,
-        OpenSslCurveName::PRIME256V1,
-    )->generate();
+    $ecPair = KeyPairGenerator::ec(OpenSslCurveName::PRIME256V1)->generate();
     $ec = $jwks->exportPublicKeyToJwk($ecPair['public'], 'ec', AsymmetricJwtAlgorithm::ES256);
     expect(fn() => $jwks->importPublicKeyFromJwk(
         array_replace($ec, ['crv' => 'P-384']),
@@ -116,7 +111,7 @@ it('rejects duplicate kid and incompatible JWK metadata', function () {
 
 it('round trips explicitly requested private JWK material', function () {
     $jwks = new Jwks();
-    $rsa = KeyPairGenerator::openSsl(OpenSslRsaBits::BITS_2048)->generate();
+    $rsa = KeyPairGenerator::rsa(OpenSslRsaBits::BITS_2048)->generate();
     $private = $jwks->exportPrivateKeyToJwk($rsa['private'], 'private-rsa', AsymmetricJwtAlgorithm::PS256);
     expect($private)->toHaveKeys(['d', 'p', 'q', 'dp', 'dq', 'qi'])
         ->and($jwks->importPrivateKeyFromJwk($private, AsymmetricJwtAlgorithm::PS256))->toContain('PRIVATE KEY');
@@ -145,7 +140,7 @@ it('uses interoperable X25519 JWK operations', function () {
 });
 
 it('binds a JWK to the matching leaf certificate', function () {
-    $pair = KeyPairGenerator::openSsl(OpenSslRsaBits::BITS_2048)->generate();
+    $pair = KeyPairGenerator::rsa(OpenSslRsaBits::BITS_2048)->generate();
     $certificate = new CertificateBuilder()->selfSign(['commonName' => 'jwk.example'], $pair['private']);
     $jwks = new Jwks();
     $jwk = $jwks->exportPublicKeyToJwk($pair['public'], 'cert-key', AsymmetricJwtAlgorithm::RS256);
@@ -154,8 +149,14 @@ it('binds a JWK to the matching leaf certificate', function () {
     expect($bound)->toHaveKeys(['x5c', 'x5t', 'x5t#S256']);
     $jwks->validateCertificateBinding($bound);
 
-    $other = KeyPairGenerator::openSsl(OpenSslRsaBits::BITS_2048)->generate();
+    $other = KeyPairGenerator::rsa(OpenSslRsaBits::BITS_2048)->generate();
     $mismatched = $jwks->exportPublicKeyToJwk($other['public'], 'other', AsymmetricJwtAlgorithm::RS256);
     expect(fn() => $jwks->bindCertificateChain($mismatched, [$certificate]))
+        ->toThrow(KeyResolutionException::class)
+        ->and(fn () => $jwks->validateCertificateBinding(array_replace($bound, ['x5t' => str_repeat('A', 27)])))
+        ->toThrow(KeyResolutionException::class)
+        ->and(fn () => $jwks->validateCertificateBinding(array_replace($bound, ['x5t#S256' => str_repeat('A', 43)])))
+        ->toThrow(KeyResolutionException::class)
+        ->and(fn () => $jwks->bindCertificateChain($jwk, [$certificate, 'not-a-certificate']))
         ->toThrow(KeyResolutionException::class);
 });

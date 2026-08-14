@@ -9,18 +9,18 @@ use Infocyph\Epicrypt\Internal\Json;
 final class SecureSecretSerializer
 {
     /**
-     * @param array<string, scalar|array<string, scalar>> $secret
+     * @return array<string, mixed>
      */
-    public function serialize(array $secret): string
+    public function deserialize(#[\SensitiveParameter] string $serialized): array
     {
-        return Json::encode($secret);
+        return Json::decodeToArray($serialized);
     }
 
     /**
-     * @return array<string, mixed>
+     * @param array<string, scalar|array<string, scalar>> $secret
      */
-    public function unserialize(string $serialized): array
+    public function serialize(#[\SensitiveParameter] array $secret): string
     {
-        return Json::decodeToArray($serialized);
+        return Json::encode($secret);
     }
 }

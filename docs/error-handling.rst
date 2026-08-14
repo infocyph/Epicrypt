@@ -70,7 +70,6 @@ Crypto:
 - ``InvalidKeyException``
 - ``InvalidNonceException``
 - ``SignatureException``
-- ``IntegrityCheckFailedException``
 
 Token:
 

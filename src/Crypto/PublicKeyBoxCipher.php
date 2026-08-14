@@ -67,6 +67,7 @@ final class PublicKeyBoxCipher
     }
 
     public function encrypt(
+        #[\SensitiveParameter]
         string $plaintext,
         string $recipientPublicKey,
         #[\SensitiveParameter]
@@ -86,6 +87,7 @@ final class PublicKeyBoxCipher
     }
 
     public function encryptWithBinaryKeys(
+        #[\SensitiveParameter]
         string $plaintext,
         string $recipientPublicKey,
         #[\SensitiveParameter]
@@ -115,8 +117,11 @@ final class PublicKeyBoxCipher
     }
 
     /** @return array{string, string} */
-    private function resolveBoxKeyPair(string $publicKey, string $secretKey): array
-    {
+    private function resolveBoxKeyPair(
+        string $publicKey,
+        #[\SensitiveParameter]
+        string $secretKey,
+    ): array {
         return [
             BinaryKey::fixedLength($publicKey, true, SODIUM_CRYPTO_BOX_PUBLICKEYBYTES, 'Public key'),
             BinaryKey::fixedLength($secretKey, true, SODIUM_CRYPTO_BOX_SECRETKEYBYTES, 'Private key'),

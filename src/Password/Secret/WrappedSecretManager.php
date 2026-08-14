@@ -12,42 +12,127 @@ use Infocyph\Epicrypt\Internal\KeyCandidates;
 use Infocyph\Epicrypt\Internal\VersionedPayload;
 use Infocyph\Epicrypt\Security\KeyPurpose;
 use Infocyph\Epicrypt\Security\KeyRing;
+use Infocyph\Epicrypt\Security\KeyStatus;
 
 final class WrappedSecretManager
 {
     private const string ALGORITHM_ID = 'secretbox';
 
     public function rewrap(
+        #[\SensitiveParameter]
         string $wrappedSecret,
+        #[\SensitiveParameter]
         string $oldMasterSecret,
+        #[\SensitiveParameter]
         string $newMasterSecret,
-        bool $oldMasterSecretIsBinary = false,
-        bool $newMasterSecretIsBinary = false,
     ): string {
-        $plaintext = $this->unwrap($wrappedSecret, $oldMasterSecret, $oldMasterSecretIsBinary);
+        return $this->wrap($this->unwrap($wrappedSecret, $oldMasterSecret), $newMasterSecret);
+    }
 
-        return $this->wrap($plaintext, $newMasterSecret, $newMasterSecretIsBinary);
+    /** @param iterable<string, string>|KeyRing $masterSecrets */
+    public function rewrapWithAnyBinaryKey(
+        #[\SensitiveParameter]
+        string $wrappedSecret,
+        #[\SensitiveParameter]
+        iterable|KeyRing $masterSecrets,
+        #[\SensitiveParameter]
+        string $newMasterSecret,
+    ): string {
+        return $this->wrapWithBinaryKey(
+            $this->unwrapWithAnyBinaryKeyResult($wrappedSecret, $masterSecrets)->plaintext,
+            $newMasterSecret,
+        );
     }
 
     /**
      * @param iterable<string, string>|KeyRing $masterSecrets
      */
     public function rewrapWithAnyKey(
+        #[\SensitiveParameter]
         string $wrappedSecret,
+        #[\SensitiveParameter]
         iterable|KeyRing $masterSecrets,
+        #[\SensitiveParameter]
         string $newMasterSecret,
-        bool $masterSecretsAreBinary = false,
-        bool $newMasterSecretIsBinary = false,
     ): string {
-        $plaintext = $this->unwrapWithAnyKeyResult($wrappedSecret, $masterSecrets, $masterSecretsAreBinary)->plaintext;
-
-        return $this->wrap($plaintext, $newMasterSecret, $newMasterSecretIsBinary);
+        return $this->wrap($this->unwrapWithAnyKeyResult($wrappedSecret, $masterSecrets)->plaintext, $newMasterSecret);
     }
 
-    public function unwrap(string $wrappedSecret, string $masterSecret, bool $masterSecretIsBinary = false): string
-    {
+    public function rewrapWithBinaryKeys(
+        #[\SensitiveParameter]
+        string $wrappedSecret,
+        #[\SensitiveParameter]
+        string $oldMasterSecret,
+        #[\SensitiveParameter]
+        string $newMasterSecret,
+    ): string {
+        return $this->wrapWithBinaryKey(
+            $this->unwrapWithBinaryKey($wrappedSecret, $oldMasterSecret),
+            $newMasterSecret,
+        );
+    }
+
+    public function unwrap(
+        #[\SensitiveParameter]
+        string $wrappedSecret,
+        #[\SensitiveParameter]
+        string $masterSecret,
+    ): string {
+        return $this->unwrapWithBinaryKey($wrappedSecret, $this->decodeMasterSecret($masterSecret, false));
+    }
+
+    /** @param iterable<string, string>|KeyRing $masterSecrets */
+    public function unwrapWithAnyBinaryKey(
+        #[\SensitiveParameter]
+        string $wrappedSecret,
+        #[\SensitiveParameter]
+        iterable|KeyRing $masterSecrets,
+    ): string {
+        return $this->unwrapWithAnyBinaryKeyResult($wrappedSecret, $masterSecrets)->plaintext;
+    }
+
+    /** @param iterable<string, string>|KeyRing $masterSecrets */
+    public function unwrapWithAnyBinaryKeyResult(
+        #[\SensitiveParameter]
+        string $wrappedSecret,
+        #[\SensitiveParameter]
+        iterable|KeyRing $masterSecrets,
+    ): UnwrappedSecretResult {
+        return $this->unwrapCandidateSet($wrappedSecret, $masterSecrets, true);
+    }
+
+    /**
+     * @param iterable<string, string>|KeyRing $masterSecrets
+     */
+    public function unwrapWithAnyKey(
+        #[\SensitiveParameter]
+        string $wrappedSecret,
+        #[\SensitiveParameter]
+        iterable|KeyRing $masterSecrets,
+    ): string {
+        return $this->unwrapWithAnyKeyResult($wrappedSecret, $masterSecrets)->plaintext;
+    }
+
+    /**
+     * @param iterable<string, string>|KeyRing $masterSecrets
+     */
+    public function unwrapWithAnyKeyResult(
+        #[\SensitiveParameter]
+        string $wrappedSecret,
+        #[\SensitiveParameter]
+        iterable|KeyRing $masterSecrets,
+    ): UnwrappedSecretResult {
+        return $this->unwrapCandidateSet($wrappedSecret, $masterSecrets, false);
+    }
+
+    public function unwrapWithBinaryKey(
+        #[\SensitiveParameter]
+        string $wrappedSecret,
+        #[\SensitiveParameter]
+        string $masterSecret,
+    ): string {
         $payload = $this->parseWrappedPayload($wrappedSecret);
-        $key = $this->decodeMasterSecret($masterSecret, $masterSecretIsBinary);
+        $key = $this->decodeMasterSecret($masterSecret, true);
 
         $plaintext = sodium_crypto_secretbox_open(
             Base64Url::decode($payload['ciphertext']),
@@ -62,72 +147,42 @@ final class WrappedSecretManager
         return $plaintext;
     }
 
-    /**
-     * @param iterable<string, string>|KeyRing $masterSecrets
-     */
-    public function unwrapWithAnyKey(string $wrappedSecret, iterable|KeyRing $masterSecrets, bool $masterSecretsAreBinary = false): string
-    {
-        return $this->unwrapWithAnyKeyResult($wrappedSecret, $masterSecrets, $masterSecretsAreBinary)->plaintext;
+    public function unwrapWithKeyRing(
+        #[\SensitiveParameter]
+        string $wrappedSecret,
+        #[\SensitiveParameter]
+        KeyRing $masterSecrets,
+    ): string {
+        return $this->unwrapWithKeyRingResult($wrappedSecret, $masterSecrets)->plaintext;
     }
 
-    /**
-     * @param iterable<string, string>|KeyRing $masterSecrets
-     */
-    public function unwrapWithAnyKeyResult(string $wrappedSecret, iterable|KeyRing $masterSecrets, bool $masterSecretsAreBinary = false): UnwrappedSecretResult
-    {
-        if ($masterSecrets instanceof KeyRing) {
-            $payload = $this->parseWrappedPayload($wrappedSecret);
-            if ($payload['key_id'] !== null) {
-                $entry = $masterSecrets->resolveForRead($payload['key_id'], KeyPurpose::SECRET_WRAPPING, self::ALGORITHM_ID);
-                if ($entry === null) {
-                    throw new SecretProtectionException(sprintf('Master secret key id "%s" was not found in the key ring.', $payload['key_id']));
-                }
-
-                try {
-                    return new UnwrappedSecretResult(
-                        $this->unwrap($wrappedSecret, $entry->key, $masterSecretsAreBinary),
-                        $payload['key_id'],
-                        false,
-                    );
-                } catch (SecretProtectionException $e) {
-                    throw new SecretProtectionException(
-                        sprintf('Secret unwrap failed for key id "%s".', $payload['key_id']),
-                        0,
-                        $e,
-                    );
-                }
-            }
-        }
-
-        $lastException = null;
-        foreach ($this->orderedKeyEntries($masterSecrets) as $entry) {
-            try {
-                return new UnwrappedSecretResult(
-                    $this->unwrap($wrappedSecret, $entry['key'], $masterSecretsAreBinary),
-                    $entry['id'],
-                    !$entry['active'],
-                );
-            } catch (SecretProtectionException $e) {
-                $lastException = $e;
-            }
-        }
-
-        throw new SecretProtectionException('Secret unwrap failed for every supplied master secret.', 0, $lastException);
+    public function unwrapWithKeyRingResult(
+        #[\SensitiveParameter]
+        string $wrappedSecret,
+        #[\SensitiveParameter]
+        KeyRing $masterSecrets,
+    ): UnwrappedSecretResult {
+        return $this->unwrapWithAnyKeyResult($wrappedSecret, $masterSecrets);
     }
 
-    public function unwrapWithKeyRing(string $wrappedSecret, KeyRing $masterSecrets, bool $masterSecretsAreBinary = false): string
-    {
-        return $this->unwrapWithKeyRingResult($wrappedSecret, $masterSecrets, $masterSecretsAreBinary)->plaintext;
+    public function wrap(
+        #[\SensitiveParameter]
+        string $secret,
+        #[\SensitiveParameter]
+        string $masterSecret,
+        ?string $keyId = null,
+    ): string {
+        return $this->wrapWithBinaryKey($secret, $this->decodeMasterSecret($masterSecret, false), $keyId);
     }
 
-    public function unwrapWithKeyRingResult(string $wrappedSecret, KeyRing $masterSecrets, bool $masterSecretsAreBinary = false): UnwrappedSecretResult
-    {
-        return $this->unwrapWithAnyKeyResult($wrappedSecret, $masterSecrets, $masterSecretsAreBinary);
-    }
-
-    public function wrap(string $secret, string $masterSecret, bool $masterSecretIsBinary = false, ?string $keyId = null): string
-    {
-        $key = $this->decodeMasterSecret($masterSecret, $masterSecretIsBinary);
+    public function wrapWithBinaryKey(
+        #[\SensitiveParameter]
+        string $secret,
+        #[\SensitiveParameter]
+        string $masterSecret,
+        ?string $keyId = null,
+    ): string {
+        $key = $this->decodeMasterSecret($masterSecret, true);
 
         $nonce = random_bytes(SODIUM_CRYPTO_SECRETBOX_NONCEBYTES);
         $ciphertext = sodium_crypto_secretbox($secret, $nonce, $key);
@@ -141,18 +196,37 @@ final class WrappedSecretManager
         );
     }
 
-    public function wrapWithKeyRing(string $secret, KeyRing $keyRing, bool $masterSecretIsBinary = false): string
-    {
+    public function wrapWithBinaryKeyRing(
+        #[\SensitiveParameter]
+        string $secret,
+        #[\SensitiveParameter]
+        KeyRing $keyRing,
+    ): string {
         try {
             $entry = $keyRing->activeForWrite(KeyPurpose::SECRET_WRAPPING, self::ALGORITHM_ID);
         } catch (\Throwable $exception) {
             throw new SecretProtectionException('An active secret-wrapping key is required.', 0, $exception);
         }
 
-        return $this->wrap($secret, $entry->key, $masterSecretIsBinary, $entry->id);
+        return $this->wrapWithBinaryKey($secret, $entry->key, $entry->id);
     }
 
-    private function decodeMasterSecret(string $masterSecret, bool $isBinary): string
+    public function wrapWithKeyRing(
+        #[\SensitiveParameter]
+        string $secret,
+        #[\SensitiveParameter]
+        KeyRing $keyRing,
+    ): string {
+        try {
+            $entry = $keyRing->activeForWrite(KeyPurpose::SECRET_WRAPPING, self::ALGORITHM_ID);
+        } catch (\Throwable $exception) {
+            throw new SecretProtectionException('An active secret-wrapping key is required.', 0, $exception);
+        }
+
+        return $this->wrap($secret, $entry->key, $entry->id);
+    }
+
+    private function decodeMasterSecret(#[\SensitiveParameter] string $masterSecret, bool $isBinary): string
     {
         try {
             return BinaryKey::fixedLength($masterSecret, $isBinary, SODIUM_CRYPTO_SECRETBOX_KEYBYTES, 'Master secret');
@@ -165,7 +239,7 @@ final class WrappedSecretManager
      * @param iterable<string, string>|KeyRing $keys
      * @return list<array{id: ?string, key: string, active: bool}>
      */
-    private function orderedKeyEntries(iterable|KeyRing $keys): array
+    private function orderedKeyEntries(#[\SensitiveParameter] iterable|KeyRing $keys): array
     {
         try {
             return KeyCandidates::orderedEntries(
@@ -183,7 +257,7 @@ final class WrappedSecretManager
     /**
      * @return array{nonce: string, ciphertext: string, key_id: ?string}
      */
-    private function parseWrappedPayload(string $wrappedSecret): array
+    private function parseWrappedPayload(#[\SensitiveParameter] string $wrappedSecret): array
     {
         $compactPayload = VersionedPayload::parseCompact($wrappedSecret, WrappedSecretVersion::V2->value);
         if ($compactPayload === null) {
@@ -199,5 +273,58 @@ final class WrappedSecretManager
             'ciphertext' => $compactPayload->ciphertext,
             'key_id' => $compactPayload->keyId,
         ];
+    }
+
+    /** @param iterable<string, string>|KeyRing $masterSecrets */
+    private function unwrapCandidateSet(
+        #[\SensitiveParameter]
+        string $wrappedSecret,
+        #[\SensitiveParameter]
+        iterable|KeyRing $masterSecrets,
+        bool $binary,
+    ): UnwrappedSecretResult {
+        if ($masterSecrets instanceof KeyRing) {
+            $payload = $this->parseWrappedPayload($wrappedSecret);
+            if ($payload['key_id'] === null) {
+                throw new SecretProtectionException('Wrapped secret key id is required for KeyRing decryption.');
+            }
+            $entry = $masterSecrets->resolveForRead($payload['key_id'], KeyPurpose::SECRET_WRAPPING, self::ALGORITHM_ID);
+            if ($entry === null) {
+                throw new SecretProtectionException(sprintf('Master secret key id "%s" was not found in the key ring.', $payload['key_id']));
+            }
+
+            try {
+                return new UnwrappedSecretResult(
+                    $binary
+                        ? $this->unwrapWithBinaryKey($wrappedSecret, $entry->key)
+                        : $this->unwrap($wrappedSecret, $entry->key),
+                    $payload['key_id'],
+                    $entry->status === KeyStatus::FALLBACK,
+                );
+            } catch (SecretProtectionException $e) {
+                throw new SecretProtectionException(
+                    sprintf('Secret unwrap failed for key id "%s".', $payload['key_id']),
+                    0,
+                    $e,
+                );
+            }
+        }
+
+        $lastException = null;
+        foreach ($this->orderedKeyEntries($masterSecrets) as $entry) {
+            try {
+                return new UnwrappedSecretResult(
+                    $binary
+                        ? $this->unwrapWithBinaryKey($wrappedSecret, $entry['key'])
+                        : $this->unwrap($wrappedSecret, $entry['key']),
+                    $entry['id'],
+                    !$entry['active'],
+                );
+            } catch (SecretProtectionException $e) {
+                $lastException = $e;
+            }
+        }
+
+        throw new SecretProtectionException('Secret unwrap failed for every supplied master secret.', 0, $lastException);
     }
 }

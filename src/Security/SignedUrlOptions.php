@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Infocyph\Epicrypt\Security;
 
 use Infocyph\Epicrypt\Exception\ConfigurationException;
+use Infocyph\Epicrypt\Security\Support\SignedUrlGuard;
 
 final class SignedUrlOptions
 {
@@ -22,8 +23,8 @@ final class SignedUrlOptions
     ) {
         if ($this->method !== null) {
             $this->method = strtoupper(trim($this->method));
-            if ($this->method === '') {
-                throw new ConfigurationException('Signed URL method binding must be a non-empty string when provided.');
+            if (!SignedUrlGuard::isValidHttpMethod($this->method)) {
+                throw new ConfigurationException('Signed URL method binding must use valid HTTP token syntax.');
             }
         }
 

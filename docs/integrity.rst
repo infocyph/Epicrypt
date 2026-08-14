@@ -2,8 +2,9 @@ Integrity
 =========
 
 The curated allowlist is SHA-256, SHA-384, SHA-512, and BLAKE2b. SHA-256 is the
-default. Use an unkeyed digest to identify public content and a keyed digest to
-authenticate content from a party that shares the secret.
+default. Use these unkeyed digests to identify public content. Use
+``Crypto\Mac`` or a digital signature when authenticity is required; Integrity
+deliberately has no keyed-hash path.
 
 Complete path: publish and verify a signed release manifest
 -----------------------------------------------------------
@@ -88,17 +89,18 @@ bytes received from the transport.
 
    declare(strict_types=1);
 
-   use Infocyph\Epicrypt\Integrity\IntegrityAlgorithm;
-   use Infocyph\Epicrypt\Integrity\StringHasher;
+   use Infocyph\Epicrypt\Crypto\Mac;
 
    $rawBody = (string) file_get_contents('php://input');
-   $providedDigest = (string) ($_SERVER['HTTP_X_BODY_DIGEST'] ?? '');
-   $webhookKey = $_ENV['WEBHOOK_INTEGRITY_KEY'];
-   $hasher = new StringHasher(IntegrityAlgorithm::SHA256);
+   $providedMac = (string) ($_SERVER['HTTP_X_BODY_MAC'] ?? '');
+   $webhookKey = $_ENV['WEBHOOK_MAC_KEY']; // 32-byte key, Base64URL encoded.
+   $mac = new Mac();
 
-   if (!$hasher->verify($rawBody, $providedDigest, ['key' => $webhookKey])) {
+   if (!$mac->verify($rawBody, $providedMac, $webhookKey)) {
        throw new RuntimeException('Webhook authentication failed.');
    }
 
-For a new application protocol, prefer ``Crypto\Mac`` when you do not need an
-existing hexadecimal digest format.
+``FileHasher`` streams through Pathwise's reader abstraction, including
+configured mounted filesystems. ``StringHasher`` and ``FileHasher`` accept
+BLAKE2b output lengths from 16 through 64 bytes; malformed digests return
+``false`` from ``verify()``.

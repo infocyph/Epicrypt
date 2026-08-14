@@ -18,6 +18,7 @@ final class KeyCandidates
      * @return list<string>
      */
     public static function ordered(
+        #[\SensitiveParameter]
         iterable|KeyRing $keys,
         string $emptyCandidateMessage,
         string $missingCandidateMessage,
@@ -32,6 +33,7 @@ final class KeyCandidates
      * @return list<array{id: ?string, key: string, active: bool}>
      */
     public static function orderedEntries(
+        #[\SensitiveParameter]
         iterable|KeyRing $keys,
         string $emptyCandidateMessage,
         string $missingCandidateMessage,
@@ -53,7 +55,7 @@ final class KeyCandidates
                     ? ($keyId !== '' ? $keyId : null)
                     : (string) $keyId,
                 'key' => $key,
-                'active' => false,
+                'active' => $ordered === [],
             ];
         }
 
@@ -66,6 +68,7 @@ final class KeyCandidates
 
     /** @return list<array{id: string, key: string, active: bool}> */
     private static function fromKeyRing(
+        #[\SensitiveParameter]
         KeyRing $keys,
         ?KeyPurpose $purpose,
         ?string $algorithm,

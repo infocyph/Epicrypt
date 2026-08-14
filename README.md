@@ -121,8 +121,10 @@ $rehash = $hasher->verifyAndRehash('MyStrongPassword!2026', $hash);
 declare(strict_types=1);
 
 use Infocyph\Epicrypt\Security\CsrfTokenManager;
+use Infocyph\Epicrypt\Generate\KeyMaterial\KeyMaterialGenerator;
 
-$csrf = new CsrfTokenManager('csrf-secret');
+$csrfSecret = new KeyMaterialGenerator()->forMasterSecret(asBase64Url: false);
+$csrf = new CsrfTokenManager($csrfSecret);
 $token = $csrf->issueToken('session-1');
 
 $ok = $csrf->verifyToken('session-1', $token);
@@ -136,8 +138,10 @@ $ok = $csrf->verifyToken('session-1', $token);
 declare(strict_types=1);
 
 use Infocyph\Epicrypt\Security\SignedUrl;
+use Infocyph\Epicrypt\Generate\KeyMaterial\KeyMaterialGenerator;
 
-$signed = new SignedUrl('url-secret');
+$urlSecret = new KeyMaterialGenerator()->forMasterSecret(asBase64Url: false);
+$signed = new SignedUrl($urlSecret);
 $url = $signed->generate('https://example.com/download', ['file' => 'report.pdf'], time() + 300);
 
 $ok = $signed->verify($url);
@@ -218,7 +222,7 @@ use Infocyph\Epicrypt\Certificate\Enum\OpenSslRsaBits;
 use Infocyph\Epicrypt\Certificate\KeyPairGenerator;
 use Infocyph\Epicrypt\Certificate\OpenSSL\CertificateBuilder;
 
-$pair = KeyPairGenerator::openSsl(bits: OpenSslRsaBits::BITS_3072)->generate();
+$pair = KeyPairGenerator::rsa(OpenSslRsaBits::BITS_3072)->generate();
 $dn = ['commonName' => 'service.example.test'];
 
 $options = new CertificateOptions(

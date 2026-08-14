@@ -139,7 +139,7 @@ final readonly class RefreshTokenManager
         }
     }
 
-    private static function validToken(string $token): bool
+    private static function validToken(#[\SensitiveParameter] string $token): bool
     {
         $length = strlen($token);
 

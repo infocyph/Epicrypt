@@ -8,6 +8,7 @@ use Infocyph\Epicrypt\Crypto\Mac;
 use Infocyph\Epicrypt\Crypto\SecretBoxCipher;
 use Infocyph\Epicrypt\Crypto\Signature;
 use Infocyph\Epicrypt\Exception\Crypto\DecryptionException;
+use Infocyph\Epicrypt\Exception\Crypto\InvalidKeyException;
 use Infocyph\Epicrypt\Exception\Crypto\SignatureException;
 use Infocyph\Epicrypt\Generate\KeyMaterial\KeyMaterialGenerator;
 
@@ -21,9 +22,8 @@ it('encrypts and decrypts with AEAD services', function () {
     $plaintext = $cipher->decrypt($ciphertext, $key, 'meta');
 
     expect($ciphertext)->toStartWith('epc2.');
-    expect($segments)->toHaveCount(5);
+    expect($segments)->toHaveCount(4);
     expect($segments[1])->toBe('xchacha20-poly1305-ietf');
-    expect($segments[2])->toBe('_');
     expect($plaintext)->toBe('epicrypt-aead');
 });
 
@@ -59,6 +59,7 @@ it('signs and verifies detached signatures', function () {
 
     expect($signatureService->verify('epicrypt-signature', $signature, $keys['public']))->toBeTrue();
     expect($signatureService->verify('tampered', $signature, $keys['public']))->toBeFalse();
+    expect($signatureService->verify('epicrypt-signature', 'invalid***', $keys['public']))->toBeFalse();
 });
 
 it('rejects invalid signature key material', function () {
@@ -77,4 +78,22 @@ it('generates and verifies mac tags', function () {
 
     expect($macService->verify('epicrypt-mac', $mac, $key))->toBeTrue();
     expect($macService->verify('wrong', $mac, $key))->toBeFalse();
+    expect($macService->verify('epicrypt-mac', 'invalid***', $key))->toBeFalse();
+});
+
+it('rejects malformed encoded and binary MAC keys with stable error taxonomy', function () {
+    $macService = new Mac;
+
+    expect(fn () => $macService->generateWithBinaryKey('message', 'short'))
+        ->toThrow(InvalidKeyException::class, 'MAC key must be 32 bytes.')
+        ->and(fn () => $macService->verifyWithBinaryKey('message', 'invalid', 'short'))
+        ->toThrow(InvalidKeyException::class, 'MAC key must be 32 bytes.');
+
+    try {
+        $macService->generate('message', 'short');
+        test()->fail('Malformed encoded MAC key was accepted.');
+    } catch (InvalidKeyException $exception) {
+        expect($exception->getCode())->toBe(0)
+            ->and($exception->getPrevious())->toBeInstanceOf(InvalidKeyException::class);
+    }
 });

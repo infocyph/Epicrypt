@@ -177,7 +177,11 @@ Protect a database backup without loading it into memory
    $files->unprotect('/backups/db.sql.ep2', '/restore/db.sql', $key, $options);
 
 The destination is staged and committed only after the complete operation
-succeeds. Input and output paths must differ.
+succeeds, and an existing destination is preserved after every failed
+decryption. Epicrypt owns this one atomic staging/commit layer; Pathwise is the
+bounded streaming I/O layer. Input and output paths must differ, and
+``FileProtector`` accepts local filesystem paths only in 2.0 (no stream-wrapper
+or mounted-remote paths).
 
 Rotate keys with policy metadata
 --------------------------------
@@ -248,3 +252,9 @@ protector.
    $aesProtector = StringProtector::create(ProtectionAlgorithm::AES_256_GCM);
 
 There is intentionally no algorithm selector on ``FileProtector``.
+
+AAD and ``kid`` are authenticated metadata, not secret material. Do not put
+passwords, tokens, personal data, or keys in them. KeyRing reads require the
+authenticated ``kid`` and never scan other keys when it is absent or unknown;
+``ProtectionResult::usedFallback`` reports whether the resolved entry really
+had ``KeyStatus::FALLBACK``.

@@ -18,12 +18,12 @@ final readonly class RemoteJoseResource
         private int $maximumBytes,
     ) {}
 
-    /** @return array{array<string, mixed>, int|null} */
-    public function fetch(string $uri): array
+    /** @return array{array<string, mixed>, array{maxAge: int|null, noStore: bool, noCache: bool}} */
+    public function fetch(string $uri, bool $jwks = false): array
     {
         try {
             $request = $this->requestFactory->createRequest('GET', $uri)
-                ->withHeader('Accept', 'application/json');
+                ->withHeader('Accept', $jwks ? 'application/jwk-set+json, application/json' : 'application/json');
             $response = $this->client->sendRequest($request);
         } catch (ClientExceptionInterface $exception) {
             throw new KeyResolutionException('Remote JOSE request failed.', 0, $exception);
@@ -31,8 +31,9 @@ final readonly class RemoteJoseResource
         if ($response->getStatusCode() !== 200) {
             throw new KeyResolutionException(sprintf('Remote JOSE endpoint returned HTTP %d.', $response->getStatusCode()));
         }
-        $contentType = strtolower($response->getHeaderLine('Content-Type'));
-        if ($contentType !== '' && !str_contains($contentType, 'application/json')) {
+        $contentType = strtolower(trim(explode(';', $response->getHeaderLine('Content-Type'), 2)[0]));
+        $allowedMediaTypes = $jwks ? ['application/jwk-set+json', 'application/json'] : ['application/json'];
+        if (!in_array($contentType, $allowedMediaTypes, true)) {
             throw new KeyResolutionException('Remote JOSE endpoint returned a non-JSON content type.');
         }
         $body = $response->getBody();
@@ -48,7 +49,7 @@ final readonly class RemoteJoseResource
         }
         $this->assertJsonDepth($json, 16);
 
-        return [JwtToken::decodeJsonObject($json, 'remote JOSE document'), $this->maxAge($response->getHeaderLine('Cache-Control'))];
+        return [JwtToken::decodeJsonObject($json, 'remote JOSE document'), $this->cachePolicy($response->getHeaderLine('Cache-Control'))];
     }
 
     private function assertJsonDepth(string $json, int $maximum): void
@@ -71,13 +72,18 @@ final readonly class RemoteJoseResource
         }
     }
 
-    private function maxAge(string $cacheControl): ?int
+    /** @return array{maxAge: int|null, noStore: bool, noCache: bool} */
+    private function cachePolicy(string $cacheControl): array
     {
-        if (preg_match('/(?:^|,)\s*max-age\s*=\s*(\d+)/i', $cacheControl, $matches) !== 1) {
-            return null;
-        }
+        $maxAge = preg_match('/(?:^|,)\s*max-age\s*=\s*(\d+)/i', $cacheControl, $matches) === 1
+            ? (filter_var($matches[1], FILTER_VALIDATE_INT, ['options' => ['min_range' => 0]]) ?: 0)
+            : null;
 
-        return filter_var($matches[1], FILTER_VALIDATE_INT, ['options' => ['min_range' => 0]]) ?: 0;
+        return [
+            'maxAge' => $maxAge,
+            'noStore' => preg_match('/(?:^|,)\s*no-store(?:\s*(?:,|$))/i', $cacheControl) === 1,
+            'noCache' => preg_match('/(?:^|,)\s*no-cache(?:\s*(?:,|$))/i', $cacheControl) === 1,
+        ];
     }
 
     private function stringEnd(string $json, int $offset): int

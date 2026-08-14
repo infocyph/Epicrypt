@@ -16,21 +16,27 @@ use Psr\Clock\ClockInterface;
  */
 final readonly class SignedPayloadCodec
 {
+    private const int MAX_TOKEN_BYTES = 16 * 1024;
+
     public function __construct(
+        #[\SensitiveParameter]
         private string $secret,
         private SignedPayloadAlgorithm $algorithm = SignedPayloadAlgorithm::SHA512,
         private ClockInterface $clock = new SystemClock(),
     ) {
-        if ($this->secret === '') {
-            throw new InvalidTokenException('Signed payload secret must be non-empty.');
-        }
+        SecurityPolicy::assertHmacSecret($this->secret, 'Signed payload secret');
     }
 
     /**
      * @param array<string, mixed> $claims
      */
-    public function issue(array $claims, ?int $expiresAt = null, ?string $type = null): string
+    public function issue(#[\SensitiveParameter] array $claims, ?int $expiresAt = null, ?string $type = null): string
     {
+        $issuedAt = $this->clock->now()->getTimestamp();
+        if ($expiresAt !== null && $expiresAt <= $issuedAt) {
+            throw new InvalidTokenException('Signed payload expiration must be after issuance.');
+        }
+
         $header = [
             'alg' => strtoupper($this->algorithm->value),
             'typ' => 'SPT',
@@ -42,7 +48,8 @@ final readonly class SignedPayloadCodec
         }
 
         $payload = $claims;
-        $payload['iat'] = $this->clock->now()->getTimestamp();
+        unset($payload['iat'], $payload['exp']);
+        $payload['iat'] = $issuedAt;
         if ($expiresAt !== null) {
             $payload['exp'] = $expiresAt;
         }
@@ -51,14 +58,23 @@ final readonly class SignedPayloadCodec
         $encodedPayload = Base64Url::encode(Json::encode($payload));
         $signature = $this->sign($encodedHeader . '.' . $encodedPayload);
 
-        return $encodedHeader . '.' . $encodedPayload . '.' . $signature;
+        $token = $encodedHeader . '.' . $encodedPayload . '.' . $signature;
+        if (strlen($token) > self::MAX_TOKEN_BYTES) {
+            throw new InvalidTokenException('Signed payload exceeds the maximum encoded size.');
+        }
+
+        return $token;
     }
 
     /**
      * @return array<string, mixed>
      */
-    public function verify(string $token, ?string $expectedType = null): array
+    public function verify(#[\SensitiveParameter] string $token, ?string $expectedType = null): array
     {
+        if (strlen($token) > self::MAX_TOKEN_BYTES) {
+            throw new InvalidTokenException('Signed payload exceeds the maximum encoded size.');
+        }
+
         $parts = explode('.', $token, 3);
         if (count($parts) !== 3 || $parts[0] === '' || $parts[1] === '' || $parts[2] === '') {
             throw new InvalidTokenException('Invalid signed payload format.');
@@ -72,13 +88,7 @@ final readonly class SignedPayloadCodec
         }
 
         $header = Json::decodeToArray(Base64Url::decode($encodedHeader));
-        if (isset($header['v']) && (!is_numeric($header['v']) || (int) $header['v'] !== SignedPayloadVersion::V2->value)) {
-            throw new InvalidTokenException('Unsupported signed payload version.');
-        }
-
-        if ($expectedType !== null && ($header['ctx'] ?? null) !== $expectedType) {
-            throw new InvalidTokenException('Invalid signed payload context.');
-        }
+        $this->validateHeader($header, $expectedType);
 
         $payload = Json::decodeToArray(Base64Url::decode($encodedPayload));
         $this->validateTemporalClaims($payload);
@@ -86,40 +96,72 @@ final readonly class SignedPayloadCodec
         return $payload;
     }
 
-    private function sign(string $value): string
+    private function assertTemporalOrder(?int $issuedAt, ?int $notBefore, ?int $expiresAt): void
+    {
+        if ($issuedAt !== null && $notBefore !== null && $issuedAt > $notBefore) {
+            throw new InvalidTokenException('Signed payload temporal claims are inconsistent.');
+        }
+        if ($notBefore !== null && $expiresAt !== null && $notBefore >= $expiresAt) {
+            throw new InvalidTokenException('Signed payload temporal claims are inconsistent.');
+        }
+        if ($issuedAt !== null && $expiresAt !== null && $issuedAt >= $expiresAt) {
+            throw new InvalidTokenException('Signed payload temporal claims are inconsistent.');
+        }
+    }
+
+    /** @param array<string, mixed> $payload */
+    private function integerClaim(#[\SensitiveParameter] array $payload, string $name): ?int
+    {
+        if (!array_key_exists($name, $payload)) {
+            return null;
+        }
+
+        $value = $payload[$name];
+        if (!is_int($value)) {
+            throw new InvalidTokenException(sprintf('Invalid %s claim.', $name));
+        }
+
+        return $value;
+    }
+
+    private function sign(#[\SensitiveParameter] string $value): string
     {
         return Base64Url::encode(hash_hmac($this->algorithm->value, $value, $this->secret, true));
+    }
+
+    /** @param array<string, mixed> $header */
+    private function validateHeader(array $header, ?string $expectedType): void
+    {
+        $expectedKeys = $expectedType === null ? ['alg', 'typ', 'v'] : ['alg', 'ctx', 'typ', 'v'];
+        $actualKeys = array_keys($header);
+        sort($actualKeys);
+        if ($actualKeys !== $expectedKeys
+            || $header['v'] !== SignedPayloadVersion::V2->value
+            || $header['typ'] !== 'SPT'
+            || $header['alg'] !== strtoupper($this->algorithm->value)
+            || ($expectedType !== null && $header['ctx'] !== $expectedType)) {
+            throw new InvalidTokenException('Invalid signed payload header.');
+        }
     }
 
     /**
      * @param array<string, mixed> $payload
      */
-    private function validateTemporalClaims(array $payload): void
+    private function validateTemporalClaims(#[\SensitiveParameter] array $payload): void
     {
         $now = $this->clock->now()->getTimestamp();
+        $issuedAt = $this->integerClaim($payload, 'iat');
+        $notBefore = $this->integerClaim($payload, 'nbf');
+        $expiresAt = $this->integerClaim($payload, 'exp');
 
-        if (array_key_exists('iat', $payload) && !is_numeric($payload['iat'])) {
-            throw new InvalidTokenException('Invalid iat claim.');
+        if ($notBefore !== null && $now < $notBefore) {
+            throw new InvalidTokenException('Token is not yet valid.');
         }
 
-        if (array_key_exists('nbf', $payload)) {
-            if (!is_numeric($payload['nbf'])) {
-                throw new InvalidTokenException('Invalid nbf claim.');
-            }
-
-            if ($now < (int) $payload['nbf']) {
-                throw new InvalidTokenException('Token is not yet valid.');
-            }
+        if ($expiresAt !== null && $now >= $expiresAt) {
+            throw new ExpiredTokenException('Token has expired.');
         }
 
-        if (array_key_exists('exp', $payload)) {
-            if (!is_numeric($payload['exp'])) {
-                throw new InvalidTokenException('Invalid exp claim.');
-            }
-
-            if ($now > (int) $payload['exp']) {
-                throw new ExpiredTokenException('Token has expired.');
-            }
-        }
+        $this->assertTemporalOrder($issuedAt, $notBefore, $expiresAt);
     }
 }

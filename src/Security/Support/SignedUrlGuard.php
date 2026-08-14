@@ -80,6 +80,11 @@ final class SignedUrlGuard
         return new SignedUrlVerificationResult(false, invalidSignature: true, expiresAt: $expiresAt, version: $version);
     }
 
+    public static function isValidHttpMethod(string $method): bool
+    {
+        return preg_match("/\\A[!#$%&'*+.^_`|~0-9A-Za-z-]+\\z/D", $method) === 1;
+    }
+
     /**
      * @param QueryMap $query
      */
@@ -94,7 +99,7 @@ final class SignedUrlGuard
             return self::invalidSignatureResult(version: $version);
         }
 
-        if ($now > $expiresAt) {
+        if ($now >= $expiresAt) {
             return new SignedUrlVerificationResult(false, expired: true, expiresAt: $expiresAt, version: $version);
         }
 
@@ -111,7 +116,7 @@ final class SignedUrlGuard
             return $options->method === null ? null : self::invalidSignatureResult($expiresAt, $version);
         }
 
-        if (!is_string($methodValue) || $methodValue === '') {
+        if (!is_string($methodValue) || !self::isValidHttpMethod($methodValue)) {
             return self::invalidSignatureResult($expiresAt, $version);
         }
 
@@ -176,7 +181,7 @@ final class SignedUrlGuard
 
     private static function parseVersion(mixed $value): ?int
     {
-        if (!is_numeric($value)) {
+        if (!is_int($value) && (!is_string($value) || preg_match('/\A[0-9]+\z/D', $value) !== 1)) {
             return null;
         }
 

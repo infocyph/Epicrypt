@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace Infocyph\Epicrypt\Token\Jwt;
 
 use Infocyph\Epicrypt\Exception\Token\KeyResolutionException;
+use Infocyph\Epicrypt\Internal\Clock\SystemClock;
 use Infocyph\Epicrypt\Token\Jwt\Enum\AsymmetricJwtAlgorithm;
 use Infocyph\Epicrypt\Token\Jwt\Support\RemoteJoseResource;
+use Psr\Clock\ClockInterface;
 use Psr\Http\Client\ClientInterface;
 use Psr\Http\Message\RequestFactoryInterface;
 use Psr\SimpleCache\CacheInterface;
@@ -22,6 +24,7 @@ final readonly class RemoteJwks
         RequestFactoryInterface $requestFactory,
         private RemoteJwksConfiguration $configuration,
         private ?CacheInterface $cache = null,
+        private ClockInterface $clock = new SystemClock(),
     ) {
         $this->resource = new RemoteJoseResource($client, $requestFactory, $configuration->maximumResponseBytes);
         $this->cacheKey = 'epicrypt:jwks:' . hash('sha256', $configuration->issuer . "\0" . ($configuration->jwksUri ?? 'discovery'));
@@ -31,23 +34,35 @@ final readonly class RemoteJwks
     public function load(bool $forceRefresh = false): array
     {
         $cached = $this->cached();
-        if (!$forceRefresh && $cached !== null && $cached['freshUntil'] >= time()) {
+        $now = $this->clock->now()->getTimestamp();
+        if (!$forceRefresh && $cached !== null && $cached['freshUntil'] > $now) {
             return $cached['jwks'];
         }
 
         try {
-            [$jwks, $maxAge] = $this->fetch();
-            $ttl = max($this->configuration->minimumTtl, min($this->configuration->maximumTtl, $maxAge ?? $this->configuration->maximumTtl));
+            [$jwks, $cachePolicy] = $this->fetch();
+            if ($cachePolicy['noStore']) {
+                $this->cache?->delete($this->cacheKey);
+
+                return $jwks;
+            }
+            $ttl = $cachePolicy['noCache']
+                ? 0
+                : max($this->configuration->minimumTtl, min(
+                    $this->configuration->maximumTtl,
+                    $cachePolicy['maxAge'] ?? $this->configuration->maximumTtl,
+                ));
+            $staleTtl = $cachePolicy['noCache'] ? 0 : $this->configuration->staleTtl;
             $entry = [
                 'jwks' => $jwks,
-                'freshUntil' => time() + $ttl,
-                'staleUntil' => time() + $ttl + $this->configuration->staleTtl,
+                'freshUntil' => $now + $ttl,
+                'staleUntil' => $now + $ttl + $staleTtl,
             ];
-            $this->cache?->set($this->cacheKey, $entry, $ttl + $this->configuration->staleTtl);
+            $this->cache?->set($this->cacheKey, $entry, max(1, $ttl + $staleTtl));
 
             return $jwks;
         } catch (\Throwable $exception) {
-            if (!$forceRefresh && $cached !== null && $cached['staleUntil'] >= time()) {
+            if (!$forceRefresh && $cached !== null && $cached['staleUntil'] > $now) {
                 return $cached['jwks'];
             }
             if ($exception instanceof KeyResolutionException) {
@@ -96,7 +111,7 @@ final readonly class RemoteJwks
         return ['jwks' => ['keys' => $keys], 'freshUntil' => $entry['freshUntil'], 'staleUntil' => $entry['staleUntil']];
     }
 
-    /** @return array{array{keys: list<array<string, mixed>>}, int|null} */
+    /** @return array{array{keys: list<array<string, mixed>>}, array{maxAge: int|null, noStore: bool, noCache: bool}} */
     private function fetch(): array
     {
         $uri = $this->configuration->jwksUri;
@@ -106,9 +121,9 @@ final readonly class RemoteJwks
                 throw new KeyResolutionException('OpenID discovery metadata does not match the configured issuer.');
             }
             $uri = $metadata['jwks_uri'];
-            $this->configuration->validateUrl($uri);
+            $this->configuration->validateJwksUrl($uri);
         }
-        [$document, $maxAge] = $this->resource->fetch($uri);
+        [$document, $cachePolicy] = $this->resource->fetch($uri, jwks: true);
         $keys = $document['keys'] ?? null;
         if (!is_array($keys) || !array_is_list($keys) || count($keys) > $this->configuration->maximumKeys) {
             throw new KeyResolutionException('Remote JWKS keys collection is invalid or exceeds its bound.');
@@ -127,6 +142,6 @@ final readonly class RemoteJwks
             $normalized[] = $entry;
         }
 
-        return [['keys' => $normalized], $maxAge];
+        return [['keys' => $normalized], $cachePolicy];
     }
 }

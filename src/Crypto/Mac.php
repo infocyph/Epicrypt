@@ -35,7 +35,7 @@ final class Mac
     {
         $decodedKey = $this->decodeKey($key);
 
-        return sodium_crypto_auth_verify(Base64Url::decode($mac), $message, $decodedKey);
+        return $this->verifyAuthenticator($message, $mac, $decodedKey);
     }
 
     public function verifyWithBinaryKey(
@@ -46,22 +46,34 @@ final class Mac
     ): bool {
         $this->assertBinaryKey($key);
 
-        return sodium_crypto_auth_verify(Base64Url::decode($mac), $message, $key);
+        return $this->verifyAuthenticator($message, $mac, $key);
     }
 
-    private function assertBinaryKey(string $key): void
+    private function assertBinaryKey(#[\SensitiveParameter] string $key): void
     {
         if (strlen($key) !== SODIUM_CRYPTO_AUTH_KEYBYTES) {
             throw new InvalidKeyException('MAC key must be 32 bytes.');
         }
     }
 
-    private function decodeKey(string $key): string
+    private function decodeKey(#[\SensitiveParameter] string $key): string
     {
         try {
             return BinaryKey::fixedLength($key, false, SODIUM_CRYPTO_AUTH_KEYBYTES, 'MAC key');
         } catch (InvalidKeyException $e) {
             throw new InvalidKeyException('MAC key must be 32 bytes.', 0, $e);
         }
+    }
+
+    private function verifyAuthenticator(string $message, string $mac, #[\SensitiveParameter] string $key): bool
+    {
+        try {
+            $decoded = Base64Url::decode($mac);
+        } catch (\Throwable) {
+            return false;
+        }
+
+        return strlen($decoded) === SODIUM_CRYPTO_AUTH_BYTES
+            && sodium_crypto_auth_verify($decoded, $message, $key);
     }
 }

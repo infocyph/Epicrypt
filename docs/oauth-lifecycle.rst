@@ -26,7 +26,7 @@ configuration in production. Give resource servers only the public key.
 
    declare(strict_types=1);
 
-   use Infocyph\Epicrypt\Certificate\Enum\OpenSslKeyType;
+   use Infocyph\Epicrypt\Certificate\Enum\OpenSslCurveName;
    use Infocyph\Epicrypt\Certificate\KeyPairGenerator;
    use Infocyph\Epicrypt\Token\Jwt\AsymmetricJwt;
    use Infocyph\Epicrypt\Token\Jwt\JwtClaims;
@@ -35,7 +35,7 @@ configuration in production. Give resource servers only the public key.
    use Infocyph\Epicrypt\Token\Opaque\RefreshTokenManager;
 
    // Provision once; production processes load these values from secret storage.
-   $signingKeys = KeyPairGenerator::openSsl(type: OpenSslKeyType::EC)->generate();
+   $signingKeys = KeyPairGenerator::ec(OpenSslCurveName::PRIME256V1)->generate();
    $accessTokenIssuer = AsymmetricJwt::issuer(
        $signingKeys['private'],
        type: 'at+jwt',

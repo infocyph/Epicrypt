@@ -17,8 +17,12 @@ final class Pem
         return $isBase64Url ? Base64Url::decode($value) : $value;
     }
 
-    public static function requirePrivateKeyResource(string $privateKey, ?string $passphrase = null): \OpenSSLAsymmetricKey
-    {
+    public static function requirePrivateKeyResource(
+        #[\SensitiveParameter]
+        string $privateKey,
+        #[\SensitiveParameter]
+        ?string $passphrase = null,
+    ): \OpenSSLAsymmetricKey {
         $resource = openssl_pkey_get_private($privateKey, $passphrase ?? '');
         if ($resource === false) {
             throw new ConfigurationException('Unable to load private key.');

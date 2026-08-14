@@ -3,7 +3,6 @@
 declare(strict_types=1);
 
 use Infocyph\Epicrypt\Certificate\Enum\OpenSslCurveName;
-use Infocyph\Epicrypt\Certificate\Enum\OpenSslKeyType;
 use Infocyph\Epicrypt\Certificate\Enum\OpenSslRsaBits;
 use Infocyph\Epicrypt\Certificate\KeyPairGenerator;
 use Infocyph\Epicrypt\Internal\Base64Url;
@@ -45,35 +44,14 @@ function readDocument(string $path): array
 /** @return array{private: string, public: string} */
 function generateEcPair(OpenSslCurveName $curve): array
 {
-    return normalizePrivateKey(KeyPairGenerator::openSsl(
-        OpenSslRsaBits::BITS_3072,
-        OpenSslKeyType::EC,
-        $curve,
-    )->generate());
-}
-
-/**
- * Converts the generator's empty-passphrase PKCS#8 output into the unencrypted
- * PKCS#8 representation required by the independent WebCrypto importer.
- *
- * @param array{private: string, public: string} $pair
- * @return array{private: string, public: string}
- */
-function normalizePrivateKey(array $pair): array
-{
-    $resource = openssl_pkey_get_private($pair['private'], '');
-    if ($resource === false || !openssl_pkey_export($resource, $privateKey, null) || !is_string($privateKey)) {
-        throw new RuntimeException('Unable to normalize an interoperability private key.');
-    }
-
-    return ['private' => $privateKey, 'public' => $pair['public']];
+    return KeyPairGenerator::ec($curve)->generate();
 }
 
 /** @return array<string, mixed> */
 function produceFixtures(): array
 {
     $jwks = new Jwks();
-    $rsa = normalizePrivateKey(KeyPairGenerator::openSsl(OpenSslRsaBits::BITS_2048)->generate());
+    $rsa = KeyPairGenerator::rsa(OpenSslRsaBits::BITS_2048)->generate();
     $ec = [
         'ES256' => generateEcPair(OpenSslCurveName::PRIME256V1),
         'ES384' => generateEcPair(OpenSslCurveName::SECP384R1),

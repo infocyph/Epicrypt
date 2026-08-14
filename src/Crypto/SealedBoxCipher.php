@@ -46,7 +46,7 @@ final class SealedBoxCipher
         return $plaintext;
     }
 
-    public function encrypt(string $plaintext, string $publicKey): string
+    public function encrypt(#[\SensitiveParameter] string $plaintext, string $publicKey): string
     {
         try {
             return $this->encryptWithBinaryKey($plaintext, Base64Url::decode($publicKey));
@@ -57,7 +57,7 @@ final class SealedBoxCipher
         }
     }
 
-    public function encryptWithBinaryKey(string $plaintext, string $publicKey): string
+    public function encryptWithBinaryKey(#[\SensitiveParameter] string $plaintext, string $publicKey): string
     {
         try {
             $publicKey = BinaryKey::fixedLength($publicKey, true, SODIUM_CRYPTO_BOX_PUBLICKEYBYTES, 'Recipient public key');

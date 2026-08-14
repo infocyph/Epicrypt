@@ -16,7 +16,7 @@ final class SecretBoxCipher
 {
     public const string ALGORITHM_ID = 'secretbox';
 
-    public function decrypt(string $ciphertext, string $key): string
+    public function decrypt(string $ciphertext, #[\SensitiveParameter] string $key): string
     {
         return $this->decryptWithBinaryKey($ciphertext, $this->decodeKey($key, 'Decryption'));
     }
@@ -25,13 +25,19 @@ final class SecretBoxCipher
     {
         $this->assertBinaryKey($key, 'Decryption');
         [$encodedNonce, $encodedCipher] = $this->splitPayload($ciphertext);
-        $nonce = Base64Url::decode($encodedNonce);
+
+        try {
+            $nonce = Base64Url::decode($encodedNonce);
+            $encrypted = Base64Url::decode($encodedCipher);
+        } catch (\Throwable $exception) {
+            throw new DecryptionException('Invalid secret-box payload encoding.', 0, $exception);
+        }
         if (strlen($nonce) !== SODIUM_CRYPTO_SECRETBOX_NONCEBYTES) {
-            throw new InvalidNonceException(sprintf('Nonce must be %d bytes.', SODIUM_CRYPTO_SECRETBOX_NONCEBYTES));
+            throw new DecryptionException('Invalid secret-box payload nonce length.');
         }
 
         $plaintext = sodium_crypto_secretbox_open(
-            Base64Url::decode($encodedCipher),
+            $encrypted,
             $nonce,
             $key,
         );
@@ -43,16 +49,20 @@ final class SecretBoxCipher
         return $plaintext;
     }
 
-    public function encrypt(string $plaintext, #[\SensitiveParameter] string $key, ?string $keyId = null): string
-    {
-        return $this->encryptWithBinaryKey($plaintext, $this->decodeKey($key, 'Encryption'), $keyId);
-    }
-
-    public function encryptWithBinaryKey(
+    public function encrypt(
+        #[\SensitiveParameter]
         string $plaintext,
         #[\SensitiveParameter]
         string $key,
-        ?string $keyId = null,
+    ): string {
+        return $this->encryptWithBinaryKey($plaintext, $this->decodeKey($key, 'Encryption'));
+    }
+
+    public function encryptWithBinaryKey(
+        #[\SensitiveParameter]
+        string $plaintext,
+        #[\SensitiveParameter]
+        string $key,
         ?string $nonce = null,
     ): string {
         $this->assertBinaryKey($key, 'Encryption');
@@ -63,39 +73,24 @@ final class SecretBoxCipher
                 SODIUM_CRYPTO_SECRETBOX_NONCEBYTES,
             ));
         }
-        if ($keyId !== null && preg_match('/\A[A-Za-z0-9_-]{1,128}\z/D', $keyId) !== 1) {
-            throw new InvalidKeyException('Key id must be a Base64URL-safe identifier.');
-        }
-
         $ciphertext = sodium_crypto_secretbox($plaintext, $nonce, $key);
 
-        return VersionedPayload::encodeCompact(
+        return VersionedPayload::encodePrimitive(
             EncryptedPayloadVersion::V2->value,
             self::ALGORITHM_ID,
-            $keyId,
             Base64Url::encode($nonce),
             Base64Url::encode($ciphertext),
         );
     }
 
-    public function parseKeyId(string $ciphertext): ?string
-    {
-        $compactPayload = VersionedPayload::parseCompact($ciphertext, EncryptedPayloadVersion::V2->value);
-        if ($compactPayload === null || $compactPayload->algorithm !== self::ALGORITHM_ID) {
-            return null;
-        }
-
-        return $compactPayload->keyId;
-    }
-
-    private function assertBinaryKey(string $key, string $operation): void
+    private function assertBinaryKey(#[\SensitiveParameter] string $key, string $operation): void
     {
         if (strlen($key) !== SODIUM_CRYPTO_SECRETBOX_KEYBYTES) {
             throw new InvalidKeyException(sprintf('%s key must be 32 bytes.', $operation));
         }
     }
 
-    private function decodeKey(string $key, string $operation): string
+    private function decodeKey(#[\SensitiveParameter] string $key, string $operation): string
     {
         try {
             return BinaryKey::fixedLength(
@@ -114,15 +109,15 @@ final class SecretBoxCipher
      */
     private function splitPayload(string $ciphertext): array
     {
-        $compactPayload = VersionedPayload::parseCompact($ciphertext, EncryptedPayloadVersion::V2->value);
-        if ($compactPayload === null) {
+        $payload = VersionedPayload::parsePrimitive($ciphertext, EncryptedPayloadVersion::V2->value);
+        if ($payload === null) {
             throw new DecryptionException('Invalid ciphertext format.');
         }
 
-        if ($compactPayload->algorithm !== self::ALGORITHM_ID) {
+        if ($payload['algorithm'] !== self::ALGORITHM_ID) {
             throw new DecryptionException('Unsupported payload algorithm.');
         }
 
-        return [$compactPayload->nonce, $compactPayload->ciphertext];
+        return [$payload['nonce'], $payload['ciphertext']];
     }
 }

@@ -9,6 +9,7 @@ final readonly class PasswordVerificationResult
     public function __construct(
         public bool $verified,
         public bool $needsRehash,
+        #[\SensitiveParameter]
         public ?string $rehashedHash = null,
     ) {}
 }

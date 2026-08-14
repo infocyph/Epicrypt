@@ -36,7 +36,7 @@ final class PasswordStrength
         return max(0, min($score, 100));
     }
 
-    private function commonPatternPenalty(string $password): int
+    private function commonPatternPenalty(#[\SensitiveParameter] string $password): int
     {
         $lower = strtolower($password);
         $patterns = ['password', 'welcome', 'admin', 'qwerty', 'letmein', '123456', 'iloveyou'];
@@ -49,7 +49,7 @@ final class PasswordStrength
         return 0;
     }
 
-    private function repetitionPenalty(string $password): int
+    private function repetitionPenalty(#[\SensitiveParameter] string $password): int
     {
         $counts = count_chars($password, 1);
         $penalty = 0;
@@ -62,7 +62,7 @@ final class PasswordStrength
         return min($penalty, 20);
     }
 
-    private function sequentialPenalty(string $password): int
+    private function sequentialPenalty(#[\SensitiveParameter] string $password): int
     {
         $lower = strtolower($password);
         $sequences = ['abcdefghijklmnopqrstuvwxyz', '0123456789', 'qwertyuiopasdfghjklzxcvbnm'];

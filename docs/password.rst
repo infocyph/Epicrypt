@@ -142,10 +142,15 @@ in a secret manager, separate from the database.
    ]);
    $wrapped = $manager->wrap($serialized, $masterSecret);
 
-   $secret = $serializer->unserialize($manager->unwrap($wrapped, $masterSecret));
+   $secret = $serializer->deserialize($manager->unwrap($wrapped, $masterSecret));
 
 Use ``KeyRing`` with ``KeyPurpose::SECRET_WRAPPING`` for managed master-secret
-rotation.
+rotation. KeyRing-wrapped values always carry an authenticated ``kid``;
+unwrapping never scans the ring when it is missing or unknown. The first key in
+a manually ordered migration list is the primary and later keys are reported
+as fallbacks. Use ``wrapWithBinaryKey()``/``unwrapWithBinaryKey()`` and the
+``*BinaryKey*`` rotation methods only when the caller truly owns raw 32-byte
+keys; ordinary methods use Base64URL key material.
 
 Explicit algorithm selection
 ----------------------------
@@ -170,3 +175,7 @@ specific compatibility requirement and retain the default cost validation.
 
 Use the default Argon2id hasher as the target of ``verifyAndRehash()`` to move
 accounts away from a compatible legacy hash after a successful login.
+
+Password policy character classes are deliberately ASCII semantics. With
+``includeAmbiguous: false``, the exact excluded set is ``0O1IlL``; generation
+and validation use the same set.

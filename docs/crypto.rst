@@ -89,7 +89,7 @@ the immutable merchant record and schema version.
    $aad = 'merchant=1847;field=provider-token;schema=1';
    $cipher = new AeadCipher(); // XChaCha20-Poly1305
 
-   $storedCiphertext = $cipher->encrypt($providerToken, $key, $aad, keyId: 'merchant-2026-08');
+   $storedCiphertext = $cipher->encrypt($providerToken, $key, $aad);
    $restoredToken = $cipher->decrypt($storedCiphertext, $key, $aad);
 
 Explicit selection is reserved for protocol interoperability:

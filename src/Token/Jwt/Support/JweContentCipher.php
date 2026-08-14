@@ -44,7 +44,7 @@ final class JweContentCipher
         return ['ciphertext' => $ciphertext, 'iv' => $iv, 'tag' => $tag];
     }
 
-    private function requireKey(string $cek): void
+    private function requireKey(#[\SensitiveParameter] string $cek): void
     {
         if (strlen($cek) !== 32) {
             throw new InvalidTokenException('JWE A256GCM requires a 256-bit content-encryption key.');

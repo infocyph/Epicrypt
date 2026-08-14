@@ -6,7 +6,7 @@ namespace Infocyph\Epicrypt\Token\Jwt;
 
 interface JwtReplayStoreInterface
 {
-    public function consume(string $issuer, string $jwtId, int $expiresAt): bool;
+    public function consume(string $namespace, string $tokenId, int $expiresAt): bool;
 
-    public function isRevoked(string $issuer, string $jwtId, int $expiresAt): bool;
+    public function isRevoked(string $namespace, string $tokenId, int $expiresAt): bool;
 }

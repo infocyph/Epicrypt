@@ -8,132 +8,139 @@ use Infocyph\Epicrypt\Exception\Token\SignatureEncodingException;
 
 final class EcdsaSignatureConverter
 {
-    private string $asn1BigIntLimit = '7f';
-
-    private string $asn1Int = '02';
-
-    private string $asn1Length2Byte = '81';
-
-    private int $asn1MaxSingleByte = 128;
-
-    private string $asn1NegativeInteger = '00';
-
-    private string $asn1Seq = '30';
-
-    private int $byteSize = 2;
-
-    /**
-     * Convert ASN1 string to JOSE signature.
-     *
-     * @throws SignatureEncodingException
-     */
     public function fromAsn1(string $signature, int $length): string
     {
-        $message = bin2hex($signature);
-        $position = 0;
-
-        if ($this->asn1Seq !== $this->readAsn1Content($message, $position, $this->byteSize)) {
-            throw new SignatureEncodingException('Invalid data. Should start with a sequence.');
+        if ($length < 2 || $length % 2 !== 0) {
+            throw new SignatureEncodingException('Invalid JOSE signature width.');
         }
 
-        if ($this->asn1Length2Byte === $this->readAsn1Content($message, $position, $this->byteSize)) {
-            $position += $this->byteSize;
+        $offset = 0;
+        if ($this->readByte($signature, $offset) !== 0x30) {
+            throw new SignatureEncodingException('ECDSA signature must contain one DER sequence.');
         }
 
-        $pointR = $this->retrievePositiveInteger($this->readAsn1Integer($message, $position));
-        $pointS = $this->retrievePositiveInteger($this->readAsn1Integer($message, $position));
-
-        $bin = hex2bin(str_pad($pointR, $length, '0', STR_PAD_LEFT) . str_pad($pointS, $length, '0', STR_PAD_LEFT));
-        if (!is_string($bin)) {
-            throw new SignatureEncodingException('Unable to parse the data.');
+        $sequenceLength = $this->readLength($signature, $offset);
+        if ($sequenceLength !== strlen($signature) - $offset) {
+            throw new SignatureEncodingException('ECDSA DER sequence length is invalid.');
         }
 
-        return $bin;
+        $coordinateWidth = intdiv($length, 2);
+        $r = $this->readPositiveInteger($signature, $offset, $coordinateWidth);
+        $s = $this->readPositiveInteger($signature, $offset, $coordinateWidth);
+        if ($offset !== strlen($signature)) {
+            throw new SignatureEncodingException('ECDSA DER signature contains trailing data.');
+        }
+
+        return str_pad($r, $coordinateWidth, "\0", STR_PAD_LEFT)
+            . str_pad($s, $coordinateWidth, "\0", STR_PAD_LEFT);
     }
 
-    /**
-     * Convert JOSE signature to ASN1 string.
-     *
-     * @throws SignatureEncodingException
-     */
     public function toAsn1(string $signature, int $length): string
     {
-        $signature = bin2hex($signature);
-
-        if ($this->octetLength($signature) !== $length) {
+        if ($length < 2 || $length % 2 !== 0 || strlen($signature) !== $length) {
             throw new SignatureEncodingException('Invalid signature length.');
         }
 
-        $pointR = $this->preparePositiveInteger(substr($signature, 0, $length));
-        $pointS = $this->preparePositiveInteger(substr($signature, $length));
+        $coordinateWidth = intdiv($length, 2);
+        $r = $this->encodePositiveInteger(substr($signature, 0, $coordinateWidth));
+        $s = $this->encodePositiveInteger(substr($signature, $coordinateWidth));
+        $body = "\x02" . $this->encodeLength(strlen($r)) . $r
+            . "\x02" . $this->encodeLength(strlen($s)) . $s;
 
-        $lengthR = $this->octetLength($pointR);
-        $lengthS = $this->octetLength($pointS);
-        $totalLength = $lengthR + $lengthS + $this->byteSize + $this->byteSize;
-        $lengthPrefix = $totalLength > $this->asn1MaxSingleByte ? $this->asn1Length2Byte : '';
-
-        $bin = hex2bin(
-            $this->asn1Seq
-            . $lengthPrefix . dechex($totalLength)
-            . $this->asn1Int . dechex($lengthR) . $pointR
-            . $this->asn1Int . dechex($lengthS) . $pointS,
-        );
-
-        if (!is_string($bin)) {
-            throw new SignatureEncodingException('Data parsing failed.');
-        }
-
-        return $bin;
+        return "\x30" . $this->encodeLength(strlen($body)) . $body;
     }
 
-    private function octetLength(string $data): int
+    private function encodeLength(int $length): string
     {
-        return (int) (strlen($data) / $this->byteSize);
-    }
-
-    private function preparePositiveInteger(string $data): string
-    {
-        if (substr($data, 0, $this->byteSize) > $this->asn1BigIntLimit) {
-            return $this->asn1NegativeInteger . $data;
+        if ($length < 0x80) {
+            return chr($length);
+        }
+        if ($length <= 0xff) {
+            return "\x81" . chr($length);
         }
 
-        while (str_starts_with($data, $this->asn1NegativeInteger)
-            && substr($data, 2, $this->byteSize) <= $this->asn1BigIntLimit) {
-            $data = substr($data, 2);
-        }
-
-        return $data;
+        return "\x82" . pack('n', $length);
     }
 
-    private function readAsn1Content(string $message, int &$position, int $length): string
+    private function encodePositiveInteger(string $coordinate): string
     {
-        $content = substr($message, $position, $length);
-        $position += $length;
-
-        return $content;
-    }
-
-    /**
-     * @throws SignatureEncodingException
-     */
-    private function readAsn1Integer(string $message, int &$position): string
-    {
-        if ($this->asn1Int !== $this->readAsn1Content($message, $position, $this->byteSize)) {
-            throw new SignatureEncodingException('Invalid data. Should contain an integer.');
+        $coordinate = ltrim($coordinate, "\0");
+        if ($coordinate === '') {
+            $coordinate = "\0";
+        }
+        if ((ord($coordinate[0]) & 0x80) !== 0) {
+            return "\0" . $coordinate;
         }
 
-        $length = (int) hexdec($this->readAsn1Content($message, $position, $this->byteSize));
-
-        return $this->readAsn1Content($message, $position, $length * $this->byteSize);
+        return $coordinate;
     }
 
-    private function retrievePositiveInteger(string $data): string
+    private function readByte(string $data, int &$offset): int
     {
-        while (str_starts_with($data, $this->asn1NegativeInteger)
-            && substr($data, 2, $this->byteSize) > $this->asn1BigIntLimit) {
-            $data = substr($data, 2);
+        if (!isset($data[$offset])) {
+            throw new SignatureEncodingException('ECDSA DER signature is truncated.');
         }
 
-        return $data;
+        return ord($data[$offset++]);
+    }
+
+    private function readLength(string $data, int &$offset): int
+    {
+        $first = $this->readByte($data, $offset);
+        if ($first < 0x80) {
+            return $first;
+        }
+
+        $octets = $first & 0x7f;
+        if ($octets < 1 || $octets > 2) {
+            throw new SignatureEncodingException('ECDSA DER length encoding is unsupported.');
+        }
+
+        $length = 0;
+        for ($index = 0; $index < $octets; $index++) {
+            $next = $this->readByte($data, $offset);
+            if ($index === 0 && $next === 0) {
+                throw new SignatureEncodingException('ECDSA DER length is not minimally encoded.');
+            }
+            $length = ($length << 8) | $next;
+        }
+        if ($length < 0x80 || ($octets === 2 && $length <= 0xff)) {
+            throw new SignatureEncodingException('ECDSA DER length is not minimally encoded.');
+        }
+
+        return $length;
+    }
+
+    private function readPositiveInteger(string $data, int &$offset, int $coordinateWidth): string
+    {
+        if ($this->readByte($data, $offset) !== 0x02) {
+            throw new SignatureEncodingException('ECDSA DER sequence must contain exactly two integers.');
+        }
+
+        $length = $this->readLength($data, $offset);
+        if ($length < 1 || $length > strlen($data) - $offset) {
+            throw new SignatureEncodingException('ECDSA DER integer length is invalid.');
+        }
+
+        $integer = substr($data, $offset, $length);
+        $offset += $length;
+        $first = ord($integer[0]);
+        if (($first & 0x80) !== 0) {
+            throw new SignatureEncodingException('ECDSA DER integers must be positive.');
+        }
+        if ($first === 0 && $length > 1) {
+            if ((ord($integer[1]) & 0x80) === 0) {
+                throw new SignatureEncodingException('ECDSA DER integer is not minimally encoded.');
+            }
+            $integer = substr($integer, 1);
+        }
+        if ($integer === '' || trim($integer, "\0") === '') {
+            throw new SignatureEncodingException('ECDSA DER integers must be greater than zero.');
+        }
+        if (strlen($integer) > $coordinateWidth) {
+            throw new SignatureEncodingException('ECDSA DER integer exceeds the selected curve width.');
+        }
+
+        return $integer;
     }
 }

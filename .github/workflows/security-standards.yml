@@ -18,7 +18,7 @@ jobs:
     with:
       php_versions: '["8.4","8.5"]'
       dependency_versions: '["prefer-lowest","prefer-stable"]'
-      php_extensions: "hash, json, mbstring, openssl, sodium"
+      php_extensions: "hash, json, openssl, sodium"
       composer_flags: ""
       phpstan_memory_limit: "1G"
       psalm_threads: "1"
@@ -139,6 +139,12 @@ jobs:
             classes: 'Infocyph\Epicrypt\Token\Jwt\AsymmetricJwt,Infocyph\Epicrypt\Token\Jwt\DpopProof,Infocyph\Epicrypt\Token\Jwt\JwtPolicy,Infocyph\Epicrypt\Token\Jwt\SymmetricJwt'
           - shard: refresh-token
             classes: 'Infocyph\Epicrypt\Token\Opaque\OpaqueToken,Infocyph\Epicrypt\Token\Opaque\RefreshTokenGrant,Infocyph\Epicrypt\Token\Opaque\RefreshTokenManager,Infocyph\Epicrypt\Token\Opaque\RefreshTokenRecord'
+          - shard: signed-helpers
+            classes: 'Infocyph\Epicrypt\Internal\SecurityPolicy,Infocyph\Epicrypt\Internal\SignedPayloadCodec,Infocyph\Epicrypt\Security\SignedUrl,Infocyph\Epicrypt\Security\Support\AbstractPurposeToken'
+          - shard: primitive-verification
+            classes: 'Infocyph\Epicrypt\Crypto\Mac,Infocyph\Epicrypt\Crypto\SecretStream,Infocyph\Epicrypt\Crypto\Signature,Infocyph\Epicrypt\Internal\EcdsaSignatureConverter'
+          - shard: remote-jose
+            classes: 'Infocyph\Epicrypt\Token\Jwt\RemoteJwks,Infocyph\Epicrypt\Token\Jwt\RemoteJwksConfiguration,Infocyph\Epicrypt\Token\Jwt\Support\JweKeyManager,Infocyph\Epicrypt\Token\Jwt\Support\RemoteJoseResource'
     steps:
       - uses: actions/checkout@v7
       - uses: shivammathur/setup-php@v2
@@ -151,20 +157,22 @@ jobs:
           fail-fast: true
       - name: Install dependencies
         run: composer install --no-interaction --no-progress --prefer-dist
-      - name: Apply the pinned PHPUnit 14 coverage compatibility patch
-        run: |
-          test "$(composer show pestphp/pest-plugin-mutate --format=json | jq --raw-output '.versions[0]')" = "v5.0.1"
-          patch --batch --forward --strip=1 --directory=vendor/pestphp/pest-plugin-mutate < .github/patches/pest-mutate-phpunit14.diff
       - name: Restore mutation-generation cache
         uses: actions/cache@v5
         with:
           path: vendor/pestphp/pest-plugin-mutate/.temp
-          key: "pest-mutate-${{ runner.os }}-php84-${{ matrix.shard }}-${{ hashFiles('composer.lock', '.github/patches/pest-mutate-phpunit14.diff', 'src/**/*.php') }}"
+          key: "pest-mutate-${{ runner.os }}-php84-${{ matrix.shard }}-${{ hashFiles('composer.json', 'composer.lock', 'src/**/*.php') }}"
           restore-keys: |
             pest-mutate-${{ runner.os }}-php84-${{ matrix.shard }}-
-      - name: Materialize the PHPForge Pest template for mutation workers
-        run: cp vendor/infocyph/phpforge/resources/pest.xml pest.xml
+      - name: Resolve the PHPForge Pest template outside the project root
+        run: |
+          sed \
+            -e "s#vendor/phpunit/phpunit/phpunit.xsd#$GITHUB_WORKSPACE/vendor/phpunit/phpunit/phpunit.xsd#" \
+            -e "s#bootstrap=\"vendor/autoload.php\"#bootstrap=\"$GITHUB_WORKSPACE/vendor/autoload.php\"#" \
+            -e "s#<directory>./tests</directory>#<directory>$GITHUB_WORKSPACE/tests</directory>#" \
+            -e "s#<directory suffix=\".php\">./src</directory>#<directory suffix=\".php\">$GITHUB_WORKSPACE/src</directory>#" \
+            vendor/infocyph/phpforge/resources/pest.xml > "$RUNNER_TEMP/pest-mutation.xml"
       - name: Enforce the measured mutation-score floor
         run: >-
-          vendor/bin/pest --configuration pest.xml --cache-directory="${{ runner.temp }}/pest-cache" --mutate --parallel --processes=4 --min=66
+          vendor/bin/pest --configuration="${{ runner.temp }}/pest-mutation.xml" --cache-directory="${{ runner.temp }}/pest-cache" --mutate --parallel --processes=4 --min=66
           --class="${{ matrix.classes }}"

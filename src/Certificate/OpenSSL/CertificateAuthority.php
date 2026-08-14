@@ -14,8 +14,10 @@ final class CertificateAuthority
     public function signCsr(
         string $csrPem,
         string $caCertificatePem,
+        #[\SensitiveParameter]
         string $caPrivateKeyPem,
         CertificateOptions $options,
+        #[\SensitiveParameter]
         ?string $passphrase = null,
     ): string {
         $caKeyResource = Pem::requirePrivateKeyResource($caPrivateKeyPem, $passphrase);

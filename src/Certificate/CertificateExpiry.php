@@ -5,9 +5,13 @@ declare(strict_types=1);
 namespace Infocyph\Epicrypt\Certificate;
 
 use Infocyph\Epicrypt\Exception\ConfigurationException;
+use Infocyph\Epicrypt\Internal\Clock\SystemClock;
+use Psr\Clock\ClockInterface;
 
-final class CertificateExpiry
+final readonly class CertificateExpiry
 {
+    public function __construct(private ClockInterface $clock = new SystemClock()) {}
+
     public function expiresAt(string $certificatePem): int
     {
         $parsed = openssl_x509_parse($certificatePem, false);
@@ -20,6 +24,10 @@ final class CertificateExpiry
 
     public function isExpired(string $certificatePem, int $leewaySeconds = 0): bool
     {
-        return time() + $leewaySeconds >= $this->expiresAt($certificatePem);
+        if ($leewaySeconds < 0) {
+            throw new ConfigurationException('Certificate expiry leeway must not be negative.');
+        }
+
+        return $this->clock->now()->getTimestamp() + $leewaySeconds >= $this->expiresAt($certificatePem);
     }
 }

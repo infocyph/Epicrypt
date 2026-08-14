@@ -11,7 +11,7 @@ final class Json
     /**
      * @return array<string, mixed>
      */
-    public static function decodeToArray(string $json): array
+    public static function decodeToArray(#[\SensitiveParameter] string $json): array
     {
         $decoded = json_decode($json, true, 512, JSON_THROW_ON_ERROR);
         if (!is_array($decoded) || array_is_list($decoded)) {
@@ -32,7 +32,7 @@ final class Json
     /**
      * @param array<string, mixed> $payload
      */
-    public static function encode(array $payload): string
+    public static function encode(#[\SensitiveParameter] array $payload): string
     {
         return json_encode($payload, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES);
     }

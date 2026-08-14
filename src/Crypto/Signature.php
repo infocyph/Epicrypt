@@ -38,12 +38,14 @@ final class Signature
     public function verify(string $message, string $signature, string $key): bool
     {
         try {
-            return $this->verifyWithBinaryKey($message, $signature, Base64Url::decode($key));
+            $publicKey = Base64Url::decode($key);
         } catch (SignatureException $exception) {
             throw $exception;
         } catch (\Throwable $exception) {
             throw new SignatureException('Public key must be a valid signing public key.', 0, $exception);
         }
+
+        return $this->verifyWithBinaryKey($message, $signature, $publicKey);
     }
 
     public function verifyWithBinaryKey(string $message, string $signature, string $key): bool
@@ -54,18 +56,20 @@ final class Signature
             throw new SignatureException('Public key must be a valid signing public key.', 0, $e);
         }
 
-        $decodedSignature = Base64Url::decode($signature);
-        if ($decodedSignature === '') {
-            throw new SignatureException('Signature must decode to non-empty bytes.');
+        try {
+            $decodedSignature = Base64Url::decode($signature);
+        } catch (\Throwable) {
+            return false;
         }
 
-        return sodium_crypto_sign_verify_detached($decodedSignature, $message, $this->requireNonEmptyKey($publicKey, 'Public key'));
+        return strlen($decodedSignature) === SODIUM_CRYPTO_SIGN_BYTES
+            && sodium_crypto_sign_verify_detached($decodedSignature, $message, $this->requireNonEmptyKey($publicKey, 'Public key'));
     }
 
     /**
      * @return non-empty-string
      */
-    private function requireNonEmptyKey(string $key, string $label): string
+    private function requireNonEmptyKey(#[\SensitiveParameter] string $key, string $label): string
     {
         if ($key === '') {
             throw new SignatureException($label . ' must not be empty.');

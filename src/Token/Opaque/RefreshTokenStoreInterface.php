@@ -9,7 +9,7 @@ interface RefreshTokenStoreInterface
     /**
      * Persist a new active record. Return false only for a digest collision.
      */
-    public function create(RefreshTokenRecord $record): bool;
+    public function create(#[\SensitiveParameter] RefreshTokenRecord $record): bool;
 
     /**
      * Revoke the family resolved from any current or retained historical token digest.
