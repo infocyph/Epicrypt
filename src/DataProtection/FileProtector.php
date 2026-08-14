@@ -11,6 +11,7 @@ use Infocyph\Epicrypt\Internal\Clock\SystemClock;
 use Infocyph\Epicrypt\Internal\Json;
 use Infocyph\Epicrypt\Security\KeyPurpose;
 use Infocyph\Epicrypt\Security\KeyRing;
+use Infocyph\Epicrypt\Security\KeyStatus;
 use Infocyph\Pathwise\FileManager\SafeFileReader;
 use Psr\Clock\ClockInterface;
 
@@ -49,6 +50,7 @@ final readonly class FileProtector
         ProtectionOptions $options,
         int $chunkSize = SecretStream::DEFAULT_CHUNK_SIZE,
     ): ProtectionResult {
+        $this->assertLocalPaths($inputPath, $outputPath);
         $createdAt = $this->clock->now()->getTimestamp();
         $prefix = $this->encodePrefix($options, $createdAt);
         new SecretStream($key, $prefix, $prefix . "\n")->encrypt($inputPath, $outputPath, $chunkSize);
@@ -65,6 +67,7 @@ final readonly class FileProtector
     public function protectWithKeyRing(
         string $inputPath,
         string $outputPath,
+        #[\SensitiveParameter]
         KeyRing $keyRing,
         ProtectionOptions $options,
         int $chunkSize = SecretStream::DEFAULT_CHUNK_SIZE,
@@ -109,6 +112,7 @@ final readonly class FileProtector
         ProtectionOptions $options,
         int $chunkSize = SecretStream::DEFAULT_CHUNK_SIZE,
     ): ProtectionResult {
+        $this->assertLocalPaths($inputPath, $outputPath);
         [$prefix, $metadata] = $this->readAndValidatePrefix($inputPath, $options);
         new SecretStream($key, $prefix, $prefix . "\n")->decrypt($inputPath, $outputPath, $chunkSize);
 
@@ -124,6 +128,7 @@ final readonly class FileProtector
     public function unprotectWithKeyRing(
         string $inputPath,
         string $outputPath,
+        #[\SensitiveParameter]
         KeyRing $keyRing,
         ProtectionOptions $options,
         int $chunkSize = SecretStream::DEFAULT_CHUNK_SIZE,
@@ -138,7 +143,27 @@ final readonly class FileProtector
             throw new DecryptionException('File key id is not eligible for decryption.');
         }
 
-        return $this->unprotect($inputPath, $outputPath, $entry->key, $options, $chunkSize);
+        $result = $this->unprotect($inputPath, $outputPath, $entry->key, $options, $chunkSize);
+
+        return new ProtectionResult(
+            $result->value,
+            $result->domain,
+            $result->purpose,
+            $result->createdAt,
+            $entry->id,
+            $entry->status === KeyStatus::FALLBACK,
+        );
+    }
+
+    private function assertLocalPaths(string $inputPath, string $outputPath): void
+    {
+        foreach ([$inputPath, $outputPath] as $path) {
+            if (preg_match('/\A[A-Za-z][A-Za-z0-9+.-]*:\/\//D', $path) === 1) {
+                throw new \Infocyph\Epicrypt\Exception\FileAccessException(
+                    'FileProtector supports local filesystem paths only.',
+                );
+            }
+        }
     }
 
     private function encodePrefix(ProtectionOptions $options, int $createdAt): string
@@ -162,9 +187,17 @@ final readonly class FileProtector
         $reader = new SafeFileReader($path);
 
         try {
-            $firstChunk = $reader->chunks(self::MAX_PREFIX_SIZE)->current();
+            $chunks = $reader->chunks(self::MAX_PREFIX_SIZE);
+            if (!$chunks->valid()) {
+                throw new DecryptionException('Invalid or truncated Epicrypt 2.0 file header.');
+            }
+            $firstChunk = $chunks->current();
         } finally {
             $reader->releaseLock();
+        }
+
+        if ($firstChunk === '') {
+            throw new DecryptionException('Invalid or truncated Epicrypt 2.0 file header.');
         }
 
         $newline = strpos($firstChunk, "\n");
@@ -178,7 +211,11 @@ final readonly class FileProtector
             throw new DecryptionException('Invalid Epicrypt 2.0 file framing.');
         }
 
-        $metadata = Json::decodeToArray(Base64Url::decode($parts[1]));
+        try {
+            $metadata = Json::decodeToArray(Base64Url::decode($parts[1]));
+        } catch (\Throwable $exception) {
+            throw new DecryptionException('Invalid Epicrypt 2.0 file metadata.', 0, $exception);
+        }
         $keys = array_keys($metadata);
         sort($keys);
         if ($keys !== ['aad', 'alg', 'created_at', 'domain', 'kid', 'purpose', 'v']

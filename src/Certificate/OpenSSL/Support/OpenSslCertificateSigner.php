@@ -15,6 +15,7 @@ final class OpenSslCertificateSigner
     public static function signAndExport(
         \OpenSSLCertificateSigningRequest|string $csr,
         \OpenSSLCertificate|string|null $caCertificate,
+        #[\SensitiveParameter]
         array|\OpenSSLAsymmetricKey|\OpenSSLCertificate|string $caPrivateKey,
         int $days,
         array $config,

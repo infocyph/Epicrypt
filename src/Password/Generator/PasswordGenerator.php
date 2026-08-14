@@ -8,19 +8,19 @@ use Infocyph\Epicrypt\Exception\Password\InvalidPasswordException;
 
 final readonly class PasswordGenerator
 {
-    private const string AMBIGUOUS_DIGIT = '01689';
+    private const string AMBIGUOUS_DIGIT = '01';
 
-    private const string AMBIGUOUS_LOWER = 'ilo';
+    private const string AMBIGUOUS_LOWER = 'l';
 
-    private const string AMBIGUOUS_UPPER = 'BIO';
+    private const string AMBIGUOUS_UPPER = 'OIL';
 
     private const string DIGIT = '23456789';
 
-    private const string LOWER = 'abcdefghjkmnpqrstuvwxyz';
+    private const string LOWER = 'abcdefghijkmnopqrstuvwxyz';
 
     private const string SYMBOL = '!@#$%^&*?.,_-+=~[]{}()';
 
-    private const string UPPER = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+    private const string UPPER = 'ABCDEFGHJKMNPQRSTUVWXYZ';
 
     public function generate(int $length = 16, PasswordPolicy $policy = new PasswordPolicy()): string
     {

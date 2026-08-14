@@ -28,7 +28,7 @@ Current suite includes:
 - JWT signing and verification per HS, RS, and ES algorithm, plus KeyRing and JWKS resolution
 - password hashing and verification per available supported algorithm
 - certificate/key generation and HKDF key exchange
-- file encryption/decryption through Pathwise 3
+- file encryption/decryption through Pathwise 3.1
 - 64 KiB, 256 KiB, and 1 MiB SecretStream chunk sizes
 
 Notes for Useful Numbers

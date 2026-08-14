@@ -45,7 +45,7 @@ final class OpaqueToken
         return hash_equals($digest, $this->hash($token));
     }
 
-    private static function assertToken(string $token): void
+    private static function assertToken(#[\SensitiveParameter] string $token): void
     {
         if (!self::isToken($token)) {
             throw new ConfigurationException(sprintf(
@@ -56,7 +56,7 @@ final class OpaqueToken
         }
     }
 
-    private static function isToken(string $token): bool
+    private static function isToken(#[\SensitiveParameter] string $token): bool
     {
         $length = strlen($token);
 

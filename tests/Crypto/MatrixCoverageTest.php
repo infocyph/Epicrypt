@@ -8,7 +8,6 @@ use Infocyph\Epicrypt\Crypto\Enum\AeadAlgorithm;
 use Infocyph\Epicrypt\Crypto\PublicKeyBoxCipher;
 use Infocyph\Epicrypt\Crypto\SealedBoxCipher;
 use Infocyph\Epicrypt\Crypto\SecretBoxCipher;
-use Infocyph\Epicrypt\Exception\ConfigurationException;
 use Infocyph\Epicrypt\Exception\Crypto\DecryptionException;
 use Infocyph\Epicrypt\Exception\Crypto\InvalidKeyException;
 use Infocyph\Epicrypt\Exception\Crypto\InvalidNonceException;
@@ -29,14 +28,15 @@ it('enforces the AEAD contract for each supported algorithm', function () {
         $ciphertext = $cipher->encrypt('aead-matrix-payload', $key, 'matrix');
         $parts = explode('.', $ciphertext);
         $corrupted = $parts;
-        $rawCiphertext = Base64Url::decode($corrupted[4]);
+        $rawCiphertext = Base64Url::decode($corrupted[3]);
         $rawCiphertext[0] = chr(ord($rawCiphertext[0]) ^ 1);
-        $corrupted[4] = Base64Url::encode($rawCiphertext);
+        $corrupted[3] = Base64Url::encode($rawCiphertext);
         $unsupported = $parts;
         $unsupported[1] = 'unsupported-aead';
         $otherAlgorithm = array_find(
             $algorithms,
-            static fn(AeadAlgorithm $candidate): bool => $candidate !== $algorithm,
+            static fn(AeadAlgorithm $candidate): bool => $candidate !== $algorithm
+                && $candidate->keyLength() === $algorithm->keyLength(),
         );
 
         expect($cipher->decrypt($ciphertext, $key, 'matrix'))->toBe('aead-matrix-payload')
@@ -102,14 +102,14 @@ it('rejects tampered nonce, tampered ciphertext and invalid base64url', function
     $parts = explode('.', $ciphertext);
 
     $tamperedNonce = $parts;
-    $tamperedNonce[3] = 'not_base64url***';
+    $tamperedNonce[2] = 'not_base64url***';
     expect(fn () => $cipher->decrypt(implode('.', $tamperedNonce), $key))
-        ->toThrow(ConfigurationException::class);
+        ->toThrow(DecryptionException::class);
 
     $tamperedCiphertext = $parts;
-    $tamperedCiphertext[4] = 'not_base64url***';
+    $tamperedCiphertext[3] = 'not_base64url***';
     expect(fn () => $cipher->decrypt(implode('.', $tamperedCiphertext), $key))
-        ->toThrow(ConfigurationException::class);
+        ->toThrow(DecryptionException::class);
 });
 
 it('supports secret-box key usage in binary and base64url modes', function () {

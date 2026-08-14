@@ -14,8 +14,14 @@ final class CsrBuilder
     /**
      * @param array<string, string> $distinguishedName
      */
-    public function build(array $distinguishedName, string $privateKey, ?string $passphrase = null, ?CertificateOptions $options = null): string
-    {
+    public function build(
+        array $distinguishedName,
+        #[\SensitiveParameter]
+        string $privateKey,
+        #[\SensitiveParameter]
+        ?string $passphrase = null,
+        ?CertificateOptions $options = null,
+    ): string {
         $privateResource = Pem::requirePrivateKeyResource($privateKey, $passphrase);
         $effectiveOptions = $options ?? new CertificateOptions();
         $tempConfigPath = OpenSslExtensionConfig::createTempConfig($effectiveOptions, $distinguishedName);

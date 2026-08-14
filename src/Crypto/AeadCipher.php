@@ -24,8 +24,12 @@ final readonly class AeadCipher
         $this->available = $algorithm->isAvailable();
     }
 
-    public function decrypt(string $ciphertext, string $key, string $aad = ''): string
-    {
+    public function decrypt(
+        string $ciphertext,
+        #[\SensitiveParameter]
+        string $key,
+        string $aad = '',
+    ): string {
         return $this->decryptWithBinaryKey(
             $ciphertext,
             $this->decodeKey($key, $this->algorithm->keyLength(), 'Decryption'),
@@ -43,12 +47,17 @@ final readonly class AeadCipher
         $this->assertBinaryKey($key, $this->algorithm->keyLength(), 'Decryption');
         [$encodedNonce, $encodedCiphertext] = $this->splitPayload($ciphertext);
 
-        $nonce = Base64Url::decode($encodedNonce);
+        try {
+            $nonce = Base64Url::decode($encodedNonce);
+            $encrypted = Base64Url::decode($encodedCiphertext);
+        } catch (\Throwable $exception) {
+            throw new DecryptionException('Invalid AEAD payload encoding.', 0, $exception);
+        }
         if (strlen($nonce) !== $this->algorithm->nonceLength()) {
-            throw new InvalidNonceException(sprintf('Nonce must be %d bytes.', $this->algorithm->nonceLength()));
+            throw new DecryptionException('Invalid AEAD payload nonce length.');
         }
 
-        $plaintext = $this->decryptRaw(Base64Url::decode($encodedCiphertext), $aad, $nonce, $key);
+        $plaintext = $this->decryptRaw($encrypted, $aad, $nonce, $key);
 
         if (!is_string($plaintext)) {
             throw new DecryptionException('AEAD decryption failed.');
@@ -58,26 +67,25 @@ final readonly class AeadCipher
     }
 
     public function encrypt(
+        #[\SensitiveParameter]
         string $plaintext,
         #[\SensitiveParameter]
         string $key,
         string $aad = '',
-        ?string $keyId = null,
     ): string {
         return $this->encryptWithBinaryKey(
             $plaintext,
             $this->decodeKey($key, $this->algorithm->keyLength(), 'Encryption'),
             $aad,
-            $keyId,
         );
     }
 
     public function encryptWithBinaryKey(
+        #[\SensitiveParameter]
         string $plaintext,
         #[\SensitiveParameter]
         string $key,
         string $aad = '',
-        ?string $keyId = null,
         ?string $nonce = null,
     ): string {
         $this->assertAlgorithmAvailability();
@@ -90,10 +98,9 @@ final readonly class AeadCipher
 
         $ciphertext = $this->encryptRaw($plaintext, $aad, $nonce, $key);
 
-        return VersionedPayload::encodeCompact(
+        return VersionedPayload::encodePrimitive(
             EncryptedPayloadVersion::V2->value,
             $this->algorithm->value,
-            $keyId,
             Base64Url::encode($nonce),
             Base64Url::encode($ciphertext),
         );
@@ -106,14 +113,14 @@ final readonly class AeadCipher
         }
     }
 
-    private function assertBinaryKey(string $key, int $expectedLength, string $operation): void
+    private function assertBinaryKey(#[\SensitiveParameter] string $key, int $expectedLength, string $operation): void
     {
         if (strlen($key) !== $expectedLength) {
             throw new InvalidKeyException(sprintf('%s key must be %d bytes.', $operation, $expectedLength));
         }
     }
 
-    private function decodeKey(string $key, int $expectedLength, string $operation): string
+    private function decodeKey(#[\SensitiveParameter] string $key, int $expectedLength, string $operation): string
     {
         try {
             return BinaryKey::fixedLength($key, false, $expectedLength, sprintf('%s key', $operation));
@@ -122,13 +129,24 @@ final readonly class AeadCipher
         }
     }
 
-    private function decryptRaw(string $ciphertext, string $aad, string $nonce, string $key): string|false
-    {
+    private function decryptRaw(
+        string $ciphertext,
+        string $aad,
+        string $nonce,
+        #[\SensitiveParameter]
+        string $key,
+    ): string|false {
         return $this->runRawOperation($ciphertext, $aad, $nonce, $key, true);
     }
 
-    private function encryptRaw(string $plaintext, string $aad, string $nonce, string $key): string
-    {
+    private function encryptRaw(
+        #[\SensitiveParameter]
+        string $plaintext,
+        string $aad,
+        string $nonce,
+        #[\SensitiveParameter]
+        string $key,
+    ): string {
         $result = $this->runRawOperation($plaintext, $aad, $nonce, $key, false);
         if (!is_string($result)) {
             throw new EncryptionException('Encryption failed.');
@@ -139,9 +157,11 @@ final readonly class AeadCipher
 
     private function runOptionalSodiumAead(
         string $prefix,
+        #[\SensitiveParameter]
         string $input,
         string $aad,
         string $nonce,
+        #[\SensitiveParameter]
         string $key,
         bool $decrypt,
     ): string|false {
@@ -154,8 +174,15 @@ final readonly class AeadCipher
         return is_string($result) ? $result : false;
     }
 
-    private function runRawOperation(string $input, string $aad, string $nonce, string $key, bool $decrypt): string|false
-    {
+    private function runRawOperation(
+        #[\SensitiveParameter]
+        string $input,
+        string $aad,
+        string $nonce,
+        #[\SensitiveParameter]
+        string $key,
+        bool $decrypt,
+    ): string|false {
         return match ($this->algorithm) {
             AeadAlgorithm::AES_256_GCM => $decrypt
                 ? sodium_crypto_aead_aes256gcm_decrypt($input, $aad, $nonce, $key)
@@ -179,15 +206,15 @@ final readonly class AeadCipher
      */
     private function splitPayload(string $ciphertext): array
     {
-        $compactPayload = VersionedPayload::parseCompact($ciphertext, EncryptedPayloadVersion::V2->value);
-        if ($compactPayload === null) {
+        $payload = VersionedPayload::parsePrimitive($ciphertext, EncryptedPayloadVersion::V2->value);
+        if ($payload === null) {
             throw new DecryptionException('Invalid ciphertext format.');
         }
 
-        if ($compactPayload->algorithm !== $this->algorithm->value) {
-            throw new DecryptionException(sprintf('Unsupported payload algorithm "%s".', $compactPayload->algorithm));
+        if ($payload['algorithm'] !== $this->algorithm->value) {
+            throw new DecryptionException(sprintf('Unsupported payload algorithm "%s".', $payload['algorithm']));
         }
 
-        return [$compactPayload->nonce, $compactPayload->ciphertext];
+        return [$payload['nonce'], $payload['ciphertext']];
     }
 }

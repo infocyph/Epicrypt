@@ -16,7 +16,7 @@ final readonly class KeyRing
     /**
      * @param list<KeyRingEntry> $entries
      */
-    public function __construct(array $entries, private ClockInterface $clock = new SystemClock())
+    public function __construct(#[\SensitiveParameter] array $entries, private ClockInterface $clock = new SystemClock())
     {
         if ($entries === []) {
             throw new ConfigurationException('Key ring must contain at least one entry.');

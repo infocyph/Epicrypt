@@ -74,26 +74,30 @@ final readonly class SecretStream
         }
     }
 
+    private function assertLocalPath(string $path): void
+    {
+        if (preg_match('/\A[A-Za-z][A-Za-z0-9+.-]*:\/\//D', $path) === 1) {
+            throw new FileAccessException('SecretStream supports local filesystem paths only.');
+        }
+    }
+
     private function assertPaths(string $inputPath, string $outputPath): void
     {
+        $this->assertLocalPath($inputPath);
+        $this->assertLocalPath($outputPath);
+
         if (!is_file($inputPath) || !is_readable($inputPath)) {
             throw new FileAccessException('Input file is not readable: ' . $inputPath);
         }
 
         $inputRealPath = realpath($inputPath);
         $outputRealPath = realpath($outputPath);
-        if ($inputRealPath !== false && $outputRealPath !== false && $inputRealPath === $outputRealPath) {
+        if ($this->pathsAreEqual($inputRealPath, $outputRealPath)) {
             throw new FileAccessException('Input and output must identify different files.');
         }
 
-        if ($outputRealPath === false) {
-            $outputDirectory = realpath(dirname($outputPath));
-            if ($inputRealPath !== false && $outputDirectory !== false) {
-                $candidate = $outputDirectory . DIRECTORY_SEPARATOR . basename($outputPath);
-                if ($candidate === $inputRealPath) {
-                    throw new FileAccessException('Input and output must identify different files.');
-                }
-            }
+        if ($outputRealPath === false && $this->unresolvedOutputMatchesInput($inputRealPath, $outputPath)) {
+            throw new FileAccessException('Input and output must identify different files.');
         }
     }
 
@@ -109,6 +113,7 @@ final readonly class SecretStream
 
     private function consumeFullFrames(
         string &$buffer,
+        #[\SensitiveParameter]
         string &$state,
         SafeFileWriter $writer,
         bool $finalSeen,
@@ -123,7 +128,7 @@ final readonly class SecretStream
         return $finalSeen;
     }
 
-    private function consumeHeader(string &$buffer): ?string
+    private function consumeHeader(#[\SensitiveParameter] string &$buffer): ?string
     {
         if (strlen($buffer) < SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_HEADERBYTES) {
             return null;
@@ -153,6 +158,7 @@ final readonly class SecretStream
     }
 
     private function decryptFrame(
+        #[\SensitiveParameter]
         string &$state,
         string $frame,
         SafeFileWriter $writer,
@@ -285,6 +291,11 @@ final readonly class SecretStream
         return [$state, $header];
     }
 
+    private function pathsAreEqual(string|false $input, string|false $output): bool
+    {
+        return $input !== false && $output !== false && $input === $output;
+    }
+
     private function replaceOutput(string $temporaryPath, string $outputPath): void
     {
         if (!file_exists($outputPath) || PHP_OS_FAMILY !== 'Windows') {
@@ -319,7 +330,19 @@ final readonly class SecretStream
         throw new FileAccessException('Unable to finalize output file: ' . $outputPath);
     }
 
-    private function writeAll(SafeFileWriter $writer, string $data): int
+    private function unresolvedOutputMatchesInput(string|false $inputRealPath, string $outputPath): bool
+    {
+        if ($inputRealPath === false) {
+            return false;
+        }
+
+        $outputDirectory = realpath(dirname($outputPath));
+
+        return $outputDirectory !== false
+            && $outputDirectory . DIRECTORY_SEPARATOR . basename($outputPath) === $inputRealPath;
+    }
+
+    private function writeAll(SafeFileWriter $writer, #[\SensitiveParameter] string $data): int
     {
         $length = strlen($data);
         $offset = 0;

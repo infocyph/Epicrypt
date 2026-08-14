@@ -11,6 +11,7 @@ use Infocyph\Epicrypt\Internal\Clock\SystemClock;
 use Infocyph\Epicrypt\Internal\Json;
 use Infocyph\Epicrypt\Security\KeyPurpose;
 use Infocyph\Epicrypt\Security\KeyRing;
+use Infocyph\Epicrypt\Security\KeyStatus;
 use Psr\Clock\ClockInterface;
 
 final readonly class EnvelopeProtector
@@ -38,6 +39,7 @@ final readonly class EnvelopeProtector
     }
 
     public function protect(
+        #[\SensitiveParameter]
         string $plaintext,
         #[\SensitiveParameter]
         string $masterKey,
@@ -47,6 +49,7 @@ final readonly class EnvelopeProtector
     }
 
     public function protectResult(
+        #[\SensitiveParameter]
         string $plaintext,
         #[\SensitiveParameter]
         string $masterKey,
@@ -56,6 +59,7 @@ final readonly class EnvelopeProtector
     }
 
     public function protectWithBinaryKeyResult(
+        #[\SensitiveParameter]
         string $plaintext,
         #[\SensitiveParameter]
         string $masterKey,
@@ -96,7 +100,9 @@ final readonly class EnvelopeProtector
     }
 
     public function protectWithKeyRing(
+        #[\SensitiveParameter]
         string $plaintext,
+        #[\SensitiveParameter]
         KeyRing $keyRing,
         ProtectionOptions $options,
     ): string {
@@ -114,6 +120,7 @@ final readonly class EnvelopeProtector
     }
 
     public function unprotect(
+        #[\SensitiveParameter]
         string $payload,
         #[\SensitiveParameter]
         string $masterKey,
@@ -123,6 +130,7 @@ final readonly class EnvelopeProtector
     }
 
     public function unprotectResult(
+        #[\SensitiveParameter]
         string $payload,
         #[\SensitiveParameter]
         string $masterKey,
@@ -132,6 +140,7 @@ final readonly class EnvelopeProtector
     }
 
     public function unprotectWithBinaryKeyResult(
+        #[\SensitiveParameter]
         string $payload,
         #[\SensitiveParameter]
         string $masterKey,
@@ -169,7 +178,9 @@ final readonly class EnvelopeProtector
     }
 
     public function unprotectWithKeyRing(
+        #[\SensitiveParameter]
         string $payload,
+        #[\SensitiveParameter]
         KeyRing $keyRing,
         ProtectionOptions $options,
     ): ProtectionResult {
@@ -187,6 +198,15 @@ final readonly class EnvelopeProtector
             throw new DecryptionException('Envelope key id is not eligible for decryption.');
         }
 
-        return $this->unprotectResult($payload, $entry->key, $options);
+        $result = $this->unprotectResult($payload, $entry->key, $options);
+
+        return new ProtectionResult(
+            $result->value,
+            $result->domain,
+            $result->purpose,
+            $result->createdAt,
+            $entry->id,
+            $entry->status === KeyStatus::FALLBACK,
+        );
     }
 }

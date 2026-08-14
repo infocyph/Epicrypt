@@ -4,22 +4,18 @@ declare(strict_types=1);
 
 namespace Infocyph\Epicrypt\Certificate;
 
+use Infocyph\Epicrypt\Certificate\Enum\CertificateDigest;
 use Infocyph\Epicrypt\Exception\ConfigurationException;
-use Infocyph\Epicrypt\Internal\HashAlgorithm;
 
 final class CertificateFingerprint
 {
-    public function fingerprint(string $certificatePem, string $algorithm = 'sha256'): string
-    {
-        try {
-            HashAlgorithm::assertSupported($algorithm);
-        } catch (\InvalidArgumentException $e) {
-            throw new ConfigurationException($e->getMessage(), 0, $e);
-        }
-
+    public function fingerprint(
+        string $certificatePem,
+        CertificateDigest $algorithm = CertificateDigest::SHA256,
+    ): string {
         $der = $this->pemToDer($certificatePem);
 
-        return hash($algorithm, $der);
+        return hash($algorithm->value, $der);
     }
 
     private function pemToDer(string $certificatePem): string

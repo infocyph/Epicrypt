@@ -8,8 +8,13 @@ use Infocyph\Epicrypt\Exception\ConfigurationException;
 
 final class CertificateKeyMatcher
 {
-    public function privateKeyMatches(string $certificatePem, string $privateKeyPem, ?string $passphrase = null): bool
-    {
+    public function privateKeyMatches(
+        string $certificatePem,
+        #[\SensitiveParameter]
+        string $privateKeyPem,
+        #[\SensitiveParameter]
+        ?string $passphrase = null,
+    ): bool {
         $privateKey = openssl_pkey_get_private($privateKeyPem, $passphrase ?? '');
         if ($privateKey === false) {
             throw new ConfigurationException('Unable to load private key.');

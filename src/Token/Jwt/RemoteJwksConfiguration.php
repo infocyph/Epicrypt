@@ -17,10 +17,17 @@ final readonly class RemoteJwksConfiguration
         public int $maximumResponseBytes = 1_048_576,
         public int $maximumKeys = 100,
         public bool $allowHttp = false,
+        /** @var list<string> */
+        public array $allowedJwksHosts = [],
     ) {
         $this->validateUrl($issuer);
+        foreach ($this->allowedJwksHosts as $host) {
+            if ($host === '' || strtolower($host) !== $host || filter_var($host, FILTER_VALIDATE_DOMAIN, FILTER_FLAG_HOSTNAME) === false) {
+                throw new ConfigurationException('Remote JWKS allowed hosts must be lowercase DNS hostnames.');
+            }
+        }
         if ($jwksUri !== null) {
-            $this->validateUrl($jwksUri);
+            $this->validateJwksUrl($jwksUri);
         }
         if ($minimumTtl < 1 || $maximumTtl < $minimumTtl || $staleTtl < 0
             || $maximumResponseBytes < 1024 || $maximumResponseBytes > 10_485_760
@@ -32,6 +39,20 @@ final readonly class RemoteJwksConfiguration
     public function discoveryUri(): string
     {
         return rtrim($this->issuer, '/') . '/.well-known/openid-configuration';
+    }
+
+    public function validateJwksUrl(string $url): void
+    {
+        $this->validateUrl($url);
+        $issuerHost = parse_url($this->issuer, PHP_URL_HOST);
+        $jwksHost = parse_url($url, PHP_URL_HOST);
+        if (!is_string($issuerHost) || !is_string($jwksHost)) {
+            throw new ConfigurationException('Remote JWKS host validation failed.');
+        }
+        $jwksHost = strtolower($jwksHost);
+        if (!hash_equals(strtolower($issuerHost), $jwksHost) && !in_array($jwksHost, $this->allowedJwksHosts, true)) {
+            throw new ConfigurationException('Remote JWKS host must match the issuer or be explicitly allowed.');
+        }
     }
 
     public function validateUrl(string $url): void

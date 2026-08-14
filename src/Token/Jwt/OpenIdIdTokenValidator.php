@@ -4,24 +4,39 @@ declare(strict_types=1);
 
 namespace Infocyph\Epicrypt\Token\Jwt;
 
+use Infocyph\Epicrypt\Exception\ConfigurationException;
 use Infocyph\Epicrypt\Exception\Token\InvalidClaimException;
 use Infocyph\Epicrypt\Internal\Base64Url;
+use Infocyph\Epicrypt\Internal\Clock\SystemClock;
 use Infocyph\Epicrypt\Token\Jwt\Enum\AsymmetricJwtAlgorithm;
+use Psr\Clock\ClockInterface;
 
-final class OpenIdIdTokenValidator
+final readonly class OpenIdIdTokenValidator
 {
+    public function __construct(private ClockInterface $clock = new SystemClock()) {}
+
     /** @param array<string, mixed> $claims */
     public function validate(
         array $claims,
         AsymmetricJwtAlgorithm $signingAlgorithm,
         string $clientId,
+        #[\SensitiveParameter]
         ?string $nonce = null,
+        #[\SensitiveParameter]
         ?string $accessToken = null,
+        #[\SensitiveParameter]
         ?string $authorizationCode = null,
+        #[\SensitiveParameter]
         ?string $state = null,
         ?int $maximumAuthenticationAge = null,
-        ?int $now = null,
     ): void {
+        if ($clientId === '' || strlen($clientId) > 255 || preg_match('/[\x00-\x1F\x7F]/', $clientId) === 1) {
+            throw new ConfigurationException('OIDC client id is invalid.');
+        }
+        if ($maximumAuthenticationAge !== null && ($maximumAuthenticationAge < 0 || $maximumAuthenticationAge > 2_678_400)) {
+            throw new ConfigurationException('OIDC maximum authentication age is invalid.');
+        }
+        $now = $this->clock->now()->getTimestamp();
         $audiences = $this->audiences($claims['aud'] ?? null);
         if (!in_array($clientId, $audiences, true)) {
             throw new InvalidClaimException('OIDC ID token audience does not contain the client id.');
@@ -35,7 +50,7 @@ final class OpenIdIdTokenValidator
         }
         if ($maximumAuthenticationAge !== null) {
             $authTime = $claims['auth_time'] ?? null;
-            if (!is_int($authTime) || $authTime > ($now ?? time()) || (($now ?? time()) - $authTime) > $maximumAuthenticationAge) {
+            if (!is_int($authTime) || $authTime > $now || ($now - $authTime) > $maximumAuthenticationAge) {
                 throw new InvalidClaimException('OIDC ID token auth_time violates maximum age.');
             }
         }
@@ -70,6 +85,7 @@ final class OpenIdIdTokenValidator
     private function validateHalfHash(
         array $claims,
         string $claim,
+        #[\SensitiveParameter]
         ?string $value,
         AsymmetricJwtAlgorithm $algorithm,
     ): void {

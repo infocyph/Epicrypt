@@ -29,6 +29,18 @@ Public refresh-token types
    The result returned to the authorization server. ``ROTATED`` includes the
    replacement token and effective grant. All other statuses contain neither.
 
+Adapter conformance
+-------------------
+
+Copy or extend ``tests/Support/RefreshTokenStoreConformance.php`` in the host
+application's integration-test suite and implement ``newStore()`` with a fresh
+adapter connected to the real production database engine. The reusable suite
+covers creation uniqueness, atomic winner/loser rotation, retained ancestor
+reuse, family and grant revocation, client and DPoP binding, scope narrowing,
+idle/absolute expiry, and replacement-digest conflicts. Also run a genuinely
+concurrent two-transaction test using the database isolation/locking strategy
+chosen by the host; an in-memory double cannot prove database concurrency.
+
 Recommended relational model
 ----------------------------
 

@@ -15,7 +15,9 @@ use Throwable;
 
 final readonly class Jws
 {
-    private const int MAX_SERIALIZED_SIZE = 1024 * 1024;
+    private const int MAX_PARTICIPANTS = 32;
+
+    private const int MAX_SERIALIZED_SIZE = 16 * 1024;
 
     private const string SIGNER = 'signer';
 
@@ -50,14 +52,20 @@ final readonly class Jws
     }
 
     /**
-     * @param non-empty-list<self> $signers
+     * @param list<self> $signers
      */
     public static function signGeneral(
+        #[\SensitiveParameter]
         string $payload,
+        #[\SensitiveParameter]
         array $signers,
         bool $detached = false,
         bool $base64Payload = true,
     ): string {
+        if ($signers === [] || count($signers) > self::MAX_PARTICIPANTS) {
+            throw new ConfigurationException('General JWS requires between 1 and 32 signers.');
+        }
+
         $signatures = [];
         $payloadPart = null;
         foreach ($signers as $signer) {
@@ -84,14 +92,20 @@ final readonly class Jws
     }
 
     /**
-     * @param non-empty-list<self> $verifiers
+     * @param list<self> $verifiers
      */
     public static function verifyGeneral(
+        #[\SensitiveParameter]
         string $jws,
+        #[\SensitiveParameter]
         array $verifiers,
         int $requiredSignatures,
+        #[\SensitiveParameter]
         ?string $detachedPayload = null,
     ): bool {
+        if ($verifiers === [] || count($verifiers) > self::MAX_PARTICIPANTS) {
+            throw new ConfigurationException('General JWS requires between 1 and 32 configured verifiers.');
+        }
         if ($requiredSignatures < 1 || $requiredSignatures > count($verifiers)) {
             throw new ConfigurationException('General JWS signature threshold is invalid.');
         }
@@ -126,6 +140,7 @@ final readonly class Jws
      * @param array<string, mixed> $protectedHeaders
      */
     public function signCompact(
+        #[\SensitiveParameter]
         string $payload,
         array $protectedHeaders = [],
         bool $detached = false,
@@ -145,6 +160,7 @@ final readonly class Jws
      * @param array<string, mixed> $unprotectedHeaders
      */
     public function signFlattened(
+        #[\SensitiveParameter]
         string $payload,
         array $protectedHeaders = [],
         array $unprotectedHeaders = [],
@@ -169,8 +185,12 @@ final readonly class Jws
         return Json::encode($document);
     }
 
-    public function verifyCompact(string $jws, ?string $detachedPayload = null): bool
-    {
+    public function verifyCompact(
+        #[\SensitiveParameter]
+        string $jws,
+        #[\SensitiveParameter]
+        ?string $detachedPayload = null,
+    ): bool {
         $this->requireMode(self::VERIFIER);
         if ($jws === '' || strlen($jws) > self::MAX_SERIALIZED_SIZE) {
             return false;
@@ -183,8 +203,12 @@ final readonly class Jws
         return $this->verifyParts($parts[0], $parts[1], $parts[2], [], $detachedPayload);
     }
 
-    public function verifyFlattened(string $jws, ?string $detachedPayload = null): bool
-    {
+    public function verifyFlattened(
+        #[\SensitiveParameter]
+        string $jws,
+        #[\SensitiveParameter]
+        ?string $detachedPayload = null,
+    ): bool {
         $this->requireMode(self::VERIFIER);
 
         try {
@@ -197,7 +221,7 @@ final readonly class Jws
     }
 
     /** @return array{signatures: non-empty-list<array<string, mixed>>, payload?: mixed} */
-    private static function decodeGeneralDocument(string $jws): array
+    private static function decodeGeneralDocument(#[\SensitiveParameter] string $jws): array
     {
         if ($jws === '' || strlen($jws) > self::MAX_SERIALIZED_SIZE) {
             throw new ConfigurationException('General JWS size is invalid.');
@@ -206,6 +230,9 @@ final readonly class Jws
         $signatures = $document['signatures'] ?? null;
         if (!is_array($signatures) || $signatures === [] || !array_is_list($signatures)) {
             throw new ConfigurationException('General JWS must contain a non-empty signatures list.');
+        }
+        if (count($signatures) > self::MAX_PARTICIPANTS) {
+            throw new ConfigurationException('General JWS contains too many signatures.');
         }
         $normalized = [];
         foreach ($signatures as $signature) {
@@ -258,7 +285,7 @@ final readonly class Jws
     }
 
     /** @return array<string, mixed> */
-    private function decodeDocument(string $jws): array
+    private function decodeDocument(#[\SensitiveParameter] string $jws): array
     {
         if ($jws === '' || strlen($jws) > self::MAX_SERIALIZED_SIZE) {
             throw new ConfigurationException('JWS JSON serialization size is invalid.');
@@ -299,6 +326,7 @@ final readonly class Jws
      * @return array{string, string, string}
      */
     private function signParts(
+        #[\SensitiveParameter]
         string $payload,
         array $protectedHeaders,
         array $unprotectedHeaders,
@@ -372,46 +400,55 @@ final readonly class Jws
      * @param array<string, mixed> $document
      * @param array<string, mixed> $entry
      */
-    private function verifyDocumentEntry(array $document, array $entry, ?string $detachedPayload): bool
-    {
+    private function verifyDocumentEntry(
+        #[\SensitiveParameter]
+        array $document,
+        array $entry,
+        #[\SensitiveParameter]
+        ?string $detachedPayload,
+    ): bool {
         $protected = $entry['protected'] ?? null;
         $signature = $entry['signature'] ?? null;
         $unprotected = $entry['header'] ?? [];
         if (!is_string($protected) || $protected === '' || !is_string($signature) || $signature === '' || !is_array($unprotected)) {
             return false;
         }
-        $payload = $document['payload'] ?? null;
-        if ($payload !== null && !is_string($payload)) {
+        $hasEmbeddedPayload = array_key_exists('payload', $document);
+        $payload = $hasEmbeddedPayload ? $document['payload'] : null;
+        if ($hasEmbeddedPayload && !is_string($payload)) {
+            return false;
+        }
+        if (!$hasEmbeddedPayload && $detachedPayload === null) {
             return false;
         }
 
         return $this->verifyParts(
             $protected,
-            $payload ?? '',
+            is_string($payload) ? $payload : '',
             $signature,
             self::stringKeyArray($unprotected),
-            $payload === null ? $detachedPayload : null,
+            $hasEmbeddedPayload ? null : $detachedPayload,
         );
     }
 
     /** @param array<string, mixed> $unprotectedHeaders */
     private function verifyParts(
         string $encodedHeader,
+        #[\SensitiveParameter]
         string $payloadPart,
         string $encodedSignature,
         array $unprotectedHeaders,
+        #[\SensitiveParameter]
         ?string $detachedPayload,
     ): bool {
         try {
             $protected = JwtToken::decodeJsonObject(Base64Url::decode($encodedHeader), 'JWS protected header');
             $base64Payload = $this->validateProtectedHeaders($protected, $unprotectedHeaders);
-            if ($payloadPart === '') {
-                if ($detachedPayload === null) {
+            if ($detachedPayload !== null) {
+                if ($payloadPart !== '') {
                     return false;
                 }
                 $payloadPart = $base64Payload ? Base64Url::encode($detachedPayload) : $detachedPayload;
-            } elseif ($detachedPayload !== null) {
-                return false;
             }
 
             return $this->signature->verify($encodedHeader . '.' . $payloadPart, Base64Url::decode($encodedSignature));

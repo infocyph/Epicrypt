@@ -10,10 +10,32 @@ use Infocyph\Epicrypt\Exception\ConfigurationException;
 
 final class DiffieHellman implements KeyExchangeInterface
 {
-    public function deriveSharedSecret(string $privateKey, string $publicKey, bool $keysAreBinary): string
-    {
-        $private = Pem::decodeIfEncoded($privateKey, !$keysAreBinary);
-        $public = Pem::decodeIfEncoded($publicKey, !$keysAreBinary);
+    public function deriveSharedSecret(
+        #[\SensitiveParameter]
+        string $privateKey,
+        string $publicKey,
+    ): string {
+        return $this->derive($privateKey, $publicKey);
+    }
+
+    public function deriveSharedSecretFromBinaryKeys(
+        #[\SensitiveParameter]
+        string $privateKey,
+        string $publicKey,
+    ): string {
+        return $this->derive(
+            $this->derToPem($privateKey, 'PRIVATE KEY'),
+            $this->derToPem($publicKey, 'PUBLIC KEY'),
+        );
+    }
+
+    private function derive(
+        #[\SensitiveParameter]
+        string $privateKey,
+        string $publicKey,
+    ): string {
+        $private = $privateKey;
+        $public = $publicKey;
 
         $privateResource = Pem::requirePrivateKeyResource($private);
         $publicResource = Pem::requirePublicKeyResource($public);
@@ -24,5 +46,14 @@ final class DiffieHellman implements KeyExchangeInterface
         }
 
         return $secret;
+    }
+
+    private function derToPem(#[\SensitiveParameter] string $key, string $label): string
+    {
+        if ($key === '') {
+            throw new ConfigurationException('Binary OpenSSL key material must not be empty.');
+        }
+
+        return sprintf("-----BEGIN %s-----\n%s-----END %s-----\n", $label, chunk_split(base64_encode($key), 64, "\n"), $label);
     }
 }

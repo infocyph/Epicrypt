@@ -8,6 +8,8 @@ use Infocyph\Epicrypt\Exception\Password\InvalidPasswordException;
 
 final readonly class PasswordPolicy
 {
+    public const string AMBIGUOUS_CHARACTERS = '0O1IlL';
+
     public function __construct(
         public int $minLength = 12,
         public bool $requireUpper = true,

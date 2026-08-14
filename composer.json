@@ -19,7 +19,7 @@
         "ext-json": "*",
         "ext-openssl": "*",
         "ext-sodium": "*",
-        "infocyph/pathwise": "^3.0",
+        "infocyph/pathwise": "^3.1",
         "phpseclib/phpseclib": "^3.0",
         "psr/clock": "^1.0",
         "psr/http-client": "^1.0",
@@ -47,7 +47,8 @@
         "allow-plugins": {
             "ergebnis/composer-normalize": true,
             "infocyph/phpforge": true,
-            "pestphp/pest-plugin": true
+            "pestphp/pest-plugin": true,
+            "php-http/discovery": true
         },
         "classmap-authoritative": true,
         "optimize-autoloader": true,

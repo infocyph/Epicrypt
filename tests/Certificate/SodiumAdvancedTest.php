@@ -33,7 +33,7 @@ it('exposes validated advanced Ristretto255 operations', function () {
         ->and(fn() => $ristretto->multiplyBase('short'))->toThrow(InvalidKeyException::class);
 });
 
-it('fails explicitly without downgrading when AEGIS is unavailable', function (AeadAlgorithm $algorithm) {
+it('round trips AEGIS when available and otherwise fails without downgrading', function (AeadAlgorithm $algorithm) {
     $cipher = new AeadCipher($algorithm);
     if (getenv('EPICRYPT_REQUIRE_AEGIS') === '1') {
         expect($algorithm->isAvailable())->toBeTrue();

@@ -25,6 +25,8 @@ infrastructure rather than in the application process.
    use Infocyph\Epicrypt\Certificate\CertificateFingerprint;
    use Infocyph\Epicrypt\Certificate\CertificateKeyMatcher;
    use Infocyph\Epicrypt\Certificate\CertificateOptions;
+   use Infocyph\Epicrypt\Certificate\Enum\CertificateDigest;
+   use Infocyph\Epicrypt\Certificate\Enum\CertificatePurpose;
    use Infocyph\Epicrypt\Certificate\Enum\ExtendedKeyUsage;
    use Infocyph\Epicrypt\Certificate\Enum\KeyUsage;
    use Infocyph\Epicrypt\Certificate\KeyPairGenerator;
@@ -32,7 +34,7 @@ infrastructure rather than in the application process.
    use Infocyph\Epicrypt\Certificate\OpenSSL\CertificateBuilder;
    use Infocyph\Epicrypt\Certificate\OpenSSL\CsrBuilder;
 
-   $caKeys = KeyPairGenerator::openSsl()->generate($caPrivateKeyPassphrase);
+   $caKeys = KeyPairGenerator::rsa()->generate($caPrivateKeyPassphrase);
    $caOptions = new CertificateOptions(
        days: 3650,
        keyUsage: [KeyUsage::KEY_CERT_SIGN, KeyUsage::CRL_SIGN],
@@ -45,7 +47,7 @@ infrastructure rather than in the application process.
        options: $caOptions,
    );
 
-   $serviceKeys = KeyPairGenerator::openSsl()->generate($serviceKeyPassphrase);
+   $serviceKeys = KeyPairGenerator::rsa()->generate($serviceKeyPassphrase);
    $leafOptions = new CertificateOptions(
        days: 90,
        sanDns: ['orders.internal.example'],
@@ -69,6 +71,7 @@ infrastructure rather than in the application process.
    $chainValid = new CertificateChainVerifier()->verify(
        $serviceCertificate,
        [$caCertificate],
+       CertificatePurpose::SSL_SERVER,
    );
    $keyMatches = new CertificateKeyMatcher()->privateKeyMatches(
        $serviceCertificate,
@@ -85,11 +88,17 @@ infrastructure rather than in the application process.
 
    $deploymentFingerprint = new CertificateFingerprint()->fingerprint(
        $serviceCertificate,
+       CertificateDigest::SHA256,
    );
 
 Deploy the leaf certificate, encrypted leaf private key, and required chain;
 publish or pin the SHA-256 fingerprint through a trusted channel. Never deploy
 the CA private key with the service.
+
+Chain-purpose validation does not perform RFC 6125 hostname matching. At the
+TLS boundary, also verify the requested DNS name or IP address with the HTTP,
+TLS, or socket client that owns the connection. A valid server-purpose chain
+must never be treated as proof that the leaf identifies an arbitrary hostname.
 
 Issue a short-lived service certificate
 ----------------------------------------
@@ -110,7 +119,7 @@ production CA normally signs a CSR instead of self-signing the leaf.
    use Infocyph\Epicrypt\Certificate\KeyPairGenerator;
    use Infocyph\Epicrypt\Certificate\OpenSSL\CertificateBuilder;
 
-   $keys = KeyPairGenerator::openSsl()->generate('private-key-passphrase');
+   $keys = KeyPairGenerator::rsa()->generate('private-key-passphrase');
    $options = new CertificateOptions(
        days: 90,
        sanDns: ['api.internal.example'],
@@ -157,7 +166,7 @@ leaf policy.
    use Infocyph\Epicrypt\Certificate\OpenSSL\CertificateParser;
    use Infocyph\Epicrypt\Certificate\OpenSSL\CsrBuilder;
 
-   $leafKeys = KeyPairGenerator::openSsl()->generate();
+   $leafKeys = KeyPairGenerator::rsa()->generate();
    $options = new CertificateOptions(days: 90, sanDns: ['worker.internal.example']);
    $csr = new CsrBuilder()->build(
        ['commonName' => 'worker.internal.example'],
@@ -227,7 +236,12 @@ prove who the peer is.
 ``KeyExchange`` feeds the raw agreement secret through SHA-512 HKDF and erases
 the raw secret. Always use a non-empty, versioned, application-specific
 context. ``KeyExchange::openSsl()`` supports the same workflow with OpenSSL EC
-key pairs.
+key pairs. Normal Sodium methods consume Base64URL keys; normal OpenSSL methods
+consume PEM keys. ``deriveKey()`` returns Base64URL and ``deriveBinaryKey()``
+returns raw bytes. Use the explicitly named ``*FromBinaryKeys()`` variants only
+when the caller owns raw Sodium keys or PKCS#8 private/SPKI public DER OpenSSL
+keys. No public method
+returns the backend's raw Diffie-Hellman secret.
 
 Directional Sodium ``crypto_kx`` session keys
 ----------------------------------------------
@@ -270,12 +284,12 @@ OpenSSL ECDH with context-bound HKDF
 
    declare(strict_types=1);
 
-   use Infocyph\Epicrypt\Certificate\Enum\OpenSslKeyType;
+   use Infocyph\Epicrypt\Certificate\Enum\OpenSslCurveName;
    use Infocyph\Epicrypt\Certificate\KeyExchange;
    use Infocyph\Epicrypt\Certificate\KeyPairGenerator;
 
-   $alice = KeyPairGenerator::openSsl(type: OpenSslKeyType::EC)->generate();
-   $bob = KeyPairGenerator::openSsl(type: OpenSslKeyType::EC)->generate();
+   $alice = KeyPairGenerator::ec(OpenSslCurveName::PRIME256V1)->generate();
+   $bob = KeyPairGenerator::ec(OpenSslCurveName::PRIME256V1)->generate();
    $transcriptSalt = random_bytes(32);
    $aliceKey = KeyExchange::openSsl()->deriveBinaryKey(
        $alice['private'], $bob['public'], 32, 'orders-service/channel/v1', $transcriptSalt,
@@ -325,12 +339,8 @@ it:
    declare(strict_types=1);
 
    use Infocyph\Epicrypt\Certificate\Enum\OpenSslCurveName;
-   use Infocyph\Epicrypt\Certificate\Enum\OpenSslKeyType;
    use Infocyph\Epicrypt\Certificate\Enum\OpenSslRsaBits;
    use Infocyph\Epicrypt\Certificate\KeyPairGenerator;
 
-   $rsa4096 = KeyPairGenerator::openSsl(bits: OpenSslRsaBits::BITS_4096)->generate();
-   $p384 = KeyPairGenerator::openSsl(
-       type: OpenSslKeyType::EC,
-       curveName: OpenSslCurveName::SECP384R1,
-   )->generate();
+   $rsa4096 = KeyPairGenerator::rsa(OpenSslRsaBits::BITS_4096)->generate();
+   $p384 = KeyPairGenerator::ec(OpenSslCurveName::SECP384R1)->generate();

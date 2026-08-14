@@ -53,7 +53,7 @@ final class AesKeyWrap
         return pack('N2', 0, $value);
     }
 
-    private function decryptBlock(string $key, string $block): string
+    private function decryptBlock(#[\SensitiveParameter] string $key, string $block): string
     {
         $result = openssl_decrypt($block, 'aes-256-ecb', $key, OPENSSL_RAW_DATA | OPENSSL_ZERO_PADDING);
         if (!is_string($result) || strlen($result) !== 16) {
@@ -63,7 +63,7 @@ final class AesKeyWrap
         return $result;
     }
 
-    private function encryptBlock(string $key, string $block): string
+    private function encryptBlock(#[\SensitiveParameter] string $key, string $block): string
     {
         $result = openssl_encrypt($block, 'aes-256-ecb', $key, OPENSSL_RAW_DATA | OPENSSL_ZERO_PADDING);
         if (!is_string($result) || strlen($result) !== 16) {
@@ -73,8 +73,13 @@ final class AesKeyWrap
         return $result;
     }
 
-    private function validate(string $keyEncryptionKey, string $value, bool $wrapped): void
-    {
+    private function validate(
+        #[\SensitiveParameter]
+        string $keyEncryptionKey,
+        #[\SensitiveParameter]
+        string $value,
+        bool $wrapped,
+    ): void {
         $minimum = $wrapped ? 24 : 16;
         if (strlen($keyEncryptionKey) !== 32 || strlen($value) < $minimum || strlen($value) % 8 !== 0) {
             throw new InvalidTokenException('JWE AES key-wrap input has an invalid size.');

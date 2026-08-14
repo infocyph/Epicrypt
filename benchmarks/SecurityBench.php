@@ -36,7 +36,7 @@ final class SecurityBench
 
     public function __construct()
     {
-        $secret = 'bench-security-secret';
+        $secret = str_repeat('bench-security-secret-', 2);
         $this->signedUrl = new SignedUrl($secret);
         $this->csrf = new CsrfTokenManager($secret, 3600);
         $this->passwordResetToken = new PasswordResetToken($secret, 3600);
@@ -80,7 +80,11 @@ final class SecurityBench
     #[Bench\BeforeMethods('setUp')]
     public function benchEmailVerificationVerify(): void
     {
-        $this->emailVerificationToken->verify($this->state['emailVerificationTokenValue'], 'user@example.com');
+        $this->emailVerificationToken->verify(
+            $this->state['emailVerificationTokenValue'],
+            'bench-user',
+            'user@example.com',
+        );
     }
 
     #[Bench\BeforeMethods('setUp')]

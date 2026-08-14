@@ -10,8 +10,8 @@ use Infocyph\Epicrypt\Internal\Base64Url;
 use Infocyph\Epicrypt\Internal\Clock\SystemClock;
 use Infocyph\Epicrypt\Security\KeyPurpose;
 use Infocyph\Epicrypt\Security\KeyRing;
+use Infocyph\Epicrypt\Security\KeyStatus;
 use Psr\Clock\ClockInterface;
-use Throwable;
 
 final readonly class StringProtector
 {
@@ -36,6 +36,7 @@ final readonly class StringProtector
     }
 
     public function protect(
+        #[\SensitiveParameter]
         string $plaintext,
         #[\SensitiveParameter]
         string $key,
@@ -45,6 +46,7 @@ final readonly class StringProtector
     }
 
     public function protectResult(
+        #[\SensitiveParameter]
         string $plaintext,
         #[\SensitiveParameter]
         string $key,
@@ -54,6 +56,7 @@ final readonly class StringProtector
     }
 
     public function protectWithBinaryKey(
+        #[\SensitiveParameter]
         string $plaintext,
         #[\SensitiveParameter]
         string $key,
@@ -63,6 +66,7 @@ final readonly class StringProtector
     }
 
     public function protectWithBinaryKeyResult(
+        #[\SensitiveParameter]
         string $plaintext,
         #[\SensitiveParameter]
         string $key,
@@ -79,7 +83,9 @@ final readonly class StringProtector
     }
 
     public function protectWithKeyRing(
+        #[\SensitiveParameter]
         string $plaintext,
+        #[\SensitiveParameter]
         KeyRing $keyRing,
         ProtectionOptions $options,
     ): string {
@@ -97,6 +103,7 @@ final readonly class StringProtector
     }
 
     public function unprotect(
+        #[\SensitiveParameter]
         string $payload,
         #[\SensitiveParameter]
         string $key,
@@ -106,6 +113,7 @@ final readonly class StringProtector
     }
 
     public function unprotectResult(
+        #[\SensitiveParameter]
         string $payload,
         #[\SensitiveParameter]
         string $key,
@@ -115,6 +123,7 @@ final readonly class StringProtector
     }
 
     public function unprotectWithBinaryKey(
+        #[\SensitiveParameter]
         string $payload,
         #[\SensitiveParameter]
         string $key,
@@ -124,6 +133,7 @@ final readonly class StringProtector
     }
 
     public function unprotectWithBinaryKeyResult(
+        #[\SensitiveParameter]
         string $payload,
         #[\SensitiveParameter]
         string $key,
@@ -133,42 +143,34 @@ final readonly class StringProtector
     }
 
     public function unprotectWithKeyRing(
+        #[\SensitiveParameter]
         string $payload,
+        #[\SensitiveParameter]
         KeyRing $keyRing,
         ProtectionOptions $options,
     ): ProtectionResult {
         $keyId = ProtectedPayload::keyId($payload, self::DOMAIN, $options, $this->algorithm);
-        if ($keyId !== null) {
-            $entry = $keyRing->resolveForRead(
-                $keyId,
-                KeyPurpose::DATA_PROTECTION,
-                $this->algorithm->value,
-            );
-            if ($entry === null) {
-                throw new DecryptionException('Protected payload key id is not eligible for decryption.');
-            }
-
-            return $this->unprotectResult($payload, $entry->key, $options);
+        if ($keyId === null) {
+            throw new DecryptionException('Protected payload key id is required for KeyRing decryption.');
         }
 
-        $lastException = null;
-        foreach ($keyRing->readCandidates(KeyPurpose::DATA_PROTECTION, $this->algorithm->value) as $entry) {
-            try {
-                $result = $this->unprotectResult($payload, $entry->key, $options);
-
-                return new ProtectionResult(
-                    $result->value,
-                    $result->domain,
-                    $result->purpose,
-                    $result->createdAt,
-                    $entry->id,
-                    $entry->status !== \Infocyph\Epicrypt\Security\KeyStatus::ACTIVE,
-                );
-            } catch (Throwable $exception) {
-                $lastException = $exception;
-            }
+        $entry = $keyRing->resolveForRead(
+            $keyId,
+            KeyPurpose::DATA_PROTECTION,
+            $this->algorithm->value,
+        );
+        if ($entry === null) {
+            throw new DecryptionException('Protected payload key id is not eligible for decryption.');
         }
+        $result = $this->unprotectResult($payload, $entry->key, $options);
 
-        throw new DecryptionException('Unable to decrypt with an eligible key.', 0, $lastException);
+        return new ProtectionResult(
+            $result->value,
+            $result->domain,
+            $result->purpose,
+            $result->createdAt,
+            $entry->id,
+            $entry->status === KeyStatus::FALLBACK,
+        );
     }
 }

@@ -25,7 +25,9 @@ final readonly class JwtPolicy
         public JwtProfile $profile = JwtProfile::EPICRYPT,
         public array $requiredClaims = ['iss', 'sub', 'aud', 'exp', 'nbf', 'iat', 'jti'],
     ) {
-        if ($this->expectedIssuer === '' || $this->expectedAudience === '' || $this->expectedType === '') {
+        if (!self::validPolicyValue($this->expectedIssuer, 2048)
+            || !self::validPolicyValue($this->expectedAudience, 2048)
+            || !self::validPolicyValue($this->expectedType, 128)) {
             throw new ConfigurationException('JWT issuer, audience, and type policy values must be non-empty.');
         }
         if ($this->maximumLifetimeSeconds < 1 || $this->leewaySeconds < 0 || $this->maximumFutureIssuedAtSeconds < 0) {
@@ -155,5 +157,12 @@ final readonly class JwtPolicy
                 throw new ConfigurationException(sprintf('OAuth access-token policies must require %s.', $claim));
             }
         }
+    }
+
+    private static function validPolicyValue(string $value, int $maximumBytes): bool
+    {
+        return $value !== ''
+            && strlen($value) <= $maximumBytes
+            && preg_match('/[\x00-\x1F\x7F]/', $value) !== 1;
     }
 }

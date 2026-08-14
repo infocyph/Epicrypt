@@ -3,7 +3,6 @@
 declare(strict_types=1);
 
 use Infocyph\Epicrypt\Certificate\Enum\OpenSslCurveName;
-use Infocyph\Epicrypt\Certificate\Enum\OpenSslKeyType;
 use Infocyph\Epicrypt\Certificate\Enum\OpenSslRsaBits;
 use Infocyph\Epicrypt\Certificate\KeyPairGenerator;
 use Infocyph\Epicrypt\Exception\ConfigurationException;
@@ -43,7 +42,7 @@ it('issues and verifies every configured HS RS and ES algorithm', function () {
         expect(SymmetricJwt::verifier($key, $policy, $algorithm)->verify($token))->toBeTrue();
     }
 
-    $rsa = KeyPairGenerator::openSsl(OpenSslRsaBits::BITS_2048)->generate();
+    $rsa = KeyPairGenerator::rsa(OpenSslRsaBits::BITS_2048)->generate();
     foreach ([
         AsymmetricJwtAlgorithm::RS256,
         AsymmetricJwtAlgorithm::RS384,
@@ -63,11 +62,7 @@ it('issues and verifies every configured HS RS and ES algorithm', function () {
     ];
     foreach ($curves as $algorithmValue => $curve) {
         $algorithm = AsymmetricJwtAlgorithm::from($algorithmValue);
-        $pair = KeyPairGenerator::openSsl(
-            OpenSslRsaBits::BITS_3072,
-            OpenSslKeyType::EC,
-            $curve,
-        )->generate();
+        $pair = KeyPairGenerator::ec($curve)->generate();
         $token = AsymmetricJwt::issuer($pair['private'], 'at+jwt', algorithm: $algorithm)->issue($claims);
         expect(AsymmetricJwt::verifier($pair['public'], $policy, $algorithm)->verify($token))->toBeTrue();
     }
@@ -106,12 +101,12 @@ it('uses atomic replay consumption after successful validation', function () {
         /** @var array<string, true> */
         private array $consumed = [];
 
-        public function consume(string $issuer, string $jwtId, int $expiresAt): bool
+        public function consume(string $namespace, string $tokenId, int $expiresAt): bool
         {
             if ($expiresAt < 1) {
                 return false;
             }
-            $key = $issuer . ':' . $jwtId;
+            $key = $namespace . ':' . $tokenId;
             if (isset($this->consumed[$key])) {
                 return false;
             }
@@ -120,9 +115,9 @@ it('uses atomic replay consumption after successful validation', function () {
             return true;
         }
 
-        public function isRevoked(string $issuer, string $jwtId, int $expiresAt): bool
+        public function isRevoked(string $namespace, string $tokenId, int $expiresAt): bool
         {
-            return $issuer === '' || $jwtId === '' || $expiresAt < 1;
+            return $namespace === '' || $tokenId === '' || $expiresAt < 1;
         }
     };
     $key = random_bytes(64);
@@ -141,9 +136,9 @@ it('checks denylisted JWTs without consuming ordinary repeatable access tokens',
 
         public int $consumed = 0;
 
-        public function consume(string $issuer, string $jwtId, int $expiresAt): bool
+        public function consume(string $namespace, string $tokenId, int $expiresAt): bool
         {
-            if ($issuer === '' || $jwtId === '' || $expiresAt < 1) {
+            if ($namespace === '' || $tokenId === '' || $expiresAt < 1) {
                 return false;
             }
             $this->consumed++;
@@ -151,9 +146,9 @@ it('checks denylisted JWTs without consuming ordinary repeatable access tokens',
             return true;
         }
 
-        public function isRevoked(string $issuer, string $jwtId, int $expiresAt): bool
+        public function isRevoked(string $namespace, string $tokenId, int $expiresAt): bool
         {
-            return $expiresAt < 1 || isset($this->revoked[$issuer."\0".$jwtId]);
+            return $expiresAt < 1 || isset($this->revoked[$namespace."\0".$tokenId]);
         }
     };
     $key = random_bytes(64);
@@ -171,7 +166,7 @@ it('checks denylisted JWTs without consuming ordinary repeatable access tokens',
         ->and($store->consumed)->toBe(0);
 
     $asymmetricClaims = JwtClaims::issue('issuer', 'user', ['api'], 300);
-    $keys = KeyPairGenerator::openSsl(type: OpenSslKeyType::EC)->generate();
+    $keys = KeyPairGenerator::ec()->generate();
     $asymmetricToken = AsymmetricJwt::issuer($keys['private'], 'at+jwt')->issue($asymmetricClaims);
     $asymmetricVerifier = AsymmetricJwt::verifier($keys['public'], $policy, replayStore: $store);
     expect($asymmetricVerifier->verify($asymmetricToken))->toBeTrue()
@@ -251,7 +246,7 @@ it('supports generic JWT claim shapes and the strict OAuth access-token profile'
             'jti' => 'external-token-id',
         ], 'at+jwt'))->failureReason)->toBe(JwtFailureReason::INVALID_CLIENT_ID);
 
-    $keys = KeyPairGenerator::openSsl(type: OpenSslKeyType::EC)->generate();
+    $keys = KeyPairGenerator::ec()->generate();
     $asymmetric = AsymmetricJwt::issuer($keys['private'], 'application/at+jwt')->issue($oauthClaims);
     expect(AsymmetricJwt::verifier($keys['public'], $oauthPolicy)->verify($asymmetric))->toBeTrue();
 });

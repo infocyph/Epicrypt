@@ -41,6 +41,7 @@ final class JweKeyManager
         #[\SensitiveParameter]
         string $key,
         array $header,
+        #[\SensitiveParameter]
         ?string $sharedCek = null,
     ): array {
         $cek = $sharedCek ?? random_bytes(32);
@@ -59,8 +60,13 @@ final class JweKeyManager
      * @param array<string, mixed> $header
      * @return array{cek: string, encryptedKey: string, header: array<string, mixed>}
      */
-    private function aesGcmKw(string $key, string $cek, array $header): array
-    {
+    private function aesGcmKw(
+        #[\SensitiveParameter]
+        string $key,
+        #[\SensitiveParameter]
+        string $cek,
+        array $header,
+    ): array {
         $iv = random_bytes(12);
         $tag = '';
         $wrapped = openssl_encrypt($cek, 'aes-256-gcm', $this->symmetricKey($key), OPENSSL_RAW_DATA, $iv, $tag, '', 16);
@@ -74,8 +80,12 @@ final class JweKeyManager
     }
 
     /** @param array<string, mixed> $header */
-    private function aesGcmUnwrap(string $key, string $encryptedKey, array $header): string
-    {
+    private function aesGcmUnwrap(
+        #[\SensitiveParameter]
+        string $key,
+        string $encryptedKey,
+        array $header,
+    ): string {
         $iv = $this->headerBytes($header, 'iv', 12);
         $tag = $this->headerBytes($header, 'tag', 16);
         $cek = openssl_decrypt($encryptedKey, 'aes-256-gcm', $this->symmetricKey($key), OPENSSL_RAW_DATA, $iv, $tag);
@@ -90,12 +100,17 @@ final class JweKeyManager
      * @param array<string, mixed> $header
      * @return array{cek: string, encryptedKey: string, header: array<string, mixed>}
      */
-    private function aesKw(string $key, string $cek, array $header): array
-    {
+    private function aesKw(
+        #[\SensitiveParameter]
+        string $key,
+        #[\SensitiveParameter]
+        string $cek,
+        array $header,
+    ): array {
         return ['cek' => $cek, 'encryptedKey' => new AesKeyWrap()->wrap($this->symmetricKey($key), $cek), 'header' => $header];
     }
 
-    private function concatKdf(string $secret, string $algorithm, string $apu, string $apv): string
+    private function concatKdf(#[\SensitiveParameter] string $secret, string $algorithm, string $apu, string $apv): string
     {
         $lengthPrefixed = static fn(string $value): string => pack('N', strlen($value)) . $value;
         $otherInfo = $lengthPrefixed($algorithm) . $lengthPrefixed($apu) . $lengthPrefixed($apv) . pack('N', 256);
@@ -107,12 +122,12 @@ final class JweKeyManager
      * @param array<string, mixed> $header
      * @return array{cek: string, encryptedKey: string, header: array<string, mixed>}
      */
-    private function direct(string $key, array $header): array
+    private function direct(#[\SensitiveParameter] string $key, array $header): array
     {
         return ['cek' => $this->symmetricKey($key), 'encryptedKey' => '', 'header' => $header];
     }
 
-    private function directUnwrap(string $key, string $encryptedKey): string
+    private function directUnwrap(#[\SensitiveParameter] string $key, string $encryptedKey): string
     {
         if ($encryptedKey !== '') {
             throw new InvalidTokenException('Direct JWE must have an empty encrypted-key segment.');
@@ -122,8 +137,13 @@ final class JweKeyManager
     }
 
     /** @param array<string, mixed> $header */
-    private function ecdhUnwrap(JweKeyManagementAlgorithm $algorithm, string $privateKey, string $encryptedKey, array $header): string
-    {
+    private function ecdhUnwrap(
+        JweKeyManagementAlgorithm $algorithm,
+        #[\SensitiveParameter]
+        string $privateKey,
+        string $encryptedKey,
+        array $header,
+    ): string {
         if (strlen($privateKey) !== SODIUM_CRYPTO_BOX_SECRETKEYBYTES || !is_array($header['epk'] ?? null)) {
             throw new InvalidTokenException('ECDH-ES requires a private X25519 key and protected epk.');
         }
@@ -133,45 +153,77 @@ final class JweKeyManager
                 $epk[$name] = $value;
             }
         }
-        $public = new Jwks()->importOkpPublicKey($epk, $algorithm->value, 'X25519');
+
+        try {
+            $public = new Jwks()->importOkpPublicKey($epk, $algorithm->value, 'X25519');
+        } catch (\Throwable $exception) {
+            throw new InvalidTokenException('JWE ECDH-ES ephemeral public key is invalid.', 0, $exception);
+        }
         $secret = sodium_crypto_scalarmult($privateKey, $public);
-        [$apu, $apv] = $this->partyInfo($header);
-        $derived = $this->concatKdf($secret, $algorithm === JweKeyManagementAlgorithm::ECDH_ES ? 'A256GCM' : $algorithm->value, $apu, $apv);
-        sodium_memzero($secret);
+
+        try {
+            [$apu, $apv] = $this->partyInfo($header);
+            $derived = $this->concatKdf($secret, $algorithm === JweKeyManagementAlgorithm::ECDH_ES ? 'A256GCM' : $algorithm->value, $apu, $apv);
+        } finally {
+            sodium_memzero($secret);
+        }
         if ($algorithm === JweKeyManagementAlgorithm::ECDH_ES) {
             if ($encryptedKey !== '') {
+                sodium_memzero($derived);
+
                 throw new InvalidTokenException('Direct ECDH-ES must have an empty encrypted key.');
             }
 
             return $derived;
         }
 
-        return new AesKeyWrap()->unwrap($derived, $encryptedKey);
+        try {
+            return new AesKeyWrap()->unwrap($derived, $encryptedKey);
+        } finally {
+            sodium_memzero($derived);
+        }
     }
 
     /**
      * @param array<string, mixed> $header
      * @return array{cek: string, encryptedKey: string, header: array<string, mixed>}
      */
-    private function ecdhWrap(JweKeyManagementAlgorithm $algorithm, string $publicKey, string $cek, array $header): array
-    {
+    private function ecdhWrap(
+        JweKeyManagementAlgorithm $algorithm,
+        string $publicKey,
+        #[\SensitiveParameter]
+        string $cek,
+        array $header,
+    ): array {
         if (strlen($publicKey) !== SODIUM_CRYPTO_BOX_PUBLICKEYBYTES) {
             throw new InvalidTokenException('ECDH-ES requires a 32-byte X25519 public key.');
         }
         $ephemeralSecret = random_bytes(SODIUM_CRYPTO_BOX_SECRETKEYBYTES);
-        $ephemeralPublic = sodium_crypto_scalarmult_base($ephemeralSecret);
-        $secret = sodium_crypto_scalarmult($ephemeralSecret, $publicKey);
-        sodium_memzero($ephemeralSecret);
+
+        try {
+            $ephemeralPublic = sodium_crypto_scalarmult_base($ephemeralSecret);
+            $secret = sodium_crypto_scalarmult($ephemeralSecret, $publicKey);
+        } finally {
+            sodium_memzero($ephemeralSecret);
+        }
         $header['epk'] = new Jwks()->exportOkpPublicKey($ephemeralPublic, 'ephemeral', $algorithm->value, 'X25519');
         unset($header['epk']['kid'], $header['epk']['alg'], $header['epk']['use'], $header['epk']['key_ops']);
-        [$apu, $apv] = $this->partyInfo($header);
-        $derived = $this->concatKdf($secret, $algorithm === JweKeyManagementAlgorithm::ECDH_ES ? 'A256GCM' : $algorithm->value, $apu, $apv);
-        sodium_memzero($secret);
+
+        try {
+            [$apu, $apv] = $this->partyInfo($header);
+            $derived = $this->concatKdf($secret, $algorithm === JweKeyManagementAlgorithm::ECDH_ES ? 'A256GCM' : $algorithm->value, $apu, $apv);
+        } finally {
+            sodium_memzero($secret);
+        }
         if ($algorithm === JweKeyManagementAlgorithm::ECDH_ES) {
             return ['cek' => $derived, 'encryptedKey' => '', 'header' => $header];
         }
 
-        return ['cek' => $cek, 'encryptedKey' => new AesKeyWrap()->wrap($derived, $cek), 'header' => $header];
+        try {
+            return ['cek' => $cek, 'encryptedKey' => new AesKeyWrap()->wrap($derived, $cek), 'header' => $header];
+        } finally {
+            sodium_memzero($derived);
+        }
     }
 
     /** @param array<string, mixed> $header */
@@ -199,7 +251,11 @@ final class JweKeyManager
             throw new InvalidTokenException(sprintf('JWE %s must be Base64URL text.', $name));
         }
 
-        return Base64Url::decode($header[$name]);
+        try {
+            return Base64Url::decode($header[$name]);
+        } catch (\Throwable $exception) {
+            throw new InvalidTokenException(sprintf('JWE %s header is invalid.', $name), 0, $exception);
+        }
     }
 
     /**
@@ -211,7 +267,7 @@ final class JweKeyManager
         return [$this->optionalHeaderBytes($header, 'apu'), $this->optionalHeaderBytes($header, 'apv')];
     }
 
-    private function rsaUnwrap(string $privateKey, string $encryptedKey): string
+    private function rsaUnwrap(#[\SensitiveParameter] string $privateKey, string $encryptedKey): string
     {
         try {
             $resource = openssl_pkey_get_private($privateKey, '');
@@ -250,8 +306,12 @@ final class JweKeyManager
      * @param array<string, mixed> $header
      * @return array{cek: string, encryptedKey: string, header: array<string, mixed>}
      */
-    private function rsaWrap(string $publicKey, string $cek, array $header): array
-    {
+    private function rsaWrap(
+        string $publicKey,
+        #[\SensitiveParameter]
+        string $cek,
+        array $header,
+    ): array {
         try {
             $rsa = PublicKeyLoader::loadPublicKey($publicKey);
             if (!$rsa instanceof \phpseclib3\Crypt\RSA\PublicKey) {
@@ -280,7 +340,7 @@ final class JweKeyManager
         return ['cek' => $cek, 'encryptedKey' => $encrypted, 'header' => $header];
     }
 
-    private function symmetricKey(string $key): string
+    private function symmetricKey(#[\SensitiveParameter] string $key): string
     {
         if (strlen($key) !== 32) {
             throw new InvalidTokenException('JWE symmetric key-management requires exactly 256 bits.');

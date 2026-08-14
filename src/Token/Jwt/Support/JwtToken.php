@@ -16,7 +16,7 @@ final class JwtToken
     public const int MAX_TOKEN_SIZE = 16 * 1024;
 
     /** @return array<string, mixed> */
-    public static function decodeJsonObject(string $json, string $name): array
+    public static function decodeJsonObject(#[\SensitiveParameter] string $json, string $name): array
     {
         try {
             self::rejectDuplicateObjectKeys($json);
@@ -32,7 +32,7 @@ final class JwtToken
      * @param array<string, mixed> $payload
      * @return array{string, string}
      */
-    public static function encodeSegments(array $header, array $payload): array
+    public static function encodeSegments(array $header, #[\SensitiveParameter] array $payload): array
     {
         return [
             Base64Url::encode(Json::encode($header)),
@@ -43,7 +43,7 @@ final class JwtToken
     /**
      * @return array{string, string, string, array<string, mixed>, array<string, mixed>}
      */
-    public static function parse(string $token): array
+    public static function parse(#[\SensitiveParameter] string $token): array
     {
         if ($token === '' || strlen($token) > self::MAX_TOKEN_SIZE) {
             throw new InvalidTokenException('JWT size is invalid.');
@@ -68,7 +68,7 @@ final class JwtToken
     /**
      * @return array<string, mixed>
      */
-    private static function decodeSegment(string $encodedSegment, string $name): array
+    private static function decodeSegment(#[\SensitiveParameter] string $encodedSegment, string $name): array
     {
         try {
             return self::decodeJsonObject(Base64Url::decode($encodedSegment), $name);
@@ -77,7 +77,7 @@ final class JwtToken
         }
     }
 
-    private static function findStringEnd(string $json, int $offset): int
+    private static function findStringEnd(#[\SensitiveParameter] string $json, int $offset): int
     {
         $length = strlen($json);
         for (; $offset < $length; $offset++) {
@@ -94,7 +94,7 @@ final class JwtToken
         throw new JsonException('Unterminated JSON string.');
     }
 
-    private static function isObjectKey(string $json, int $offset, bool $insideObject): bool
+    private static function isObjectKey(#[\SensitiveParameter] string $json, int $offset, bool $insideObject): bool
     {
         $length = strlen($json);
         while ($offset < $length && ctype_space($json[$offset])) {
@@ -104,7 +104,7 @@ final class JwtToken
         return $insideObject && $offset < $length && $json[$offset] === ':';
     }
 
-    private static function rejectDuplicateObjectKeys(string $json): void
+    private static function rejectDuplicateObjectKeys(#[\SensitiveParameter] string $json): void
     {
         /** @var list<array<string, true>> $objects */
         $objects = [];

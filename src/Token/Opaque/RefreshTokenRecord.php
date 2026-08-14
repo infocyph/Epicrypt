@@ -9,6 +9,7 @@ use Infocyph\Epicrypt\Exception\ConfigurationException;
 final readonly class RefreshTokenRecord
 {
     public function __construct(
+        #[\SensitiveParameter]
         public string $digest,
         public string $familyId,
         public RefreshTokenGrant $grant,

@@ -3,7 +3,9 @@ Application security
 
 This domain provides purpose-bound application tokens, signed URLs, CSRF
 tokens, and policy-aware key rotation. These values authenticate data but do
-not make their contents secret.
+not make their contents secret. Signed application tokens and URLs use
+HMAC-SHA-512 with a minimum 32-byte secret; the algorithm is fixed rather than
+selected from untrusted input.
 
 Complete path: issue and consume a single-use password reset
 ------------------------------------------------------------
@@ -156,7 +158,7 @@ password-reset token cannot be replayed as an email-verification token.
 
    $email = new EmailVerificationToken($secret);
    $emailToken = $email->issue('user-42', 'user@example.com');
-   $emailAllowed = $email->verify($emailToken, 'user@example.com');
+   $emailAllowed = $email->verify($emailToken, 'user-42', 'user@example.com');
 
    $remember = new RememberToken($secret);
    $rememberToken = $remember->issue('user-42', 'device-a7f3');
@@ -166,7 +168,9 @@ password-reset token cannot be replayed as an email-verification token.
    $actionToken = $action->issue('user-42', 'delete-account');
    $actionAllowed = $action->verify($actionToken, 'user-42', 'delete-account');
 
-These helpers validate integrity, expiry, and expected claims. Applications
+All subject, action, email, and device bindings are mandatory at verification;
+there is no unbound convenience path. These helpers validate integrity,
+expiry, and expected claims. Applications
 must still enforce single use when the workflow requires it.
 
 Rotate signing keys with a typed KeyRing

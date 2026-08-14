@@ -22,7 +22,7 @@ final readonly class PasswordHasher
         );
     }
 
-    public function needsRehash(string $hash): bool
+    public function needsRehash(#[\SensitiveParameter] string $hash): bool
     {
         return password_needs_rehash(
             $hash,
@@ -34,6 +34,7 @@ final readonly class PasswordHasher
     public function verifyAndNeedsRehash(
         #[\SensitiveParameter]
         string $password,
+        #[\SensitiveParameter]
         string $hash,
     ): PasswordVerificationResult {
         if (!$this->verifyPassword($password, $hash)) {
@@ -46,6 +47,7 @@ final readonly class PasswordHasher
     public function verifyAndRehash(
         #[\SensitiveParameter]
         string $password,
+        #[\SensitiveParameter]
         string $hash,
     ): PasswordVerificationResult {
         $result = $this->verifyAndNeedsRehash($password, $hash);
@@ -56,8 +58,12 @@ final readonly class PasswordHasher
         return new PasswordVerificationResult(true, true, $this->hashPassword($password));
     }
 
-    public function verifyPassword(#[\SensitiveParameter] string $password, string $hash): bool
-    {
+    public function verifyPassword(
+        #[\SensitiveParameter]
+        string $password,
+        #[\SensitiveParameter]
+        string $hash,
+    ): bool {
         if (str_starts_with($hash, '$2') && strlen($password) > 72) {
             return false;
         }
@@ -65,7 +71,7 @@ final readonly class PasswordHasher
         return password_verify($password, $hash);
     }
 
-    private function assertPasswordSupported(string $password): void
+    private function assertPasswordSupported(#[\SensitiveParameter] string $password): void
     {
         if ($this->options->algorithm === PasswordHashAlgorithm::BCRYPT && strlen($password) > 72) {
             throw new PasswordHashException('Bcrypt passwords cannot exceed 72 bytes.');

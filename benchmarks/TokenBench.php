@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Infocyph\Epicrypt\Benchmarks;
 
 use Infocyph\Epicrypt\Certificate\Enum\OpenSslCurveName;
-use Infocyph\Epicrypt\Certificate\Enum\OpenSslKeyType;
 use Infocyph\Epicrypt\Certificate\Enum\OpenSslRsaBits;
 use Infocyph\Epicrypt\Certificate\KeyPairGenerator;
 use Infocyph\Epicrypt\Security\KeyPurpose;
@@ -70,7 +69,7 @@ final class TokenBench
             $this->symmetricTokens[$algorithm->value] = $this->symmetricIssuers[$algorithm->value]->issue($this->claims);
         }
 
-        $rsa = KeyPairGenerator::openSsl(OpenSslRsaBits::BITS_2048)->generate();
+        $rsa = KeyPairGenerator::rsa(OpenSslRsaBits::BITS_2048)->generate();
         foreach ([
             AsymmetricJwtAlgorithm::RS256,
             AsymmetricJwtAlgorithm::RS384,
@@ -87,11 +86,7 @@ final class TokenBench
             AsymmetricJwtAlgorithm::ES512->value => OpenSslCurveName::SECP521R1,
         ];
         foreach ($curves as $algorithmValue => $curve) {
-            $pair = KeyPairGenerator::openSsl(
-                OpenSslRsaBits::BITS_3072,
-                OpenSslKeyType::EC,
-                $curve,
-            )->generate();
+            $pair = KeyPairGenerator::ec($curve)->generate();
             $this->prepareAsymmetric(AsymmetricJwtAlgorithm::from($algorithmValue), $pair, $policy);
         }
         $this->prepareAsymmetric(
@@ -108,7 +103,7 @@ final class TokenBench
             $this->ring,
             JwtPolicy::accessToken('benchmark', 'api'),
         );
-        $pair = KeyPairGenerator::openSsl(OpenSslRsaBits::BITS_2048)->generate();
+        $pair = KeyPairGenerator::rsa(OpenSslRsaBits::BITS_2048)->generate();
         $this->jwks = new Jwks();
         $this->jwkSet = ['keys' => [
             $this->jwks->exportPublicKeyToJwk($pair['public'], 'rsa', AsymmetricJwtAlgorithm::RS256),

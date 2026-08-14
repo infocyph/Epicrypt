@@ -32,7 +32,19 @@ final class VersionedPayload
         );
     }
 
-    public static function parse(string $payload, string $expectedVersion, int $partCount): ?VersionedPayloadResult
+    public static function encodePrimitive(string $version, string $algorithm, string $nonce, string $ciphertext): string
+    {
+        if ($algorithm === '' || str_contains($algorithm, '.')) {
+            throw new \InvalidArgumentException('Payload algorithm must be a non-empty dot-safe string.');
+        }
+        if ($nonce === '' || $ciphertext === '') {
+            throw new \InvalidArgumentException('Payload nonce and ciphertext must be non-empty strings.');
+        }
+
+        return self::encode($version, $algorithm, $nonce, $ciphertext);
+    }
+
+    public static function parse(#[\SensitiveParameter] string $payload, string $expectedVersion, int $partCount): ?VersionedPayloadResult
     {
         $segments = explode('.', $payload);
 
@@ -48,7 +60,7 @@ final class VersionedPayload
         return null;
     }
 
-    public static function parseCompact(string $payload, string $expectedVersion): ?CompactPayloadResult
+    public static function parseCompact(#[\SensitiveParameter] string $payload, string $expectedVersion): ?CompactPayloadResult
     {
         $parsedPayload = self::parse($payload, $expectedVersion, 4);
         if ($parsedPayload === null) {
@@ -59,6 +71,19 @@ final class VersionedPayload
         $keyId = $encodedKeyId === self::EMPTY_KEY_ID ? null : $encodedKeyId;
 
         return new CompactPayloadResult($parsedPayload->versioned, $algorithm, $keyId, $nonce, $ciphertext);
+    }
+
+    /** @return array{algorithm: string, nonce: string, ciphertext: string}|null */
+    public static function parsePrimitive(#[\SensitiveParameter] string $payload, string $expectedVersion): ?array
+    {
+        $parsedPayload = self::parse($payload, $expectedVersion, 3);
+        if ($parsedPayload === null) {
+            return null;
+        }
+
+        [$algorithm, $nonce, $ciphertext] = $parsedPayload->parts;
+
+        return ['algorithm' => $algorithm, 'nonce' => $nonce, 'ciphertext' => $ciphertext];
     }
 
     /**

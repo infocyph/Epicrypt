@@ -60,15 +60,15 @@ final class JwtValidator
     private static function audiences(mixed $audience): ?array
     {
         if (is_string($audience)) {
-            return $audience !== '' && strlen($audience) <= 2048 ? [$audience] : null;
+            return self::validIdentityValue($audience, 2048) ? [$audience] : null;
         }
-        if (!is_array($audience) || $audience === [] || !array_is_list($audience)) {
+        if (!is_array($audience) || $audience === [] || count($audience) > 32 || !array_is_list($audience)) {
             return null;
         }
 
         $audiences = [];
         foreach ($audience as $value) {
-            if (!is_string($value) || $value === '' || strlen($value) > 2048) {
+            if (!is_string($value) || !self::validIdentityValue($value, 2048)) {
                 return null;
             }
             $audiences[] = $value;
@@ -125,11 +125,11 @@ final class JwtValidator
      */
     private static function normalizeIdentity(array $claims): JwtFailureReason|array
     {
-        if (!is_string($claims['iss']) || $claims['iss'] === '') {
+        if (!is_string($claims['iss']) || !self::validIdentityValue($claims['iss'], 2048)) {
             return JwtFailureReason::INVALID_ISSUER;
         }
         $subject = $claims['sub'] ?? null;
-        if ($subject !== null && (!is_string($subject) || $subject === '' || strlen($subject) > 255)) {
+        if ($subject !== null && (!is_string($subject) || !self::validIdentityValue($subject, 255))) {
             return JwtFailureReason::INVALID_SUBJECT;
         }
         $audiences = self::audiences($claims['aud']);
@@ -142,17 +142,7 @@ final class JwtValidator
 
     private static function numericDate(mixed $value): ?int
     {
-        if (is_int($value)) {
-            return $value;
-        }
-        if (!is_float($value) || !is_finite($value) || floor($value) !== $value
-            || $value < PHP_INT_MIN || $value > PHP_INT_MAX) {
-            return null;
-        }
-
-        $normalized = (int) $value;
-
-        return (float) $normalized === $value ? $normalized : null;
+        return is_int($value) ? $value : null;
     }
 
     /**
@@ -270,6 +260,13 @@ final class JwtValidator
             'scope' => self::validScope($value, $profile),
             default => self::isBoundedJsonValue($value),
         };
+    }
+
+    private static function validIdentityValue(string $value, int $maximumBytes): bool
+    {
+        return $value !== ''
+            && strlen($value) <= $maximumBytes
+            && preg_match('/[\x00-\x1F\x7F]/', $value) !== 1;
     }
 
     private static function validJwtId(string $jwtId): bool

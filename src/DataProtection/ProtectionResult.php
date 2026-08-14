@@ -7,6 +7,7 @@ namespace Infocyph\Epicrypt\DataProtection;
 final readonly class ProtectionResult
 {
     public function __construct(
+        #[\SensitiveParameter]
         public string $value,
         public string $domain,
         public string $purpose,

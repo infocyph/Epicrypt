@@ -14,8 +14,11 @@ final class Pkcs12
      */
     public function export(
         string $certificatePem,
+        #[\SensitiveParameter]
         string $privateKeyPem,
+        #[\SensitiveParameter]
         string $password,
+        #[\SensitiveParameter]
         ?string $privateKeyPassphrase = null,
         ?string $friendlyName = null,
         array $caCertificatesPem = [],
@@ -53,8 +56,12 @@ final class Pkcs12
     /**
      * @return array{certificate: string, private_key: string, ca_certificates: list<string>}
      */
-    public function import(string $pkcs12, string $password): array
-    {
+    public function import(
+        #[\SensitiveParameter]
+        string $pkcs12,
+        #[\SensitiveParameter]
+        string $password,
+    ): array {
         $output = [];
         if (!openssl_pkcs12_read($pkcs12, $output, $password)) {
             throw new ConfigurationException('PKCS#12 import failed.');

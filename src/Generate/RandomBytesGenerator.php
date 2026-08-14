@@ -24,10 +24,12 @@ final class RandomBytesGenerator
             throw new ConfigurationException('Length must be at least 1.');
         }
 
-        $bodyLength = $length - strlen($prefix . $postfix);
-        if ($bodyLength <= 0) {
-            return $prefix . $postfix;
+        $affixLength = strlen($prefix) + strlen($postfix);
+        if ($affixLength >= $length) {
+            throw new ConfigurationException('Prefix and postfix must leave room for at least one random character.');
         }
+
+        $bodyLength = $length - $affixLength;
 
         $requiredBytes = (int) ceil(($bodyLength * 3) / 4);
         $random = Base64Url::encode($this->bytes($requiredBytes));

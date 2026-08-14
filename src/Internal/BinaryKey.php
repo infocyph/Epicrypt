@@ -12,7 +12,7 @@ use Infocyph\Epicrypt\Exception\Crypto\InvalidKeyException;
  */
 final class BinaryKey
 {
-    public static function decodeBase64UrlOrBinary(mixed $value, bool $isBinary, string $name = 'Key'): string
+    public static function decodeBase64UrlOrBinary(#[\SensitiveParameter] mixed $value, bool $isBinary, string $name = 'Key'): string
     {
         if (!is_string($value) || $value === '') {
             throw new InvalidKeyException(sprintf('%s must be a non-empty string.', $name));
@@ -29,7 +29,7 @@ final class BinaryKey
         }
     }
 
-    public static function fixedLength(mixed $value, bool $isBinary, int $expectedLength, string $name = 'Key'): string
+    public static function fixedLength(#[\SensitiveParameter] mixed $value, bool $isBinary, int $expectedLength, string $name = 'Key'): string
     {
         if ($expectedLength < 1) {
             throw new InvalidKeyException(sprintf('%s expected length must be greater than zero.', $name));

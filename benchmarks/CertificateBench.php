@@ -37,6 +37,6 @@ final class CertificateBench
 
     public function benchOpenSslKeyGeneration(): void
     {
-        KeyPairGenerator::openSsl(OpenSslRsaBits::BITS_2048)->generate();
+        KeyPairGenerator::rsa(OpenSslRsaBits::BITS_2048)->generate();
     }
 }

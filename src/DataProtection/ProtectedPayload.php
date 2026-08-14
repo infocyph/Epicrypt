@@ -19,6 +19,7 @@ final class ProtectedPayload
     private const int VERSION = 2;
 
     public static function decrypt(
+        #[\SensitiveParameter]
         string $payload,
         #[\SensitiveParameter]
         string $key,
@@ -68,6 +69,7 @@ final class ProtectedPayload
     }
 
     public static function encrypt(
+        #[\SensitiveParameter]
         string $plaintext,
         #[\SensitiveParameter]
         string $key,
@@ -129,7 +131,7 @@ final class ProtectedPayload
         return self::decodeHeader($parts[1], $expectedDomain, $options, $algorithm)['kid'];
     }
 
-    private static function assertKey(string $key, ProtectionAlgorithm $algorithm): void
+    private static function assertKey(#[\SensitiveParameter] string $key, ProtectionAlgorithm $algorithm): void
     {
         if (strlen($key) !== $algorithm->keyLength()) {
             throw new InvalidKeyException(sprintf(
@@ -180,9 +182,11 @@ final class ProtectedPayload
     }
 
     private static function runRawOperation(
+        #[\SensitiveParameter]
         string $input,
         string $aad,
         string $nonce,
+        #[\SensitiveParameter]
         string $key,
         ProtectionAlgorithm $algorithm,
         bool $decrypt,

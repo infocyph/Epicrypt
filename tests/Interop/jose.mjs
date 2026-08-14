@@ -142,7 +142,6 @@ for (const algorithm of generalJweAlgorithms) {
   const encryptor = new GeneralEncrypt(payload).setProtectedHeader({
     alg: algorithm,
     enc: 'A256GCM',
-    kids: ['interop-recipient'],
   })
   encryptor.addRecipient(key).setUnprotectedHeader({ kid: 'interop-recipient' })
   candidate.jwe_general[algorithm] = JSON.stringify(await encryptor.encrypt())

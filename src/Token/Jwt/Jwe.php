@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Infocyph\Epicrypt\Token\Jwt;
 
+use Infocyph\Epicrypt\Exception\ConfigurationException;
 use Infocyph\Epicrypt\Exception\Token\InvalidTokenException;
 use Infocyph\Epicrypt\Internal\Base64Url;
 use Infocyph\Epicrypt\Internal\Json;
@@ -25,7 +26,12 @@ final readonly class Jwe
         private ?string $keyId = null,
     ) {
         if ($key === '' || ($keyId !== null && preg_match('/\A[A-Za-z0-9_-]{1,128}\z/D', $keyId) !== 1)) {
-            throw new InvalidTokenException('JWE key and kid configuration is invalid.');
+            throw new ConfigurationException('JWE key and kid configuration is invalid.');
+        }
+        if ((in_array($this->algorithm, [JweKeyManagementAlgorithm::DIRECT, JweKeyManagementAlgorithm::A256KW, JweKeyManagementAlgorithm::A256GCMKW], true)
+                || in_array($this->algorithm, [JweKeyManagementAlgorithm::ECDH_ES, JweKeyManagementAlgorithm::ECDH_ES_A256KW], true))
+            && strlen($key) !== 32) {
+            throw new ConfigurationException('The selected JWE key-management algorithm requires a 32-byte key.');
         }
     }
 
@@ -86,25 +92,32 @@ final readonly class Jwe
         $document = $this->decodeDocument($token);
         if (!is_string($document['protected'] ?? null) || !is_array($document['recipients'] ?? null)
             || !is_string($document['iv'] ?? null) || !is_string($document['ciphertext'] ?? null)
-            || !is_string($document['tag'] ?? null) || count($document['recipients']) > 32) {
+            || !is_string($document['tag'] ?? null)
+            || count($document['recipients']) < 1
+            || count($document['recipients']) > 32) {
             throw new InvalidTokenException('General JWE structure is invalid.');
         }
         $header = $this->decodeProtected($document['protected']);
-        $this->validateProtected($header);
-        if (!is_array($header['kids'] ?? null) || !in_array($kid, $header['kids'], true)) {
-            throw new InvalidTokenException('General JWE protected recipient identifiers are invalid.');
+        $this->validateProtected($header, recipientKeyId: true);
+        $sharedHeader = $document['unprotected'] ?? [];
+        if (!is_array($sharedHeader)) {
+            throw new InvalidTokenException('General JWE shared unprotected header must be an object.');
         }
+        $sharedHeader = $this->stringKeyArray($sharedHeader);
+        if (array_intersect_key($header, $sharedHeader) !== []) {
+            throw new InvalidTokenException('General JWE protected and shared header names must be disjoint.');
+        }
+        $this->validateRecipientSet($document['recipients'], $header, $sharedHeader);
         $recipient = $this->recipient($document['recipients'], $kid);
         $recipientHeader = $recipient['header'];
-        unset($recipientHeader['kid']);
-        if (array_intersect_key($header, $recipientHeader) !== []) {
+        if (array_intersect_key($header + $sharedHeader, $recipientHeader) !== []) {
             throw new InvalidTokenException('General JWE header parameter names must be disjoint.');
         }
         $cek = new JweKeyManager()->unwrap(
             $this->algorithm,
             $this->key,
             $this->decodeEncryptedKey($recipient['encrypted_key']),
-            $header + $recipientHeader,
+            $header + $sharedHeader + $recipientHeader,
         );
 
         return new JweContentCipher()->decrypt(
@@ -116,7 +129,7 @@ final readonly class Jwe
         );
     }
 
-    public function decryptNested(string $encryptedJwt): string
+    public function decryptNested(#[\SensitiveParameter] string $encryptedJwt): string
     {
         $parts = explode('.', $encryptedJwt);
         if (count($parts) !== 5) {
@@ -173,43 +186,63 @@ final readonly class Jwe
     }
 
     /**
-     * @param non-empty-list<array{key: string, kid: string}> $recipients
+     * @param list<mixed> $recipients
      * @param array<string, mixed> $protectedHeaders
      */
-    public function encryptGeneral(#[\SensitiveParameter] string $plaintext, array $recipients, array $protectedHeaders = []): string
-    {
-        if (count($recipients) > 32
+    public function encryptGeneral(
+        #[\SensitiveParameter]
+        string $plaintext,
+        #[\SensitiveParameter]
+        array $recipients,
+        array $protectedHeaders = [],
+    ): string {
+        if ($recipients === [] || count($recipients) > 32
             || in_array($this->algorithm, [JweKeyManagementAlgorithm::DIRECT, JweKeyManagementAlgorithm::ECDH_ES], true)) {
-            throw new InvalidTokenException('General JWE requires 1-32 recipients and a wrapping key-management algorithm.');
+            throw new ConfigurationException('General JWE requires 1-32 recipients and a wrapping key-management algorithm.');
         }
-        $kids = array_column($recipients, 'kid');
+        $validatedRecipients = [];
+        foreach ($recipients as $recipient) {
+            if (!is_array($recipient)
+                || !is_string($recipient['key'] ?? null) || $recipient['key'] === ''
+                || !is_string($recipient['kid'] ?? null)
+                || preg_match('/\A[A-Za-z0-9_-]{1,128}\z/D', $recipient['kid']) !== 1) {
+                throw new ConfigurationException('General JWE recipients require valid keys and key identifiers.');
+            }
+            $validatedRecipients[] = ['key' => $recipient['key'], 'kid' => $recipient['kid']];
+        }
+        $kids = array_column($validatedRecipients, 'kid');
         if (count(array_unique($kids)) !== count($kids)) {
-            throw new InvalidTokenException('General JWE recipient kid values must be unique.');
+            throw new ConfigurationException('General JWE recipient kid values must be unique.');
         }
         $header = $this->protectedHeader($protectedHeaders);
-        $header['kids'] = $kids;
+        unset($header['kid']);
         $cek = random_bytes(32);
-        $encodedRecipients = [];
-        foreach ($recipients as $recipient) {
-            $wrapped = new JweKeyManager()->wrap($this->algorithm, $recipient['key'], [], $cek);
-            $encodedRecipients[] = [
-                'header' => ['kid' => $recipient['kid']] + $wrapped['header'],
-                'encrypted_key' => Base64Url::encode($wrapped['encryptedKey']),
-            ];
-        }
-        $encodedHeader = Base64Url::encode(Json::encode($header));
-        $encrypted = new JweContentCipher()->encrypt($plaintext, $cek, $encodedHeader);
 
-        return $this->encodeDocument([
-            'protected' => $encodedHeader,
-            'recipients' => $encodedRecipients,
-            'iv' => Base64Url::encode($encrypted['iv']),
-            'ciphertext' => Base64Url::encode($encrypted['ciphertext']),
-            'tag' => Base64Url::encode($encrypted['tag']),
-        ]);
+        try {
+            $encodedRecipients = [];
+            foreach ($validatedRecipients as $recipient) {
+                $wrapped = new JweKeyManager()->wrap($this->algorithm, $recipient['key'], [], $cek);
+                $encodedRecipients[] = [
+                    'header' => ['kid' => $recipient['kid']] + $wrapped['header'],
+                    'encrypted_key' => Base64Url::encode($wrapped['encryptedKey']),
+                ];
+            }
+            $encodedHeader = Base64Url::encode(Json::encode($header));
+            $encrypted = new JweContentCipher()->encrypt($plaintext, $cek, $encodedHeader);
+
+            return $this->encodeDocument([
+                'protected' => $encodedHeader,
+                'recipients' => $encodedRecipients,
+                'iv' => Base64Url::encode($encrypted['iv']),
+                'ciphertext' => Base64Url::encode($encrypted['ciphertext']),
+                'tag' => Base64Url::encode($encrypted['tag']),
+            ]);
+        } finally {
+            sodium_memzero($cek);
+        }
     }
 
-    public function encryptNested(string $signedJwt): string
+    public function encryptNested(#[\SensitiveParameter] string $signedJwt): string
     {
         if (count(explode('.', $signedJwt)) !== 3) {
             throw new InvalidTokenException('Nested JWT input must be a compact JWS.');
@@ -219,7 +252,7 @@ final readonly class Jwe
     }
 
     /** @return array<string, mixed> */
-    private function decodeDocument(string $token): array
+    private function decodeDocument(#[\SensitiveParameter] string $token): array
     {
         if ($token === '' || strlen($token) > self::MAX_CIPHERTEXT_BYTES) {
             throw new InvalidTokenException('JWE JSON serialization exceeds its size bound.');
@@ -271,9 +304,9 @@ final readonly class Jwe
      */
     private function protectedHeader(array $additional): array
     {
-        foreach (['alg', 'enc', 'kid', 'zip', 'iv', 'tag', 'epk', 'kids'] as $reserved) {
+        foreach (['alg', 'enc', 'kid', 'zip', 'iv', 'tag', 'epk', 'crit'] as $reserved) {
             if (array_key_exists($reserved, $additional)) {
-                throw new InvalidTokenException(sprintf('JWE protected header %s is managed by the configured capability.', $reserved));
+                throw new ConfigurationException(sprintf('JWE protected header %s is managed by the configured capability.', $reserved));
             }
         }
 
@@ -319,13 +352,55 @@ final readonly class Jwe
         return $match;
     }
 
+    /**
+     * @param array<mixed, mixed> $input
+     * @return array<string, mixed>
+     */
+    private function stringKeyArray(array $input): array
+    {
+        $normalized = [];
+        foreach ($input as $name => $value) {
+            if (is_string($name)) {
+                $normalized[$name] = $value;
+            }
+        }
+
+        return $normalized;
+    }
+
     /** @param array<string, mixed> $header */
-    private function validateProtected(array $header): void
+    private function validateProtected(array $header, bool $recipientKeyId = false): void
     {
         if (($header['alg'] ?? null) !== $this->algorithm->value
             || ($header['enc'] ?? null) !== $this->contentEncryption->value
-            || isset($header['zip']) || ($this->keyId !== null && ($header['kid'] ?? null) !== $this->keyId)) {
+            || isset($header['zip'])
+            || array_key_exists('crit', $header)
+            || (!$recipientKeyId && $this->keyId !== null && ($header['kid'] ?? null) !== $this->keyId)) {
             throw new InvalidTokenException('JWE protected algorithms, kid, or compression policy is invalid.');
+        }
+    }
+
+    /**
+     * @param array<mixed> $recipients
+     * @param array<string, mixed> $protected
+     * @param array<string, mixed> $shared
+     */
+    private function validateRecipientSet(array $recipients, array $protected, array $shared): void
+    {
+        $seen = [];
+        foreach ($recipients as $candidate) {
+            if (!is_array($candidate) || !is_array($candidate['header'] ?? null) || !is_string($candidate['encrypted_key'] ?? null)) {
+                throw new InvalidTokenException('General JWE recipient structure is invalid.');
+            }
+            $header = $this->stringKeyArray($candidate['header']);
+            $kid = $header['kid'] ?? null;
+            if (!is_string($kid) || preg_match('/\A[A-Za-z0-9_-]{1,128}\z/D', $kid) !== 1 || isset($seen[$kid])) {
+                throw new InvalidTokenException('General JWE recipient kid values must be valid and unique.');
+            }
+            if (array_intersect_key($protected + $shared, $header) !== []) {
+                throw new InvalidTokenException('General JWE header parameter names must be disjoint.');
+            }
+            $seen[$kid] = true;
         }
     }
 }

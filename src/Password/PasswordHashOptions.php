@@ -23,13 +23,14 @@ final readonly class PasswordHashOptions
             ));
         }
 
-        if ($this->memoryCost < 8192 || $this->memoryCost > 1_048_576
-            || $this->timeCost < 1 || $this->timeCost > 10
-            || $this->threads < 1 || $this->threads > 16) {
-            throw new PasswordHashException('Argon2 costs are outside the supported security bounds.');
-        }
-        if ($this->bcryptCost < 4 || $this->bcryptCost > 31) {
+        if ($this->algorithm === PasswordHashAlgorithm::BCRYPT && ($this->bcryptCost < 4 || $this->bcryptCost > 31)) {
             throw new PasswordHashException('Bcrypt cost must be between 4 and 31.');
+        }
+        if ($this->algorithm !== PasswordHashAlgorithm::BCRYPT
+            && ($this->memoryCost < 8192 || $this->memoryCost > 1_048_576
+                || $this->timeCost < 1 || $this->timeCost > 10
+                || $this->threads < 1 || $this->threads > 16)) {
+            throw new PasswordHashException('Argon2 costs are outside the supported security bounds.');
         }
     }
 

@@ -3,6 +3,8 @@
 declare(strict_types=1);
 
 use Infocyph\Epicrypt\Certificate\KeyPairGenerator;
+use Infocyph\Epicrypt\Exception\ConfigurationException;
+use Infocyph\Epicrypt\Exception\Token\InvalidClaimException;
 use Infocyph\Epicrypt\Exception\Token\InvalidTokenException;
 use Infocyph\Epicrypt\Internal\Base64Url;
 use Infocyph\Epicrypt\Token\Jwt\DpopProof;
@@ -10,6 +12,43 @@ use Infocyph\Epicrypt\Token\Jwt\Enum\AsymmetricJwtAlgorithm;
 use Infocyph\Epicrypt\Token\Jwt\Jwks;
 use Infocyph\Epicrypt\Token\Jwt\JwtReplayStoreInterface;
 use Infocyph\Epicrypt\Token\Jwt\OpenIdIdTokenValidator;
+use Psr\Clock\ClockInterface;
+
+function joseProfileClock(int $timestamp): ClockInterface
+{
+    return new class($timestamp) implements ClockInterface {
+        public function __construct(private readonly int $timestamp) {}
+
+        public function now(): DateTimeImmutable
+        {
+            return new DateTimeImmutable('@' . $this->timestamp);
+        }
+    };
+}
+
+function joseReplayStore(): JwtReplayStoreInterface
+{
+    return new class implements JwtReplayStoreInterface {
+        /** @var array<string, true> */
+        private array $seen = [];
+
+        public function consume(string $namespace, string $tokenId, int $expiresAt): bool
+        {
+            $key = $namespace."\0".$tokenId;
+            if ($expiresAt < 1 || isset($this->seen[$key])) {
+                return false;
+            }
+            $this->seen[$key] = true;
+
+            return true;
+        }
+
+        public function isRevoked(string $namespace, string $tokenId, int $expiresAt): bool
+        {
+            return $expiresAt > 0 && isset($this->seen['revoked' . "\0" . $namespace . "\0" . $tokenId]);
+        }
+    };
+}
 
 it('validates OIDC nonce azp max age and half hashes', function () {
     $value = 'access-token';
@@ -21,14 +60,13 @@ it('validates OIDC nonce azp max age and half hashes', function () {
         'auth_time' => 1_700_000_000,
         'at_hash' => Base64Url::encode(substr($digest, 0, 16)),
     ];
-    new OpenIdIdTokenValidator()->validate(
+    new OpenIdIdTokenValidator(joseProfileClock(1_700_000_100))->validate(
         $claims,
         AsymmetricJwtAlgorithm::ES256,
         'client',
         nonce: 'browser-nonce',
         accessToken: $value,
         maximumAuthenticationAge: 300,
-        now: 1_700_000_100,
     );
     expect(true)->toBeTrue();
 });
@@ -40,12 +78,12 @@ it('issues and validates replay-safe DPoP proofs with token binding', function (
         /** @var array<string, true> */
         private array $seen = [];
 
-        public function consume(string $issuer, string $jwtId, int $expiresAt): bool
+        public function consume(string $namespace, string $tokenId, int $expiresAt): bool
         {
             if ($expiresAt <= 0) {
                 return false;
             }
-            $key = $issuer . "\0" . $jwtId;
+            $key = $namespace . "\0" . $tokenId;
             if (isset($this->seen[$key])) {
                 return false;
             }
@@ -54,12 +92,12 @@ it('issues and validates replay-safe DPoP proofs with token binding', function (
             return true;
         }
 
-        public function isRevoked(string $issuer, string $jwtId, int $expiresAt): bool
+        public function isRevoked(string $namespace, string $tokenId, int $expiresAt): bool
         {
-            return $issuer === '' || $jwtId === '' || $expiresAt < 1;
+            return $namespace === '' || $tokenId === '' || $expiresAt < 1;
         }
     };
-    $dpop = new DpopProof();
+    $dpop = new DpopProof(joseProfileClock(1_700_000_010));
     $proof = $dpop->issue(
         'post',
         'https://api.example/resource?ignored=query',
@@ -79,7 +117,6 @@ it('issues and validates replay-safe DPoP proofs with token binding', function (
         $store,
         accessToken: 'access-token',
         nonce: 'server-nonce',
-        now: 1_700_000_010,
     );
     expect($verified['claims'])->toHaveKey('jti', 'proof-1')
         ->and($verified['keyThumbprint'])->toBe((new Jwks())->thumbprint($jwk))
@@ -92,8 +129,89 @@ it('issues and validates replay-safe DPoP proofs with token binding', function (
         $store,
         accessToken: 'access-token',
         nonce: 'server-nonce',
-        now: 1_700_000_010,
     ))->toThrow(InvalidTokenException::class);
 
     $dpop->validateAccessTokenBinding(['cnf' => ['jkt' => (new Jwks())->thumbprint($jwk)]], $jwk);
+});
+
+it('validates OIDC half hashes for every supported signing hash family', function (AsymmetricJwtAlgorithm $algorithm) {
+    $value = 'protocol-value';
+    $digest = hash($algorithm->hashAlgorithm(), $value, true);
+    $half = Base64Url::encode(substr($digest, 0, intdiv(strlen($digest), 2)));
+    $claims = [
+        'aud' => 'client',
+        'nonce' => 'nonce',
+        'auth_time' => 1_700_000_000,
+        'at_hash' => $half,
+        'c_hash' => $half,
+        's_hash' => $half,
+    ];
+
+    new OpenIdIdTokenValidator(joseProfileClock(1_700_000_010))->validate(
+        $claims,
+        $algorithm,
+        'client',
+        nonce: 'nonce',
+        accessToken: $value,
+        authorizationCode: $value,
+        state: $value,
+        maximumAuthenticationAge: 10,
+    );
+    expect(true)->toBeTrue();
+})->with([
+    AsymmetricJwtAlgorithm::ES256,
+    AsymmetricJwtAlgorithm::ES384,
+    AsymmetricJwtAlgorithm::ES512,
+]);
+
+it('rejects invalid OIDC configuration and profile claims', function () {
+    $validator = new OpenIdIdTokenValidator(joseProfileClock(1_700_000_100));
+    $claims = ['aud' => ['client', 'secondary'], 'azp' => 'client', 'auth_time' => 1_700_000_000];
+
+    expect(fn () => $validator->validate($claims, AsymmetricJwtAlgorithm::ES256, ''))
+        ->toThrow(ConfigurationException::class)
+        ->and(fn () => $validator->validate($claims, AsymmetricJwtAlgorithm::ES256, 'client', maximumAuthenticationAge: -1))
+        ->toThrow(ConfigurationException::class)
+        ->and(fn () => $validator->validate($claims, AsymmetricJwtAlgorithm::ES256, 'client', nonce: 'required'))
+        ->toThrow(InvalidClaimException::class)
+        ->and(fn () => $validator->validate(array_replace($claims, ['azp' => 'other']), AsymmetricJwtAlgorithm::ES256, 'client'))
+        ->toThrow(InvalidClaimException::class)
+        ->and(fn () => $validator->validate(array_replace($claims, ['auth_time' => 1_700_000_101]), AsymmetricJwtAlgorithm::ES256, 'client', maximumAuthenticationAge: 300))
+        ->toThrow(InvalidClaimException::class)
+        ->and(fn () => $validator->validate($claims, AsymmetricJwtAlgorithm::ES256, 'client', maximumAuthenticationAge: 99))
+        ->toThrow(InvalidClaimException::class);
+});
+
+it('bounds DPoP configuration identifiers age and parser work', function () {
+    $pair = KeyPairGenerator::sodiumSign()->generate();
+    $jwks = new Jwks();
+    $public = $jwks->exportOkpPublicKey($pair['public'], 'dpop');
+    $private = $jwks->exportOkpPrivateKey($pair['private'], 'dpop');
+    $dpop = new DpopProof(joseProfileClock(1_700_000_000));
+
+    expect(fn () => $dpop->issue("GET\nPOST", 'https://api.example/resource', $pair['private'], $public, AsymmetricJwtAlgorithm::EDDSA))
+        ->toThrow(ConfigurationException::class)
+        ->and(fn () => $dpop->issue('GET', 'file:///tmp/value', $pair['private'], $public, AsymmetricJwtAlgorithm::EDDSA))
+        ->toThrow(ConfigurationException::class)
+        ->and(fn () => $dpop->issue('GET', 'https://api.example/resource', $pair['private'], $private, AsymmetricJwtAlgorithm::EDDSA))
+        ->toThrow(ConfigurationException::class)
+        ->and(fn () => $dpop->issue('GET', 'https://api.example/resource', $pair['private'], $public, AsymmetricJwtAlgorithm::EDDSA, jwtId: ''))
+        ->toThrow(ConfigurationException::class)
+        ->and(fn () => $dpop->issue('GET', 'https://api.example/resource', $pair['private'], $public, AsymmetricJwtAlgorithm::EDDSA, nonce: str_repeat('n', 257)))
+        ->toThrow(ConfigurationException::class)
+        ->and(fn () => $dpop->verify(str_repeat('x', 16_385), 'GET', 'https://api.example/resource', AsymmetricJwtAlgorithm::EDDSA, joseReplayStore()))
+        ->toThrow(InvalidTokenException::class);
+
+    $old = $dpop->issue(
+        'GET',
+        'https://api.example/resource',
+        $pair['private'],
+        $public,
+        AsymmetricJwtAlgorithm::EDDSA,
+        issuedAt: 1_699_999_699,
+    );
+    expect(fn () => $dpop->verify($old, 'GET', 'https://api.example/resource', AsymmetricJwtAlgorithm::EDDSA, joseReplayStore()))
+        ->toThrow(InvalidTokenException::class)
+        ->and(fn () => $dpop->verify($old, 'GET', 'https://api.example/resource', AsymmetricJwtAlgorithm::EDDSA, joseReplayStore(), maximumAgeSeconds: 0))
+        ->toThrow(ConfigurationException::class);
 });

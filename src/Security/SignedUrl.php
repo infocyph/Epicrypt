@@ -23,13 +23,26 @@ final readonly class SignedUrl
     private const string METHOD_PARAM = 'ep_m';
 
     public function __construct(
+        #[\SensitiveParameter]
         private string $secret,
         private string $signatureParam = 'ep_sig',
         private string $expiresParam = 'ep_exp',
         private string $versionParam = SecurityPolicy::SIGNED_URL_VERSION_PARAM,
         private ClockInterface $clock = new SystemClock(),
         private SignedUrlOptions $defaultOptions = new SignedUrlOptions(),
-    ) {}
+    ) {
+        SecurityPolicy::assertHmacSecret($this->secret, 'Signed URL secret');
+
+        $reservedNames = [$this->signatureParam, $this->expiresParam, $this->versionParam, self::METHOD_PARAM];
+        foreach ($reservedNames as $name) {
+            if (preg_match('/\A[A-Za-z0-9_-]+\z/D', $name) !== 1) {
+                throw new ConfigurationException('Signed URL reserved parameter names must use the safe query-key grammar.');
+            }
+        }
+        if (count(array_unique($reservedNames)) !== count($reservedNames)) {
+            throw new ConfigurationException('Signed URL reserved parameter names must be distinct.');
+        }
+    }
 
     /**
      * @param array<string, scalar|null> $parameters
@@ -40,6 +53,11 @@ final readonly class SignedUrl
 
         [$parts, $existing] = $this->parseUrlWithQueryOrFail($url);
         $this->assertUrlPolicy($parts, $options, throwOnFailure: true);
+        $this->assertNoReservedParameters($existing);
+        $this->assertNoReservedParameters($parameters);
+        if ($expiresAt !== null && $expiresAt <= $this->clock->now()->getTimestamp()) {
+            throw new ConfigurationException('Signed URL expiration must be in the future.');
+        }
 
         $merged = array_merge($existing, $parameters);
         $normalized = $this->normalizeQuery($merged, $options->allowArrayParameters);
@@ -68,12 +86,12 @@ final readonly class SignedUrl
         return $this->buildDisplayBasePath($parts) . '?' . $this->buildQueryString($merged);
     }
 
-    public function verify(string $signedUrl, ?SignedUrlOptions $options = null): bool
+    public function verify(#[\SensitiveParameter] string $signedUrl, ?SignedUrlOptions $options = null): bool
     {
         return $this->verifyResult($signedUrl, $options)->verified;
     }
 
-    public function verifyResult(string $signedUrl, ?SignedUrlOptions $options = null): SignedUrlVerificationResult
+    public function verifyResult(#[\SensitiveParameter] string $signedUrl, ?SignedUrlOptions $options = null): SignedUrlVerificationResult
     {
         $options ??= $this->defaultOptions;
 
@@ -121,6 +139,55 @@ final readonly class SignedUrl
             expiresAt: $expiresAt,
             version: $version,
         );
+    }
+
+    /**
+     * @param QueryMap $parsed
+     * @param array<string, true> $seenNames
+     * @param array<string, string> $rootKinds
+     * @param array{name: string, root: string, index: ?string, value: string} $component
+     */
+    private function appendQueryComponent(array &$parsed, array &$seenNames, array &$rootKinds, array $component): bool
+    {
+        if (isset($seenNames[$component['name']])) {
+            return false;
+        }
+        $seenNames[$component['name']] = true;
+
+        $root = $component['root'];
+        $kind = $component['index'] === null ? 'scalar' : 'array';
+        if (isset($rootKinds[$root]) && $rootKinds[$root] !== $kind) {
+            return false;
+        }
+        $rootKinds[$root] = $kind;
+
+        if ($component['index'] === null) {
+            if (array_key_exists($root, $parsed)) {
+                return false;
+            }
+            $parsed[$root] = $component['value'];
+
+            return true;
+        }
+
+        $items = isset($parsed[$root]) && is_array($parsed[$root]) ? $parsed[$root] : [];
+        if (array_key_exists($component['index'], $items)) {
+            return false;
+        }
+        $items[$component['index']] = $component['value'];
+        $parsed[$root] = $items;
+
+        return true;
+    }
+
+    /** @param array<array-key, mixed> $query */
+    private function assertNoReservedParameters(array $query): void
+    {
+        foreach ([$this->signatureParam, $this->expiresParam, $this->versionParam, self::METHOD_PARAM] as $reserved) {
+            if (array_key_exists($reserved, $query)) {
+                throw new ConfigurationException(sprintf('Signed URL input must not contain reserved parameter "%s".', $reserved));
+            }
+        }
     }
 
     /**
@@ -187,6 +254,36 @@ final readonly class SignedUrl
         return Base64Url::encode(hash_hmac('sha256', $basePath . '?' . $this->buildQueryString($query), $this->secret, true));
     }
 
+    /** @return array{name: string, root: string, index: ?string, value: string}|null */
+    private function decodeQueryComponent(string $pair): ?array
+    {
+        if ($pair === '') {
+            return null;
+        }
+
+        [$encodedName, $encodedValue] = array_pad(explode('=', $pair, 2), 2, '');
+        if (!$this->hasValidPercentEncoding($encodedName) || !$this->hasValidPercentEncoding($encodedValue)) {
+            return null;
+        }
+
+        $name = rawurldecode($encodedName);
+        if (preg_match('/\A([A-Za-z0-9_-]+)(?:\[([A-Za-z0-9_-]+)\])?\z/D', $name, $matches) !== 1) {
+            return null;
+        }
+
+        return [
+            'name' => $name,
+            'root' => $matches[1],
+            'index' => $matches[2] ?? null,
+            'value' => rawurldecode($encodedValue),
+        ];
+    }
+
+    private function hasValidPercentEncoding(string $value): bool
+    {
+        return preg_match('/%(?![0-9A-Fa-f]{2})/', $value) !== 1;
+    }
+
     /**
      * @param array<array-key, mixed> $value
      * @return array<array-key, scalar>|null
@@ -218,8 +315,8 @@ final readonly class SignedUrl
         $normalized = [];
 
         foreach ($query as $key => $value) {
-            if (!is_string($key) || $key === '') {
-                continue;
+            if (!is_string($key) || preg_match('/\A[A-Za-z0-9_-]+\z/D', $key) !== 1) {
+                return null;
             }
 
             if (is_scalar($value)) {
@@ -249,6 +346,26 @@ final readonly class SignedUrl
         return $normalized;
     }
 
+    /** @return QueryMap|null */
+    private function parseRawQuery(string $query): ?array
+    {
+        if ($query === '') {
+            return [];
+        }
+
+        $parsed = [];
+        $seenNames = [];
+        $rootKinds = [];
+        foreach (explode('&', $query) as $pair) {
+            $component = $this->decodeQueryComponent($pair);
+            if ($component === null || !$this->appendQueryComponent($parsed, $seenNames, $rootKinds, $component)) {
+                return null;
+            }
+        }
+
+        return $parsed;
+    }
+
     /**
      * @return array{array{scheme?: mixed, host?: mixed, port?: mixed, path?: mixed}, QueryMap}|null
      */
@@ -259,9 +376,13 @@ final readonly class SignedUrl
             return null;
         }
 
-        $query = [];
-        if (isset($parts['query'])) {
-            parse_str($parts['query'], $query);
+        if (isset($parts['fragment'])) {
+            return null;
+        }
+
+        $query = isset($parts['query']) ? $this->parseRawQuery($parts['query']) : [];
+        if ($query === null) {
+            return null;
         }
 
         $normalizedQuery = $this->normalizeQuery($query, allowArrays: true);

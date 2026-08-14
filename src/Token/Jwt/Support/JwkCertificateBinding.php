@@ -56,12 +56,26 @@ final class JwkCertificateBinding
 
     private function certificateDer(string $certificatePem): string
     {
+        $der = $this->decodeCertificatePem($certificatePem);
         $certificate = openssl_x509_read($certificatePem);
         $normalized = '';
         if ($certificate === false || !openssl_x509_export($certificate, $normalized) || !is_string($normalized)) {
             throw new KeyResolutionException('Unable to read certificate for JWK binding.');
         }
-        $body = preg_replace('/-----[^-]+-----|\s+/', '', $normalized);
+
+        return $der;
+    }
+
+    private function decodeCertificatePem(string $certificatePem): string
+    {
+        if (preg_match(
+            '/\A-----BEGIN CERTIFICATE-----\R([A-Za-z0-9+\/=\r\n]+)-----END CERTIFICATE-----\R?\z/',
+            $certificatePem,
+            $matches,
+        ) !== 1) {
+            throw new KeyResolutionException('Unable to read certificate for JWK binding.');
+        }
+        $body = preg_replace('/\s+/', '', $matches[1]);
         $der = is_string($body) ? base64_decode($body, true) : false;
         if (!is_string($der) || $der === '') {
             throw new KeyResolutionException('Unable to encode certificate for JWK binding.');
@@ -78,8 +92,13 @@ final class JwkCertificateBinding
             throw new KeyResolutionException('JWK x5c must be a non-empty certificate list.');
         }
         foreach ($chain as $certificate) {
-            if (!is_string($certificate) || base64_decode($certificate, true) === false) {
+            $der = is_string($certificate) ? base64_decode($certificate, true) : false;
+            if (!is_string($der) || $der === '') {
                 throw new KeyResolutionException('JWK x5c contains an invalid certificate.');
+            }
+            $pem = "-----BEGIN CERTIFICATE-----\n" . chunk_split(base64_encode($der), 64, "\n") . "-----END CERTIFICATE-----\n";
+            if (openssl_x509_read($pem) === false) {
+                throw new KeyResolutionException('JWK x5c contains an unparseable certificate.');
             }
         }
         $leaf = base64_decode($chain[0], true);

@@ -15,8 +15,8 @@ Supported algorithms
 - RSA keys must contain at least 2048 bits, and EC curves must match the
   configured ES algorithm.
 
-Issue an access token across a service boundary
------------------------------------------------
+Complete path: issue and verify an access token across a service boundary
+-------------------------------------------------------------------------
 
 The authentication service keeps the EC private key. APIs receive only the
 public key, so they can verify tokens without gaining issuance authority.
@@ -27,13 +27,13 @@ public key, so they can verify tokens without gaining issuance authority.
 
    declare(strict_types=1);
 
-   use Infocyph\Epicrypt\Certificate\Enum\OpenSslKeyType;
+   use Infocyph\Epicrypt\Certificate\Enum\OpenSslCurveName;
    use Infocyph\Epicrypt\Certificate\KeyPairGenerator;
    use Infocyph\Epicrypt\Token\Jwt\AsymmetricJwt;
    use Infocyph\Epicrypt\Token\Jwt\JwtClaims;
    use Infocyph\Epicrypt\Token\Jwt\JwtPolicy;
 
-   $signingKeys = KeyPairGenerator::openSsl(type: OpenSslKeyType::EC)->generate();
+   $signingKeys = KeyPairGenerator::ec(OpenSslCurveName::PRIME256V1)->generate();
    $claims = JwtClaims::issue(
        issuer: 'https://auth.example.com',
        subject: 'user-42',
@@ -106,12 +106,12 @@ algorithm agree during export and import.
 
    declare(strict_types=1);
 
-   use Infocyph\Epicrypt\Certificate\Enum\OpenSslKeyType;
+   use Infocyph\Epicrypt\Certificate\Enum\OpenSslCurveName;
    use Infocyph\Epicrypt\Certificate\KeyPairGenerator;
    use Infocyph\Epicrypt\Token\Jwt\Enum\AsymmetricJwtAlgorithm;
    use Infocyph\Epicrypt\Token\Jwt\Jwks;
 
-   $signingKeys = KeyPairGenerator::openSsl(type: OpenSslKeyType::EC)->generate();
+   $signingKeys = KeyPairGenerator::ec(OpenSslCurveName::PRIME256V1)->generate();
    $jwks = new Jwks();
    $publicJwk = $jwks->exportPublicKeyToJwk(
        $signingKeys['public'],
@@ -138,7 +138,7 @@ to the token header's algorithm.
    use Infocyph\Epicrypt\Token\Jwt\Enum\AsymmetricJwtAlgorithm;
    use Infocyph\Epicrypt\Token\Jwt\JwtPolicy;
 
-   $rsaKeys = KeyPairGenerator::openSsl()->generate();
+   $rsaKeys = KeyPairGenerator::rsa()->generate();
    $issuer = AsymmetricJwt::issuer(
        $rsaKeys['private'],
        type: 'at+jwt',
@@ -249,7 +249,7 @@ The context keeps checkout state from being accepted as another token type.
    $state = $payloads->encode(
        ['cart_id' => 'cart-1847', 'return_path' => '/checkout/complete'],
        $signingKey,
-       ['exp' => time() + 600],
+       time() + 600,
    );
    $claims = $payloads->decode($state, $signingKey);
 
@@ -324,6 +324,14 @@ JWK export is deliberately named and must be treated like the source key.
        password: $privateKeyPassword,
    );
 
+``bindCertificateChain()`` and ``validateCertificateBinding()`` prove that the
+leaf certificate public key and advertised ``x5t``/``x5t#S256`` values match
+the JWK. They do not establish chain trust, certificate purpose, hostname, or
+revocation status; perform those checks at the PKI/TLS boundary. SHA-1 is
+supported only for the JOSE ``x5t`` compatibility member, never as a selectable
+signature, MAC, password, or general integrity algorithm. Symmetric export is
+deliberately named ``exportSymmetricSecretJwk()`` and must never be published.
+
 Resolve remote JWKS with safe rollover
 --------------------------------------
 
@@ -351,7 +359,17 @@ bounded connection/read timeouts.
    $verificationKey = $keys->resolve($trustedKid, AsymmetricJwtAlgorithm::PS256);
 
 Unknown ``kid`` performs at most one forced refresh. Cache lifetimes and stale
-use are bounded; discovery must return the exact configured issuer.
+use are bounded; discovery must return the exact configured issuer. The JWKS
+host must match the issuer host unless it is explicitly listed in
+``allowedJwksHosts``. Discovery uses ``application/json``; JWKS retrieval
+accepts ``application/jwk-set+json`` and ``application/json``. ``no-store``
+prevents persistence, ``no-cache`` forces revalidation, and ``max-age`` is
+bounded by Epicrypt's configured maximum.
+
+PSR-18 does not define redirect behavior. The supplied client must have
+automatic redirects disabled, must reject redirects as ordinary non-success
+responses, and should enforce DNS/IP policy and short network timeouts. Never
+derive a destination from token ``jku`` or ``x5u`` headers.
 
 Encrypt PII and nest a signed JWT
 ---------------------------------

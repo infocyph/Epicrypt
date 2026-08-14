@@ -20,8 +20,15 @@ final readonly class CertificateBuilder
     /**
      * @param array<string, string> $distinguishedName
      */
-    public function selfSign(array $distinguishedName, string $privateKey, int $days = 365, ?string $passphrase = null, ?CertificateOptions $options = null): string
-    {
+    public function selfSign(
+        array $distinguishedName,
+        #[\SensitiveParameter]
+        string $privateKey,
+        int $days = 365,
+        #[\SensitiveParameter]
+        ?string $passphrase = null,
+        ?CertificateOptions $options = null,
+    ): string {
         $privateResource = Pem::requirePrivateKeyResource($privateKey, $passphrase);
         $effectiveOptions = $options ?? new CertificateOptions(days: $days, digestAlgorithm: $this->digestAlgorithm);
         $requestedDays = $effectiveOptions->days;

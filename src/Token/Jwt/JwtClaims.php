@@ -33,16 +33,16 @@ final readonly class JwtClaims
         public string $jwtId,
         array $custom = [],
     ) {
-        if ($this->issuer === '' || strlen($this->issuer) > 2048
-            || $this->subject === '' || strlen($this->subject) > 255
-            || $this->jwtId === '' || strlen($this->jwtId) > 128) {
+        if (!self::validIdentityValue($this->issuer, 2048)
+            || !self::validIdentityValue($this->subject, 255)
+            || !self::validIdentityValue($this->jwtId, 128)) {
             throw new ConfigurationException('JWT issuer, subject, and JWT ID must be non-empty.');
         }
-        if ($this->audiences === []) {
+        if ($this->audiences === [] || count($this->audiences) > 32) {
             throw new ConfigurationException('JWT audiences must contain at least one value.');
         }
         foreach ($this->audiences as $audience) {
-            if ($audience === '' || strlen($audience) > 2048) {
+            if (!self::validIdentityValue($audience, 2048)) {
                 throw new ConfigurationException('JWT audiences must contain non-empty strings.');
             }
         }
@@ -158,5 +158,12 @@ final readonly class JwtClaims
         } catch (Throwable $exception) {
             throw new ConfigurationException('JWT custom claim is not a bounded JSON value.', 0, $exception);
         }
+    }
+
+    private static function validIdentityValue(string $value, int $maximumBytes): bool
+    {
+        return $value !== ''
+            && strlen($value) <= $maximumBytes
+            && preg_match('/[\x00-\x1F\x7F]/', $value) !== 1;
     }
 }
