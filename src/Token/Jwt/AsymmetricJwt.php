@@ -262,7 +262,12 @@ final readonly class AsymmetricJwt
             return sodium_crypto_sign_detached($input, $this->edDsaKey($privateKey, true));
         }
         if ($this->algorithm->isRsaPss()) {
-            return $this->rsaPssPrivateKey($privateKey)->sign($input);
+            $signature = $this->rsaPssPrivateKey($privateKey)->sign($input);
+            if (!is_string($signature)) {
+                throw new ConfigurationException('RSA-PSS signing returned an unsupported signature representation.');
+            }
+
+            return $signature;
         }
 
         $key = $this->loadAndValidateKey($privateKey, true);
