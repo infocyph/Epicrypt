@@ -42,58 +42,6 @@ final readonly class FileProtector
         );
     }
 
-    public function protectWithBinaryKey(
-        string $inputPath,
-        string $outputPath,
-        #[\SensitiveParameter]
-        string $key,
-        ProtectionOptions $options,
-        int $chunkSize = SecretStream::DEFAULT_CHUNK_SIZE,
-    ): ProtectionResult {
-        StreamIO::assertDistinctLocalPaths($inputPath, $outputPath);
-        $metadata = StreamIO::withReadableLocalFile(
-            $inputPath,
-            fn($input): ProtectionMetadata => StreamIO::withAtomicLocalOutput(
-                $outputPath,
-                fn($output): ProtectionMetadata => $this->protectStreamWithBinaryKey(
-                    $input,
-                    $output,
-                    $key,
-                    $options,
-                    $chunkSize,
-                ),
-            ),
-        );
-
-        return $this->pathResult($outputPath, $metadata);
-    }
-
-    public function protectWithKeyRing(
-        string $inputPath,
-        string $outputPath,
-        #[\SensitiveParameter]
-        KeyRing $keyRing,
-        ProtectionOptions $options,
-        int $chunkSize = SecretStream::DEFAULT_CHUNK_SIZE,
-    ): ProtectionResult {
-        StreamIO::assertDistinctLocalPaths($inputPath, $outputPath);
-        $metadata = StreamIO::withReadableLocalFile(
-            $inputPath,
-            fn($input): ProtectionMetadata => StreamIO::withAtomicLocalOutput(
-                $outputPath,
-                fn($output): ProtectionMetadata => $this->protectStreamWithKeyRing(
-                    $input,
-                    $output,
-                    $keyRing,
-                    $options,
-                    $chunkSize,
-                ),
-            ),
-        );
-
-        return $this->pathResult($outputPath, $metadata);
-    }
-
     /**
      * Protect from the current input position into the current output position.
      * The caller owns stream lifetime and publication/rollback semantics.
@@ -167,6 +115,58 @@ final readonly class FileProtector
         );
     }
 
+    public function protectWithBinaryKey(
+        string $inputPath,
+        string $outputPath,
+        #[\SensitiveParameter]
+        string $key,
+        ProtectionOptions $options,
+        int $chunkSize = SecretStream::DEFAULT_CHUNK_SIZE,
+    ): ProtectionResult {
+        StreamIO::assertDistinctLocalPaths($inputPath, $outputPath);
+        $metadata = StreamIO::withReadableLocalFile(
+            $inputPath,
+            fn($input): ProtectionMetadata => StreamIO::withAtomicLocalOutput(
+                $outputPath,
+                fn($output): ProtectionMetadata => $this->protectStreamWithBinaryKey(
+                    $input,
+                    $output,
+                    $key,
+                    $options,
+                    $chunkSize,
+                ),
+            ),
+        );
+
+        return $this->pathResult($outputPath, $metadata);
+    }
+
+    public function protectWithKeyRing(
+        string $inputPath,
+        string $outputPath,
+        #[\SensitiveParameter]
+        KeyRing $keyRing,
+        ProtectionOptions $options,
+        int $chunkSize = SecretStream::DEFAULT_CHUNK_SIZE,
+    ): ProtectionResult {
+        StreamIO::assertDistinctLocalPaths($inputPath, $outputPath);
+        $metadata = StreamIO::withReadableLocalFile(
+            $inputPath,
+            fn($input): ProtectionMetadata => StreamIO::withAtomicLocalOutput(
+                $outputPath,
+                fn($output): ProtectionMetadata => $this->protectStreamWithKeyRing(
+                    $input,
+                    $output,
+                    $keyRing,
+                    $options,
+                    $chunkSize,
+                ),
+            ),
+        );
+
+        return $this->pathResult($outputPath, $metadata);
+    }
+
     public function unprotect(
         string $inputPath,
         string $outputPath,
@@ -182,58 +182,6 @@ final readonly class FileProtector
             $options,
             $chunkSize,
         );
-    }
-
-    public function unprotectWithBinaryKey(
-        string $inputPath,
-        string $outputPath,
-        #[\SensitiveParameter]
-        string $key,
-        ProtectionOptions $options,
-        int $chunkSize = SecretStream::DEFAULT_CHUNK_SIZE,
-    ): ProtectionResult {
-        StreamIO::assertDistinctLocalPaths($inputPath, $outputPath);
-        $metadata = StreamIO::withReadableLocalFile(
-            $inputPath,
-            fn($input): ProtectionMetadata => StreamIO::withAtomicLocalOutput(
-                $outputPath,
-                fn($output): ProtectionMetadata => $this->unprotectStreamWithBinaryKey(
-                    $input,
-                    $output,
-                    $key,
-                    $options,
-                    $chunkSize,
-                ),
-            ),
-        );
-
-        return $this->pathResult($outputPath, $metadata);
-    }
-
-    public function unprotectWithKeyRing(
-        string $inputPath,
-        string $outputPath,
-        #[\SensitiveParameter]
-        KeyRing $keyRing,
-        ProtectionOptions $options,
-        int $chunkSize = SecretStream::DEFAULT_CHUNK_SIZE,
-    ): ProtectionResult {
-        StreamIO::assertDistinctLocalPaths($inputPath, $outputPath);
-        $metadata = StreamIO::withReadableLocalFile(
-            $inputPath,
-            fn($input): ProtectionMetadata => StreamIO::withAtomicLocalOutput(
-                $outputPath,
-                fn($output): ProtectionMetadata => $this->unprotectStreamWithKeyRing(
-                    $input,
-                    $output,
-                    $keyRing,
-                    $options,
-                    $chunkSize,
-                ),
-            ),
-        );
-
-        return $this->pathResult($outputPath, $metadata);
     }
 
     /**
@@ -314,6 +262,58 @@ final readonly class FileProtector
             $entry->id,
             $entry->status === KeyStatus::FALLBACK,
         );
+    }
+
+    public function unprotectWithBinaryKey(
+        string $inputPath,
+        string $outputPath,
+        #[\SensitiveParameter]
+        string $key,
+        ProtectionOptions $options,
+        int $chunkSize = SecretStream::DEFAULT_CHUNK_SIZE,
+    ): ProtectionResult {
+        StreamIO::assertDistinctLocalPaths($inputPath, $outputPath);
+        $metadata = StreamIO::withReadableLocalFile(
+            $inputPath,
+            fn($input): ProtectionMetadata => StreamIO::withAtomicLocalOutput(
+                $outputPath,
+                fn($output): ProtectionMetadata => $this->unprotectStreamWithBinaryKey(
+                    $input,
+                    $output,
+                    $key,
+                    $options,
+                    $chunkSize,
+                ),
+            ),
+        );
+
+        return $this->pathResult($outputPath, $metadata);
+    }
+
+    public function unprotectWithKeyRing(
+        string $inputPath,
+        string $outputPath,
+        #[\SensitiveParameter]
+        KeyRing $keyRing,
+        ProtectionOptions $options,
+        int $chunkSize = SecretStream::DEFAULT_CHUNK_SIZE,
+    ): ProtectionResult {
+        StreamIO::assertDistinctLocalPaths($inputPath, $outputPath);
+        $metadata = StreamIO::withReadableLocalFile(
+            $inputPath,
+            fn($input): ProtectionMetadata => StreamIO::withAtomicLocalOutput(
+                $outputPath,
+                fn($output): ProtectionMetadata => $this->unprotectStreamWithKeyRing(
+                    $input,
+                    $output,
+                    $keyRing,
+                    $options,
+                    $chunkSize,
+                ),
+            ),
+        );
+
+        return $this->pathResult($outputPath, $metadata);
     }
 
     private function encodePrefix(ProtectionOptions $options, int $createdAt): string
