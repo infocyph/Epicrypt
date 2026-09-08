@@ -9,24 +9,6 @@ use Infocyph\Epicrypt\Exception\FileAccessException;
 /** @internal */
 final class StreamIO
 {
-    /** @param resource $stream */
-    public static function assertReadable(mixed $stream, string $label = 'Input stream'): void
-    {
-        $mode = self::mode($stream, $label);
-        if ($mode[0] !== 'r' && !str_contains($mode, '+')) {
-            throw new FileAccessException($label . ' is not readable.');
-        }
-    }
-
-    /** @param resource $stream */
-    public static function assertWritable(mixed $stream, string $label = 'Output stream'): void
-    {
-        $mode = self::mode($stream, $label);
-        if (!in_array($mode[0], ['w', 'a', 'x', 'c'], true) && !str_contains($mode, '+')) {
-            throw new FileAccessException($label . ' is not writable.');
-        }
-    }
-
     public static function assertDistinctLocalPaths(string $inputPath, string $outputPath): void
     {
         self::assertLocalPath($inputPath);
@@ -56,8 +38,27 @@ final class StreamIO
         if ($path === '' || str_contains($path, "\0")) {
             throw new FileAccessException('Local file path must be non-empty and NUL-free.');
         }
+
         if (preg_match('/\A[A-Za-z][A-Za-z0-9+.-]*:\/\//D', $path) === 1) {
             throw new FileAccessException('Epicrypt local path APIs do not accept stream-wrapper or storage schemes.');
+        }
+    }
+
+    /** @param resource $stream */
+    public static function assertReadable(mixed $stream, string $label = 'Input stream'): void
+    {
+        $mode = self::mode($stream, $label);
+        if ($mode[0] !== 'r' && !str_contains($mode, '+')) {
+            throw new FileAccessException($label . ' is not readable.');
+        }
+    }
+
+    /** @param resource $stream */
+    public static function assertWritable(mixed $stream, string $label = 'Output stream'): void
+    {
+        $mode = self::mode($stream, $label);
+        if (!in_array($mode[0], ['w', 'a', 'x', 'c'], true) && !str_contains($mode, '+')) {
+            throw new FileAccessException($label . ' is not writable.');
         }
     }
 
@@ -79,6 +80,7 @@ final class StreamIO
             if ($chunk === false) {
                 throw new FileAccessException('Unable to read from input stream.');
             }
+
             if ($chunk === '') {
                 if (feof($stream)) {
                     break;
@@ -106,6 +108,7 @@ final class StreamIO
             if ($byte === false) {
                 throw new FileAccessException('Unable to read from input stream.');
             }
+
             if ($byte === '') {
                 if (feof($stream)) {
                     throw new FileAccessException('Input stream ended before the required line terminator.');
@@ -113,6 +116,7 @@ final class StreamIO
 
                 throw new FileAccessException('Input stream made no progress before EOF.');
             }
+
             if ($byte === "\n") {
                 return $line;
             }
@@ -122,22 +126,62 @@ final class StreamIO
         throw new FileAccessException('Input stream line exceeds the configured size bound.');
     }
 
-    /** @param resource $stream */
-    public static function writeAll(mixed $stream, #[\SensitiveParameter] string $data): int
+    /**
+     * @template TResult
+     * @param \Closure(resource): TResult $operation
+     * @return TResult
+     */
+    public static function withAtomicLocalOutput(string $outputPath, \Closure $operation): mixed
     {
-        self::assertWritable($stream);
-        $length = strlen($data);
-        $offset = 0;
-
-        while ($offset < $length) {
-            $written = fwrite($stream, substr($data, $offset));
-            if ($written === false || $written < 1) {
-                throw new FileAccessException('Unable to write the complete output stream.');
-            }
-            $offset += $written;
+        self::assertLocalPath($outputPath);
+        $directory = dirname($outputPath);
+        if (!is_dir($directory) || !is_writable($directory)) {
+            throw new FileAccessException('Output directory is not writable: ' . $directory);
         }
 
-        return $length;
+        if (file_exists($outputPath) && !is_file($outputPath) && !is_link($outputPath)) {
+            throw new FileAccessException('Output path is not a regular file target: ' . $outputPath);
+        }
+
+        $temporaryPath = tempnam($directory, '.epicrypt-');
+        if ($temporaryPath === false) {
+            throw new FileAccessException('Unable to create a temporary output file.');
+        }
+
+        if (!chmod($temporaryPath, 0600)) {
+            self::removeTemporaryFile($temporaryPath);
+
+            throw new FileAccessException('Unable to secure the temporary output file.');
+        }
+
+        $stream = fopen($temporaryPath, 'wb');
+        if (!is_resource($stream)) {
+            self::removeTemporaryFile($temporaryPath);
+
+            throw new FileAccessException('Unable to open the temporary output file.');
+        }
+
+        $committed = false;
+        try {
+            $result = $operation($stream);
+            if (!fflush($stream)) {
+                throw new FileAccessException('Unable to flush the complete output file.');
+            }
+            fclose($stream);
+            $stream = null;
+            self::replaceLocalOutput($temporaryPath, $outputPath);
+            $committed = true;
+
+            return $result;
+        } finally {
+            if (is_resource($stream)) {
+                fclose($stream);
+            }
+
+            if (!$committed) {
+                self::removeTemporaryFile($temporaryPath);
+            }
+        }
     }
 
     /**
@@ -173,57 +217,22 @@ final class StreamIO
         }
     }
 
-    /**
-     * @template TResult
-     * @param \Closure(resource): TResult $operation
-     * @return TResult
-     */
-    public static function withAtomicLocalOutput(string $outputPath, \Closure $operation): mixed
+    /** @param resource $stream */
+    public static function writeAll(mixed $stream, #[\SensitiveParameter] string $data): int
     {
-        self::assertLocalPath($outputPath);
-        $directory = dirname($outputPath);
-        if (!is_dir($directory) || !is_writable($directory)) {
-            throw new FileAccessException('Output directory is not writable: ' . $directory);
-        }
-        if (file_exists($outputPath) && !is_file($outputPath) && !is_link($outputPath)) {
-            throw new FileAccessException('Output path is not a regular file target: ' . $outputPath);
-        }
+        self::assertWritable($stream);
+        $length = strlen($data);
+        $offset = 0;
 
-        $temporaryPath = tempnam($directory, '.epicrypt-');
-        if ($temporaryPath === false) {
-            throw new FileAccessException('Unable to create a temporary output file.');
-        }
-        if (!chmod($temporaryPath, 0600)) {
-            @unlink($temporaryPath);
-            throw new FileAccessException('Unable to secure the temporary output file.');
-        }
-
-        $stream = fopen($temporaryPath, 'wb');
-        if (!is_resource($stream)) {
-            @unlink($temporaryPath);
-            throw new FileAccessException('Unable to open the temporary output file.');
-        }
-
-        $committed = false;
-        try {
-            $result = $operation($stream);
-            if (!fflush($stream)) {
-                throw new FileAccessException('Unable to flush the complete output file.');
+        while ($offset < $length) {
+            $written = fwrite($stream, substr($data, $offset));
+            if ($written === false || $written < 1) {
+                throw new FileAccessException('Unable to write the complete output stream.');
             }
-            fclose($stream);
-            $stream = null;
-            self::replaceLocalOutput($temporaryPath, $outputPath);
-            $committed = true;
-
-            return $result;
-        } finally {
-            if (is_resource($stream)) {
-                fclose($stream);
-            }
-            if (!$committed && is_file($temporaryPath)) {
-                @unlink($temporaryPath);
-            }
+            $offset += $written;
         }
+
+        return $length;
     }
 
     private static function mode(mixed $stream, string $label): string
@@ -233,12 +242,19 @@ final class StreamIO
         }
 
         $metadata = stream_get_meta_data($stream);
-        $mode = $metadata['mode'] ?? null;
-        if (!is_string($mode) || $mode === '') {
+        $mode = $metadata['mode'] ?? '';
+        if ($mode === '') {
             throw new FileAccessException($label . ' mode is unavailable.');
         }
 
         return $mode;
+    }
+
+    private static function removeTemporaryFile(string $path): void
+    {
+        if (is_file($path) && !unlink($path) && is_file($path)) {
+            throw new FileAccessException('Unable to remove temporary output file.');
+        }
     }
 
     private static function replaceLocalOutput(string $temporaryPath, string $outputPath): void
