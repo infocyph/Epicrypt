@@ -7,11 +7,14 @@ use Infocyph\Epicrypt\Certificate\KeyPairGenerator;
 use Infocyph\Epicrypt\Exception\ConfigurationException;
 use Infocyph\Epicrypt\Exception\Token\InvalidTokenException;
 use Infocyph\Epicrypt\Exception\Token\KeyResolutionException;
+use Infocyph\Epicrypt\Token\Jwt\AsymmetricJwt;
 use Infocyph\Epicrypt\Token\Jwt\Enum\AsymmetricJwtAlgorithm;
 use Infocyph\Epicrypt\Token\Jwt\Enum\JweKeyManagementAlgorithm;
 use Infocyph\Epicrypt\Token\Jwt\Jwe;
 use Infocyph\Epicrypt\Token\Jwt\Jwks;
 use Infocyph\Epicrypt\Token\Jwt\Jws;
+use Infocyph\Epicrypt\Token\Jwt\JwtClaims;
+use Infocyph\Epicrypt\Token\Jwt\JwtPolicy;
 use phpseclib4\Crypt\PublicKeyLoader;
 
 it('uses only the native phpseclib 4 namespace', function () {
@@ -35,6 +38,39 @@ it('signs PS256 with a password-protected private key', function () {
     expect($verifier->verifyCompact($token))->toBeTrue()
         ->and(fn () => Jws::signer($encryptedPrivate, AsymmetricJwtAlgorithm::PS256, 'ps256-v4', 'wrong'))
         ->toThrow(ConfigurationException::class);
+});
+
+it('issues PS256 JWTs with a password-protected private key', function () {
+    $pair = KeyPairGenerator::rsa(OpenSslRsaBits::BITS_2048)->generate();
+    $resource = openssl_pkey_get_private($pair['private']);
+    expect($resource)->not->toBeFalse();
+
+    $passphrase = 'jwt-v4-passphrase';
+    $encryptedPrivate = '';
+    expect(openssl_pkey_export($resource, $encryptedPrivate, $passphrase))->toBeTrue();
+
+    $claims = JwtClaims::issue('issuer', 'subject', ['api'], 300);
+    $issuer = AsymmetricJwt::issuer(
+        $encryptedPrivate,
+        'at+jwt',
+        'jwt-v4',
+        AsymmetricJwtAlgorithm::PS256,
+        $passphrase,
+    );
+    $verifier = AsymmetricJwt::verifier(
+        $pair['public'],
+        JwtPolicy::accessToken('issuer', 'api'),
+        AsymmetricJwtAlgorithm::PS256,
+    );
+
+    expect($verifier->verify($issuer->issue($claims)))->toBeTrue()
+        ->and(fn () => AsymmetricJwt::issuer(
+            $encryptedPrivate,
+            'at+jwt',
+            'jwt-v4',
+            AsymmetricJwtAlgorithm::PS256,
+            'wrong',
+        ))->toThrow(ConfigurationException::class);
 });
 
 it('round trips password-protected RSA private JWK material', function () {
