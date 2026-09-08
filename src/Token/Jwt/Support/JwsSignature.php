@@ -40,7 +40,12 @@ final readonly class JwsSignature
             return sodium_crypto_sign_detached($input, $this->nonEmptyKey());
         }
         if ($this->algorithm->isRsaPss()) {
-            return $this->rsaPssPrivateKey()->sign($input);
+            $signature = $this->rsaPssPrivateKey()->sign($input);
+            if (!is_string($signature)) {
+                throw new ConfigurationException('RSA-PSS signing returned an unsupported signature representation.');
+            }
+
+            return $signature;
         }
         $key = $this->opensslKey();
         if (!openssl_sign($input, $signature, $key, $this->algorithm->opensslAlgorithm()) || !is_string($signature)) {
