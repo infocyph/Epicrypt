@@ -47,8 +47,13 @@ final class StreamIO
     /** @return resource */
     public static function readable(mixed $stream, string $label = 'Input stream'): mixed
     {
-        $mode = self::mode($stream, $label);
-        if ($mode[0] !== 'r' && !str_contains($mode, '+')) {
+        if (!is_resource($stream) || get_resource_type($stream) !== 'stream') {
+            throw new FileAccessException($label . ' must be an open PHP stream resource.');
+        }
+
+        $metadata = stream_get_meta_data($stream);
+        $mode = $metadata['mode'];
+        if ($mode === '' || ($mode[0] !== 'r' && !str_contains($mode, '+'))) {
             throw new FileAccessException($label . ' is not readable.');
         }
 
@@ -214,8 +219,13 @@ final class StreamIO
     /** @return resource */
     public static function writable(mixed $stream, string $label = 'Output stream'): mixed
     {
-        $mode = self::mode($stream, $label);
-        if (!in_array($mode[0], ['w', 'a', 'x', 'c'], true) && !str_contains($mode, '+')) {
+        if (!is_resource($stream) || get_resource_type($stream) !== 'stream') {
+            throw new FileAccessException($label . ' must be an open PHP stream resource.');
+        }
+
+        $metadata = stream_get_meta_data($stream);
+        $mode = $metadata['mode'];
+        if ($mode === '' || (!in_array($mode[0], ['w', 'a', 'x', 'c'], true) && !str_contains($mode, '+'))) {
             throw new FileAccessException($label . ' is not writable.');
         }
 
@@ -237,21 +247,6 @@ final class StreamIO
         }
 
         return $length;
-    }
-
-    private static function mode(mixed $stream, string $label): string
-    {
-        if (!is_resource($stream) || get_resource_type($stream) !== 'stream') {
-            throw new FileAccessException($label . ' must be an open PHP stream resource.');
-        }
-
-        $metadata = stream_get_meta_data($stream);
-        $mode = $metadata['mode'];
-        if ($mode === '') {
-            throw new FileAccessException($label . ' mode is unavailable.');
-        }
-
-        return $mode;
     }
 
     private static function removeTemporaryFile(string $path): void
