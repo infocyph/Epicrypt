@@ -57,10 +57,18 @@ jobs:
         run: |
           composer show infocyph/pathwise
           php -r 'require "vendor/autoload.php"; $r = new ReflectionClass(Infocyph\Pathwise\Storage\StorageContext::class); echo $r->getName(), PHP_EOL;'
+      - name: Resolve the PHPForge Pest template outside the dependency tree
+        run: |
+          sed \
+            -e "s#vendor/phpunit/phpunit/phpunit.xsd#$GITHUB_WORKSPACE/vendor/phpunit/phpunit/phpunit.xsd#" \
+            -e "s#bootstrap=\"vendor/autoload.php\"#bootstrap=\"$GITHUB_WORKSPACE/vendor/autoload.php\"#" \
+            -e "s#<directory>./tests</directory>#<directory>$GITHUB_WORKSPACE/tests</directory>#" \
+            -e "s#<directory suffix=\".php\">./src</directory>#<directory suffix=\".php\">$GITHUB_WORKSPACE/src</directory>#" \
+            vendor/infocyph/phpforge/resources/pest.xml > "$RUNNER_TEMP/pest-phase-ab.xml"
       - name: Run stream and Pathwise isolation tests
         run: >-
           vendor/bin/pest
-          --configuration vendor/infocyph/phpforge/resources/pest.xml
+          --configuration="${{ runner.temp }}/pest-phase-ab.xml"
           --cache-directory="${{ runner.temp }}/pest-cache"
           tests/Architecture/DependencyBoundaryTest.php
           tests/DataProtection/FileStreamProtectionTest.php
