@@ -35,7 +35,7 @@ final readonly class FileHasher
      */
     public function hashStream(mixed $stream, bool $binary = false, ?int $length = null): string
     {
-        StreamIO::assertReadable($stream);
+        $stream = StreamIO::readable($stream);
 
         return $this->algorithm === IntegrityAlgorithm::BLAKE2B
             ? $this->hashBlake2b($stream, $binary, $length)
