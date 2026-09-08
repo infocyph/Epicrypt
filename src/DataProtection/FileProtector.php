@@ -66,7 +66,10 @@ final readonly class FileProtector
         );
     }
 
-    /** @param resource $input @param resource $output */
+    /**
+     * @param resource $input
+     * @param resource $output
+     */
     public function protectStreamWithBinaryKey(
         mixed $input,
         mixed $output,
@@ -75,8 +78,8 @@ final readonly class FileProtector
         ProtectionOptions $options,
         int $chunkSize = SecretStream::DEFAULT_CHUNK_SIZE,
     ): ProtectionMetadata {
-        StreamIO::assertReadable($input);
-        StreamIO::assertWritable($output);
+        $input = StreamIO::readable($input);
+        $output = StreamIO::writable($output);
 
         $createdAt = $this->clock->now()->getTimestamp();
         $prefix = $this->encodePrefix($options, $createdAt);
@@ -91,7 +94,10 @@ final readonly class FileProtector
         );
     }
 
-    /** @param resource $input @param resource $output */
+    /**
+     * @param resource $input
+     * @param resource $output
+     */
     public function protectStreamWithKeyRing(
         mixed $input,
         mixed $output,
@@ -100,6 +106,8 @@ final readonly class FileProtector
         ProtectionOptions $options,
         int $chunkSize = SecretStream::DEFAULT_CHUNK_SIZE,
     ): ProtectionMetadata {
+        $input = StreamIO::readable($input);
+        $output = StreamIO::writable($output);
         $entry = $keyRing->activeForWrite(KeyPurpose::FILE_PROTECTION, self::ALGORITHM);
 
         return $this->protectStream(
@@ -208,7 +216,10 @@ final readonly class FileProtector
         );
     }
 
-    /** @param resource $input @param resource $output */
+    /**
+     * @param resource $input
+     * @param resource $output
+     */
     public function unprotectStreamWithBinaryKey(
         mixed $input,
         mixed $output,
@@ -217,8 +228,8 @@ final readonly class FileProtector
         ProtectionOptions $options,
         int $chunkSize = SecretStream::DEFAULT_CHUNK_SIZE,
     ): ProtectionMetadata {
-        StreamIO::assertReadable($input);
-        StreamIO::assertWritable($output);
+        $input = StreamIO::readable($input);
+        $output = StreamIO::writable($output);
 
         [$prefix, $metadata] = $this->readAndValidatePrefixFromStream($input, $options);
         new SecretStream($key, $prefix)->decryptStream($input, $output, $chunkSize);
@@ -231,7 +242,10 @@ final readonly class FileProtector
         );
     }
 
-    /** @param resource $input @param resource $output */
+    /**
+     * @param resource $input
+     * @param resource $output
+     */
     public function unprotectStreamWithKeyRing(
         mixed $input,
         mixed $output,
@@ -240,8 +254,8 @@ final readonly class FileProtector
         ProtectionOptions $options,
         int $chunkSize = SecretStream::DEFAULT_CHUNK_SIZE,
     ): ProtectionMetadata {
-        StreamIO::assertReadable($input);
-        StreamIO::assertWritable($output);
+        $input = StreamIO::readable($input);
+        $output = StreamIO::writable($output);
 
         [$prefix, $metadata] = $this->readAndValidatePrefixFromStream($input, $options);
         if ($metadata['kid'] === null) {
