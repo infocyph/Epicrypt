@@ -7,7 +7,7 @@ namespace Infocyph\Epicrypt\Token\Jwt\Support;
 use Infocyph\Epicrypt\Exception\Token\KeyResolutionException;
 use Infocyph\Epicrypt\Internal\Json;
 use Infocyph\Epicrypt\Token\Jwt\Enum\AsymmetricJwtAlgorithm;
-use phpseclib3\Crypt\PublicKeyLoader;
+use phpseclib4\Crypt\PublicKeyLoader;
 
 /** @internal Explicit secret-bearing JWK import/export boundary. */
 final class JwkPrivateKeyCodec
@@ -22,15 +22,7 @@ final class JwkPrivateKeyCodec
         string $password,
     ): array {
         try {
-            $resource = openssl_pkey_get_private($privateKeyPem, $password);
-            $normalized = '';
-            if ($resource === false || !openssl_pkey_export($resource, $normalized) || !is_string($normalized)) {
-                throw new \RuntimeException('OpenSSL could not normalize the private key.');
-            }
-            $encoded = PublicKeyLoader::loadPrivateKey($normalized)->toString('JWK');
-            if (!is_string($encoded)) {
-                throw new \RuntimeException('Private-key JWK encoding failed.');
-            }
+            $encoded = PublicKeyLoader::loadPrivateKey($privateKeyPem, $password)->toString('JWK');
             $jwk = $this->unwrap(Json::decodeToArray($encoded));
         } catch (\Throwable $exception) {
             throw new KeyResolutionException('Unable to export private key as JWK.', 0, $exception);
@@ -54,9 +46,6 @@ final class JwkPrivateKeyCodec
 
         try {
             $pem = PublicKeyLoader::loadPrivateKey(Json::encode($jwk))->toString('PKCS8');
-            if (!is_string($pem)) {
-                throw new \RuntimeException('Private-key PEM encoding failed.');
-            }
         } catch (\Throwable $exception) {
             throw new KeyResolutionException('JWK private parameters are invalid or inconsistent.', 0, $exception);
         }
