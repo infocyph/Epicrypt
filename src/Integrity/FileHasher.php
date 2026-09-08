@@ -114,9 +114,7 @@ final readonly class FileHasher
 
             return $binary ? $digest : sodium_bin2hex($digest);
         } finally {
-            if (is_string($state)) {
-                sodium_memzero($state);
-            }
+            sodium_memzero($state);
         }
     }
 
