@@ -44,28 +44,20 @@ final class StreamIO
         }
     }
 
-    /** @phpstan-assert resource $stream */
-    public static function assertReadable(mixed $stream, string $label = 'Input stream'): void
+    /** @return resource */
+    public static function readable(mixed $stream, string $label = 'Input stream'): mixed
     {
         $mode = self::mode($stream, $label);
         if ($mode[0] !== 'r' && !str_contains($mode, '+')) {
             throw new FileAccessException($label . ' is not readable.');
         }
+
+        return $stream;
     }
 
-    /** @phpstan-assert resource $stream */
-    public static function assertWritable(mixed $stream, string $label = 'Output stream'): void
-    {
-        $mode = self::mode($stream, $label);
-        if (!in_array($mode[0], ['w', 'a', 'x', 'c'], true) && !str_contains($mode, '+')) {
-            throw new FileAccessException($label . ' is not writable.');
-        }
-    }
-
-    /** @param resource $stream */
     public static function readChunk(mixed $stream, int $maximumBytes): ?string
     {
-        self::assertReadable($stream);
+        $stream = self::readable($stream);
         if ($maximumBytes < 1) {
             throw new \InvalidArgumentException('Maximum read size must be positive.');
         }
@@ -95,10 +87,9 @@ final class StreamIO
         return $buffer === '' && feof($stream) ? null : $buffer;
     }
 
-    /** @param resource $stream */
     public static function readLine(mixed $stream, int $maximumBytes): string
     {
-        self::assertReadable($stream);
+        $stream = self::readable($stream);
         if ($maximumBytes < 1) {
             throw new \InvalidArgumentException('Maximum line size must be positive.');
         }
@@ -220,10 +211,20 @@ final class StreamIO
         }
     }
 
-    /** @param resource $stream */
+    /** @return resource */
+    public static function writable(mixed $stream, string $label = 'Output stream'): mixed
+    {
+        $mode = self::mode($stream, $label);
+        if (!in_array($mode[0], ['w', 'a', 'x', 'c'], true) && !str_contains($mode, '+')) {
+            throw new FileAccessException($label . ' is not writable.');
+        }
+
+        return $stream;
+    }
+
     public static function writeAll(mixed $stream, #[\SensitiveParameter] string $data): int
     {
-        self::assertWritable($stream);
+        $stream = self::writable($stream);
         $length = strlen($data);
         $offset = 0;
 
