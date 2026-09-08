@@ -137,6 +137,7 @@ final readonly class SecretStream
         if ($finalSeen) {
             throw new RuntimeException('Trailing data or a duplicate final frame was found.');
         }
+
         if (strlen($frame) < SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_ABYTES) {
             throw new RuntimeException('Truncated SecretStream frame.');
         }
@@ -151,9 +152,6 @@ final readonly class SecretStream
         }
 
         [$plaintext, $tag] = $decrypted;
-        if (!is_string($plaintext) || !is_int($tag)) {
-            throw new RuntimeException('Invalid SecretStream decrypted frame values.');
-        }
         StreamIO::writeAll($output, $plaintext);
 
         return $tag === SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_TAG_FINAL;
@@ -165,56 +163,45 @@ final readonly class SecretStream
      */
     private function decryptFrames(mixed $input, mixed $output, int $chunkSize): void
     {
-        $state = null;
+        $state = $this->initializePullFromStream($input);
 
         try {
-            if ($this->framingPrefix !== '') {
-                $prefix = StreamIO::readChunk($input, strlen($this->framingPrefix));
-                if (!is_string($prefix)
-                    || strlen($prefix) !== strlen($this->framingPrefix)
-                    || !hash_equals($this->framingPrefix, $prefix)) {
-                    throw new RuntimeException('Invalid or truncated SecretStream framing prefix.');
-                }
-            }
-
-            $header = StreamIO::readChunk($input, SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_HEADERBYTES);
-            if (!is_string($header) || strlen($header) !== SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_HEADERBYTES) {
-                throw new RuntimeException('Invalid or truncated SecretStream header.');
-            }
-
-            $state = sodium_crypto_secretstream_xchacha20poly1305_init_pull($header, $this->key);
-            if (!is_string($state)) {
-                throw new RuntimeException('Unable to initialize SecretStream decryption state.');
-            }
-
-            $frameSize = $chunkSize + SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_ABYTES;
-            $finalSeen = false;
-
-            while (($frame = StreamIO::readChunk($input, $frameSize)) !== null) {
-                $shortFrame = strlen($frame) < $frameSize;
-                $finalSeen = $this->decryptFrame($state, $frame, $output, $finalSeen);
-
-                if ($finalSeen) {
-                    if (StreamIO::readChunk($input, 1) !== null) {
-                        throw new RuntimeException('Trailing data or a duplicate final frame was found.');
-                    }
-
-                    break;
-                }
-
-                if ($shortFrame) {
-                    throw new RuntimeException('SecretStream final frame is missing.');
-                }
-            }
-
-            if (!$finalSeen) {
-                throw new RuntimeException('SecretStream final frame is missing.');
-            }
+            $this->decryptRemainingFrames($input, $output, $state, $chunkSize);
         } finally {
-            if (is_string($state)) {
-                sodium_memzero($state);
+            sodium_memzero($state);
+        }
+    }
+
+    /**
+     * @param resource $input
+     * @param resource $output
+     */
+    private function decryptRemainingFrames(
+        mixed $input,
+        mixed $output,
+        #[\SensitiveParameter]
+        string &$state,
+        int $chunkSize,
+    ): void {
+        $frameSize = $chunkSize + SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_ABYTES;
+        $finalSeen = false;
+
+        while (($frame = StreamIO::readChunk($input, $frameSize)) !== null) {
+            $shortFrame = strlen($frame) < $frameSize;
+            $finalSeen = $this->decryptFrame($state, $frame, $output, $finalSeen);
+
+            if ($finalSeen) {
+                $this->assertNoTrailingData($input);
+
+                return;
+            }
+
+            if ($shortFrame) {
+                break;
             }
         }
+
+        throw new RuntimeException('SecretStream final frame is missing.');
     }
 
     /**
@@ -262,6 +249,34 @@ final readonly class SecretStream
         } finally {
             sodium_memzero($state);
         }
+    }
+
+    /** @param resource $input */
+    private function assertNoTrailingData(mixed $input): void
+    {
+        if (StreamIO::readChunk($input, 1) !== null) {
+            throw new RuntimeException('Trailing data or a duplicate final frame was found.');
+        }
+    }
+
+    /** @param resource $input */
+    private function initializePullFromStream(mixed $input): string
+    {
+        if ($this->framingPrefix !== '') {
+            $prefix = StreamIO::readChunk($input, strlen($this->framingPrefix));
+            if ($prefix === null
+                || strlen($prefix) !== strlen($this->framingPrefix)
+                || !hash_equals($this->framingPrefix, $prefix)) {
+                throw new RuntimeException('Invalid or truncated SecretStream framing prefix.');
+            }
+        }
+
+        $header = StreamIO::readChunk($input, SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_HEADERBYTES);
+        if ($header === null || strlen($header) !== SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_HEADERBYTES) {
+            throw new RuntimeException('Invalid or truncated SecretStream header.');
+        }
+
+        return sodium_crypto_secretstream_xchacha20poly1305_init_pull($header, $this->key);
     }
 
     /** @return array{string, string} */
