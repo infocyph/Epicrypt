@@ -23,7 +23,7 @@ final class JwkPrivateKeyCodec
     ): array {
         try {
             $key = PublicKeyLoader::loadPrivateKey($privateKeyPem, $password);
-            $encoded = $key->withoutPassword()->toString('JWK');
+            $encoded = $key->withPassword()->toString('JWK');
             $jwk = $this->unwrap(Json::decodeToArray($encoded));
         } catch (\Throwable $exception) {
             throw new KeyResolutionException('Unable to export private key as JWK.', 0, $exception);
