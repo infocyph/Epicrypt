@@ -13,7 +13,7 @@ use Infocyph\Epicrypt\Token\Jwt\Support\JwkCertificateBinding;
 use Infocyph\Epicrypt\Token\Jwt\Support\JwkOkpCodec;
 use Infocyph\Epicrypt\Token\Jwt\Support\JwkPrivateKeyCodec;
 use Infocyph\Epicrypt\Token\Jwt\Support\JwkThumbprint;
-use phpseclib3\Math\BigInteger;
+use phpseclib4\Math\BigInteger;
 
 final class Jwks
 {
