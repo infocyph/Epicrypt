@@ -8,6 +8,40 @@ Planning branch: `epicrypt-3/architecture-plan`
 
 Baseline audited from current `main` at `f80092978328cccaef0d2233b08ce95b453dd90a`.
 
+Implementation status: **Phase A + Phase B in progress**.
+
+Latest implementation batch: **A+B Batch 1** — `0538cec0eb89b1b954bbd04cb0c0327d502031b3`.
+
+### Progress ledger
+
+#### 2026-09-08 — Phase A+B Batch 1
+
+Completed in this batch:
+
+- moved `SecretStream`, `FileProtector` and `FileHasher` to native caller-owned PHP stream cores while retaining local-path convenience APIs;
+- removed all production Pathwise imports and removed Pathwise from Composer `require`;
+- moved Pathwise to `require-dev ^4.0` solely for explicit interoperability tests;
+- added an internal native stream/local-file boundary with bounded short-read/short-write handling, shared input locking and atomic local output publication;
+- preserved the existing `ep2` protected-file framing and added a frozen Epicrypt 2.x protected-file compatibility fixture;
+- retained the existing frozen 2.x string-protection fixture and added a frozen 2.x signed-payload fixture;
+- added `ProtectionMetadata` so stream operations return metadata without inventing a fake output path/value;
+- added a public-API inventory for intentional 3.0 removals/renames before later breaking changes land;
+- added a Pathwise 4 `StorageContext` interoperability test using two independent contexts with the same logical disk name to prove no ambient Pathwise state is required;
+- added a production-only no-Pathwise smoke script and an architecture test preventing production Pathwise imports.
+
+Validation performed for Batch 1:
+
+- targeted PHP 8.4 syntax checks passed for the new/changed stream implementation and tests;
+- targeted runtime checks passed for SecretStream stream round-trip, FileProtector stream round-trip, FileHasher SHA/BLAKE2b stream hashing and decryption of the frozen 2.x protected-file artifact;
+- full Composer/Pest/PHPForge CI was **not** run from the chat environment and remains a required repository CI validation.
+
+Still open before Phase A+B can close:
+
+- capture/record numeric Epicrypt 2.1/current-main benchmark baselines before performance comparisons;
+- add and run the production-only `composer install --no-dev` no-Pathwise CI gate using `tests/Smoke/core-no-pathwise.php`;
+- run the complete test/static/security matrix with Pathwise 4 installed and resolve any findings;
+- add/compare dedicated stream-vs-local-wrapper benchmarks.
+
 Primary ecosystem goals:
 
 - unblock Foundation 3 from the Epicrypt 2.1 → Pathwise `^3.1` constraint;
@@ -105,13 +139,13 @@ Current Epicrypt 2.1 requires `infocyph/pathwise ^3.1`, but production use is co
 
 For Epicrypt 3:
 
-- [ ] remove `infocyph/pathwise` from production `require`;
-- [ ] add `infocyph/pathwise: ^4.0` to `require-dev` only for integration/interoperability tests where useful;
-- [ ] do not expose or depend on Pathwise static/global mount APIs;
-- [ ] make file crypto **stream-first** so Foundation/Pathwise can supply streams without Epicrypt knowing storage topology;
-- [ ] keep local path convenience APIs where useful, implemented over Epicrypt-owned local stream/path helpers rather than Pathwise classes;
-- [ ] add examples/tests showing Pathwise 4 `StorageContext`/Flysystem streams feeding Epicrypt stream APIs without cross-process/global state;
-- [ ] do not add a Pathwise `suggest` entry unless Epicrypt ships an actual public optional integration class that needs it. A dev-only interoperability dependency is preferable if core stream APIs are sufficient.
+- [x] remove `infocyph/pathwise` from production `require`;
+- [x] add `infocyph/pathwise: ^4.0` to `require-dev` only for integration/interoperability tests where useful;
+- [x] do not expose or depend on Pathwise static/global mount APIs;
+- [x] make file crypto **stream-first** so Foundation/Pathwise can supply streams without Epicrypt knowing storage topology;
+- [x] keep local path convenience APIs where useful, implemented over Epicrypt-owned local stream/path helpers rather than Pathwise classes;
+- [x] add examples/tests showing Pathwise 4 `StorageContext`/Flysystem streams feeding Epicrypt stream APIs without cross-process/global state;
+- [x] do not add a Pathwise `suggest` entry unless Epicrypt ships an actual public optional integration class that needs it. A dev-only interoperability dependency is preferable if core stream APIs are sufficient.
 
 ### 2.2 OTP
 
@@ -169,26 +203,26 @@ caller/Pathwise commits destination
 
 ### Required changes
 
-- [ ] add stream-native `SecretStream` encrypt/decrypt entry points;
-- [ ] add stream-native `FileProtector`/protected-stream entry points;
-- [ ] add stream-native `FileHasher` hashing/verification entry points;
-- [ ] keep bounded chunking and exact framing validation;
-- [ ] validate stream readability/writability and fail with Epicrypt exceptions;
-- [ ] guarantee cleanup/zeroization of internal state in normal and exceptional paths;
-- [ ] avoid retaining input/output stream references beyond one operation;
-- [ ] keep path convenience methods as wrappers over stream operations;
-- [ ] for local path replacement, preserve existing destination on crypto failure and use safe sibling staging/commit semantics;
-- [ ] do not accept arbitrary Pathwise scheme strings in the core path APIs. Storage-backed callers should resolve/open streams explicitly;
-- [ ] add Pathwise 4 integration tests using independent `StorageContext` instances with identical disk names to prove Epicrypt has no ambient storage state;
+- [x] add stream-native `SecretStream` encrypt/decrypt entry points;
+- [x] add stream-native `FileProtector`/protected-stream entry points;
+- [x] add stream-native `FileHasher` hashing/verification entry points;
+- [x] keep bounded chunking and exact framing validation;
+- [x] validate stream readability/writability and fail with Epicrypt exceptions;
+- [x] guarantee cleanup/zeroization of internal state in normal and exceptional paths;
+- [x] avoid retaining input/output stream references beyond one operation;
+- [x] keep path convenience methods as wrappers over stream operations;
+- [x] for local path replacement, preserve existing destination on crypto failure and use safe sibling staging/commit semantics;
+- [x] do not accept arbitrary Pathwise scheme strings in the core path APIs. Storage-backed callers should resolve/open streams explicitly;
+- [x] add Pathwise 4 integration tests using independent `StorageContext` instances with identical disk names to prove Epicrypt has no ambient storage state;
 - [ ] verify remote/adapter streams can be processed without whole-file buffering when the caller provides appropriate streams;
 - [ ] benchmark local paths and streams separately.
 
 ### File format compatibility
 
-- [ ] continue reading Epicrypt 2.x protected-file framing;
-- [ ] remove misleading error text that hard-codes “Epicrypt 2.0” where the concern is a format version;
-- [ ] separate `package version` from `wire/storage format version` explicitly;
-- [ ] do not introduce a new protected-file format merely because the package major changes;
+- [x] continue reading Epicrypt 2.x protected-file framing;
+- [x] remove misleading protected-file error text that hard-codes “Epicrypt 2.0” where the concern is a format version;
+- [x] separate `package version` from `wire/storage format version` explicitly in the 3.0 API inventory/plan;
+- [x] do not introduce a new protected-file format merely because the package major changes;
 - [ ] if a v3 format is justified, implement **read old + read new + write new**, publish deterministic migration/re-protection tooling/examples, and include fixed cross-version test vectors.
 
 ---
@@ -872,18 +906,18 @@ Use this order to prevent dependency/API churn from invalidating later work.
 
 ### Phase A — freeze baselines and formats
 
-1. [ ] capture current 2.x persisted-format fixtures and benchmark baselines;
-2. [ ] enumerate public API slated for removal/rename;
-3. [ ] document dependency/ownership decisions;
-4. [ ] add tests that prove current durable payload/file/token formats before refactoring.
+1. [ ] capture current 2.x persisted-format fixtures and benchmark baselines — **partial:** durable string/file/signed-payload fixtures are frozen; numeric benchmark baselines remain open;
+2. [x] enumerate public API slated for removal/rename — inventory added at `docs/plans/epicrypt-3-public-api-inventory.md`;
+3. [x] document dependency/ownership decisions;
+4. [x] add tests that prove current durable payload/file/token formats before refactoring.
 
 ### Phase B — break dependency coupling
 
-5. [ ] redesign `SecretStream`, `FileProtector`, `FileHasher` around streams;
-6. [ ] remove Pathwise imports from production source;
-7. [ ] move Pathwise to `require-dev ^4.0` only if integration tests still need it;
-8. [ ] add no-Pathwise clean-install test;
-9. [ ] add Pathwise 4 explicit-context stream interop test.
+5. [x] redesign `SecretStream`, `FileProtector`, `FileHasher` around streams;
+6. [x] remove Pathwise imports from production source;
+7. [x] move Pathwise to `require-dev ^4.0` only if integration tests still need it;
+8. [ ] add no-Pathwise clean-install test — smoke script exists; dedicated `composer install --no-dev` CI gate still pending;
+9. [x] add Pathwise 4 explicit-context stream interop test.
 
 This phase alone should remove the Composer conflict that currently blocks Foundation 26.5.
 
