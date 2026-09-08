@@ -44,7 +44,7 @@ final class StreamIO
         }
     }
 
-    /** @param resource $stream */
+    /** @phpstan-assert resource $stream */
     public static function assertReadable(mixed $stream, string $label = 'Input stream'): void
     {
         $mode = self::mode($stream, $label);
@@ -53,7 +53,7 @@ final class StreamIO
         }
     }
 
-    /** @param resource $stream */
+    /** @phpstan-assert resource $stream */
     public static function assertWritable(mixed $stream, string $label = 'Output stream'): void
     {
         $mode = self::mode($stream, $label);
@@ -76,7 +76,8 @@ final class StreamIO
 
         $buffer = '';
         while (strlen($buffer) < $maximumBytes && !feof($stream)) {
-            $chunk = fread($stream, $maximumBytes - strlen($buffer));
+            $remaining = max(1, $maximumBytes - strlen($buffer));
+            $chunk = fread($stream, $remaining);
             if ($chunk === false) {
                 throw new FileAccessException('Unable to read from input stream.');
             }
@@ -162,6 +163,7 @@ final class StreamIO
         }
 
         $committed = false;
+
         try {
             $result = $operation($stream);
             if (!fflush($stream)) {
@@ -202,6 +204,7 @@ final class StreamIO
         }
 
         $locked = false;
+
         try {
             $locked = flock($stream, LOCK_SH);
             if (!$locked) {
@@ -242,7 +245,7 @@ final class StreamIO
         }
 
         $metadata = stream_get_meta_data($stream);
-        $mode = $metadata['mode'] ?? '';
+        $mode = $metadata['mode'];
         if ($mode === '') {
             throw new FileAccessException($label . ' mode is unavailable.');
         }
