@@ -14,6 +14,7 @@ it('redacts secret-bearing parameters throughout production call chains', functi
         'Infocyph\Epicrypt\Crypto\Ristretto255::fromHash::$uniformHash',
         'Infocyph\Epicrypt\Crypto\Signature::verify::$key',
         'Infocyph\Epicrypt\Crypto\Signature::verifyWithBinaryKey::$key',
+        'Infocyph\Epicrypt\Integrity\FileHasher::digestIsWellFormed::$digest',
         'Infocyph\Epicrypt\Integrity\FileHasher::verify::$digest',
         'Infocyph\Epicrypt\Integrity\StringHasher::isWellFormedDigest::$digest',
         'Infocyph\Epicrypt\Integrity\StringHasher::verify::$digest',
