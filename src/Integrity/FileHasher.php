@@ -105,16 +105,20 @@ final readonly class FileHasher
     {
         $outputLength = $this->blake2bLength($length);
         $state = sodium_crypto_generichash_init('', $outputLength);
+        $finalized = false;
 
         try {
             while (($chunk = StreamIO::readChunk($stream, self::STREAM_CHUNK_SIZE)) !== null) {
                 sodium_crypto_generichash_update($state, $chunk);
             }
             $digest = sodium_crypto_generichash_final($state, $outputLength);
+            $finalized = true;
 
             return $binary ? $digest : sodium_bin2hex($digest);
         } finally {
-            sodium_memzero($state);
+            if (!$finalized) {
+                sodium_memzero($state);
+            }
         }
     }
 
