@@ -61,8 +61,8 @@ final readonly class SecretStream
         mixed $output,
         int $chunkSize = self::DEFAULT_CHUNK_SIZE,
     ): void {
-        StreamIO::assertReadable($input);
-        StreamIO::assertWritable($output);
+        $input = StreamIO::readable($input);
+        $output = StreamIO::writable($output);
         $this->assertValidChunkSize($chunkSize);
 
         try {
@@ -103,8 +103,8 @@ final readonly class SecretStream
         mixed $output,
         int $chunkSize = self::DEFAULT_CHUNK_SIZE,
     ): int {
-        StreamIO::assertReadable($input);
-        StreamIO::assertWritable($output);
+        $input = StreamIO::readable($input);
+        $output = StreamIO::writable($output);
         $this->assertValidChunkSize($chunkSize);
 
         try {
@@ -113,6 +113,14 @@ final readonly class SecretStream
             throw $exception;
         } catch (Throwable $exception) {
             throw new EncryptionException('SecretStream encryption failed.', 0, $exception);
+        }
+    }
+
+    /** @param resource $input */
+    private function assertNoTrailingData(mixed $input): void
+    {
+        if (StreamIO::readChunk($input, 1) !== null) {
+            throw new RuntimeException('Trailing data or a duplicate final frame was found.');
         }
     }
 
@@ -152,6 +160,9 @@ final readonly class SecretStream
         }
 
         [$plaintext, $tag] = $decrypted;
+        if (!is_string($plaintext) || !is_int($tag)) {
+            throw new RuntimeException('Invalid SecretStream decrypted frame values.');
+        }
         StreamIO::writeAll($output, $plaintext);
 
         return $tag === SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_TAG_FINAL;
@@ -248,14 +259,6 @@ final readonly class SecretStream
             }
         } finally {
             sodium_memzero($state);
-        }
-    }
-
-    /** @param resource $input */
-    private function assertNoTrailingData(mixed $input): void
-    {
-        if (StreamIO::readChunk($input, 1) !== null) {
-            throw new RuntimeException('Trailing data or a duplicate final frame was found.');
         }
     }
 
