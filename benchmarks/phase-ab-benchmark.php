@@ -10,8 +10,7 @@ $autoload = $argv[1] ?? dirname(__DIR__) . '/vendor/autoload.php';
 $label = $argv[2] ?? 'current';
 
 if (!is_file($autoload)) {
-    fwrite(STDERR, "Autoload file not found: {$autoload}\n");
-    exit(1);
+    throw new RuntimeException("Autoload file not found: {$autoload}");
 }
 
 require $autoload;
@@ -99,8 +98,8 @@ if (method_exists($protector, 'protectStream') && method_exists($hasher, 'hashSt
     if (!is_resource($input) || !is_resource($encrypted) || !is_resource($output)) {
         throw new RuntimeException('Unable to create benchmark streams.');
     }
-    fwrite($input, $payload);
 
+    fwrite($input, $payload);
     $results['stream'] = [];
     foreach ([64 * 1024, 256 * 1024, 1024 * 1024] as $chunkSize) {
         $results['stream']['file_roundtrip_' . $chunkSize] = measure(
@@ -120,6 +119,7 @@ if (method_exists($protector, 'protectStream') && method_exists($hasher, 'hashSt
     $results['stream']['sha256_1mib'] = measure(
         static function () use ($hasher, $input): string {
             rewind($input);
+
             return $hasher->hashStream($input);
         },
         12,
@@ -143,4 +143,7 @@ foreach ([$inputPath, $encryptedPath, $outputPath] as $path) {
 }
 rmdir($directory);
 
-echo json_encode($results, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR), "\n";
+fwrite(
+    STDOUT,
+    json_encode($results, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR) . PHP_EOL,
+);
