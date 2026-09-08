@@ -6,39 +6,73 @@ namespace Infocyph\Epicrypt\Integrity;
 
 use Infocyph\Epicrypt\Exception\FileAccessException;
 use Infocyph\Epicrypt\Exception\Integrity\HashingException;
-use Infocyph\Pathwise\FileManager\SafeFileReader;
+use Infocyph\Epicrypt\Internal\StreamIO;
 
 final readonly class FileHasher
 {
+    private const int STREAM_CHUNK_SIZE = 64 * 1024;
+
     public function __construct(private IntegrityAlgorithm $algorithm = IntegrityAlgorithm::SHA256) {}
 
     public function hash(string $path, bool $binary = false, ?int $length = null): string
     {
-        $reader = new SafeFileReader($path);
-
         try {
-            return $this->algorithm === IntegrityAlgorithm::BLAKE2B
-                ? $this->hashBlake2b($reader, $binary, $length)
-                : $this->hashPhp($reader, $binary, $length);
-        } catch (HashingException $exception) {
+            return StreamIO::withReadableLocalFile(
+                $path,
+                fn($stream): string => $this->hashStream($stream, $binary, $length),
+            );
+        } catch (HashingException|FileAccessException $exception) {
             throw $exception;
         } catch (\Throwable $exception) {
             throw new FileAccessException('Unable to hash file: ' . $path, 0, $exception);
-        } finally {
-            $reader->releaseLock();
         }
     }
 
-    public function verify(string $path, string $digest, bool $binary = false, ?int $length = null): bool
+    /**
+     * Hash from the current stream position through EOF. The caller owns the stream lifecycle.
+     *
+     * @param resource $stream
+     */
+    public function hashStream(mixed $stream, bool $binary = false, ?int $length = null): string
     {
-        $expectedBytes = $this->algorithm === IntegrityAlgorithm::BLAKE2B
-            ? $this->blake2bLength($length)
-            : strlen(hash($this->algorithm->value, '', true));
-        if ($binary ? strlen($digest) !== $expectedBytes : strlen($digest) !== $expectedBytes * 2 || !ctype_xdigit($digest)) {
+        StreamIO::assertReadable($stream);
+
+        return $this->algorithm === IntegrityAlgorithm::BLAKE2B
+            ? $this->hashBlake2b($stream, $binary, $length)
+            : $this->hashPhp($stream, $binary, $length);
+    }
+
+    public function verify(
+        string $path,
+        #[\SensitiveParameter]
+        string $digest,
+        bool $binary = false,
+        ?int $length = null,
+    ): bool {
+        if (!$this->digestIsWellFormed($digest, $binary, $length)) {
             return false;
         }
 
         return hash_equals($this->hash($path, $binary, $length), $digest);
+    }
+
+    /**
+     * Verify from the current stream position through EOF. The caller owns the stream lifecycle.
+     *
+     * @param resource $stream
+     */
+    public function verifyStream(
+        mixed $stream,
+        #[\SensitiveParameter]
+        string $digest,
+        bool $binary = false,
+        ?int $length = null,
+    ): bool {
+        if (!$this->digestIsWellFormed($digest, $binary, $length)) {
+            return false;
+        }
+
+        return hash_equals($this->hashStream($stream, $binary, $length), $digest);
     }
 
     private function blake2bLength(?int $length): int
@@ -55,26 +89,46 @@ final readonly class FileHasher
         return $length;
     }
 
-    private function hashBlake2b(SafeFileReader $reader, bool $binary, ?int $length): string
+    private function digestIsWellFormed(string $digest, bool $binary, ?int $length): bool
+    {
+        $expectedBytes = $this->algorithm === IntegrityAlgorithm::BLAKE2B
+            ? $this->blake2bLength($length)
+            : strlen(hash($this->algorithm->value, '', true));
+
+        return $binary
+            ? strlen($digest) === $expectedBytes
+            : strlen($digest) === $expectedBytes * 2 && ctype_xdigit($digest);
+    }
+
+    /** @param resource $stream */
+    private function hashBlake2b(mixed $stream, bool $binary, ?int $length): string
     {
         $outputLength = $this->blake2bLength($length);
         $state = sodium_crypto_generichash_init('', $outputLength);
-        foreach ($reader->chunks() as $chunk) {
-            sodium_crypto_generichash_update($state, $chunk);
-        }
-        $digest = sodium_crypto_generichash_final($state, $outputLength);
 
-        return $binary ? $digest : sodium_bin2hex($digest);
+        try {
+            while (($chunk = StreamIO::readChunk($stream, self::STREAM_CHUNK_SIZE)) !== null) {
+                sodium_crypto_generichash_update($state, $chunk);
+            }
+            $digest = sodium_crypto_generichash_final($state, $outputLength);
+
+            return $binary ? $digest : sodium_bin2hex($digest);
+        } finally {
+            if (is_string($state)) {
+                sodium_memzero($state);
+            }
+        }
     }
 
-    private function hashPhp(SafeFileReader $reader, bool $binary, ?int $length): string
+    /** @param resource $stream */
+    private function hashPhp(mixed $stream, bool $binary, ?int $length): string
     {
         if ($length !== null) {
             throw new HashingException('Digest length is configurable only for BLAKE2b.');
         }
 
         $context = hash_init($this->algorithm->value);
-        foreach ($reader->chunks() as $chunk) {
+        while (($chunk = StreamIO::readChunk($stream, self::STREAM_CHUNK_SIZE)) !== null) {
             hash_update($context, $chunk);
         }
 
