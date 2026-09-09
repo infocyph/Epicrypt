@@ -15,9 +15,7 @@ final readonly class JwtPolicy
 
     public KeyPurpose $keyPurpose;
 
-    /**
-     * @param list<string> $requiredClaims
-     */
+    /** @param list<string> $requiredClaims */
     public function __construct(
         public string $expectedIssuer,
         public string $expectedAudience,
@@ -67,9 +65,7 @@ final readonly class JwtPolicy
         return new self($issuer, $audience, 'email-verification+jwt', replayMode: JwtReplayMode::SINGLE_USE);
     }
 
-    /**
-     * @param list<string> $requiredClaims
-     */
+    /** @param list<string> $requiredClaims */
     public static function generic(
         string $issuer,
         string $audience,
@@ -106,6 +102,22 @@ final readonly class JwtPolicy
             profile: JwtProfile::OPENID_ID_TOKEN,
             requiredClaims: ['iss', 'aud', 'exp', 'iat'],
             tokenClass: AuthTokenClass::OIDC_ID_TOKEN,
+        );
+    }
+
+    public static function personalAccessToken(
+        string $issuer,
+        string $audience,
+        int $maximumLifetimeSeconds,
+    ): self {
+        return new self(
+            $issuer,
+            $audience,
+            AuthTokenClass::PERSONAL_ACCESS_TOKEN->joseType(),
+            maximumLifetimeSeconds: $maximumLifetimeSeconds,
+            profile: JwtProfile::PERSONAL_ACCESS_TOKEN,
+            requiredClaims: ['iss', 'sub', 'aud', 'exp', 'iat', 'jti'],
+            tokenClass: AuthTokenClass::PERSONAL_ACCESS_TOKEN,
         );
     }
 
@@ -167,38 +179,70 @@ final readonly class JwtPolicy
             throw new ConfigurationException('JWT type does not match the selected authentication token class.');
         }
 
-        if ($profile === JwtProfile::OAUTH_ACCESS_TOKEN) {
-            if ($tokenClass !== AuthTokenClass::OAUTH_ACCESS_TOKEN) {
-                throw new ConfigurationException('OAuth access-token policies require the OAuth access-token class.');
-            }
-            if ($type !== AuthTokenClass::OAUTH_ACCESS_TOKEN->joseType()) {
-                throw new ConfigurationException('OAuth access-token policies require typ=at+jwt.');
-            }
-            foreach (['sub', 'iat', 'jti', 'client_id'] as $claim) {
-                if (!isset($requiredClaims[$claim])) {
-                    throw new ConfigurationException(sprintf('OAuth access-token policies must require %s.', $claim));
-                }
-            }
+        match ($profile) {
+            JwtProfile::OAUTH_ACCESS_TOKEN => self::validateOAuthAccessTokenProfile($type, $requiredClaims, $tokenClass),
+            JwtProfile::OPENID_ID_TOKEN => self::validateOpenIdProfile($type, $requiredClaims, $tokenClass),
+            JwtProfile::PERSONAL_ACCESS_TOKEN => self::validatePersonalAccessTokenProfile($type, $requiredClaims, $tokenClass),
+            JwtProfile::EPICRYPT, JwtProfile::GENERIC => self::validateUnclassifiedProfile($tokenClass),
+        };
+    }
 
-            return;
+    /** @param array<string, true> $requiredClaims */
+    private static function validateOAuthAccessTokenProfile(
+        string $type,
+        array $requiredClaims,
+        ?AuthTokenClass $tokenClass,
+    ): void {
+        if ($tokenClass !== AuthTokenClass::OAUTH_ACCESS_TOKEN
+            || $type !== AuthTokenClass::OAUTH_ACCESS_TOKEN->joseType()) {
+            throw new ConfigurationException('OAuth access-token policies require the OAuth access-token class and typ=at+jwt.');
         }
+        self::requireProfileClaims($requiredClaims, ['sub', 'iat', 'jti', 'client_id'], 'OAuth access-token');
+    }
 
-        if ($profile === JwtProfile::OPENID_ID_TOKEN) {
-            if ($tokenClass !== AuthTokenClass::OIDC_ID_TOKEN) {
-                throw new ConfigurationException('OpenID ID-token policies require the OIDC ID-token class.');
-            }
-            if ($type !== AuthTokenClass::OIDC_ID_TOKEN->joseType()) {
-                throw new ConfigurationException('OpenID ID-token policies require typ=JWT.');
-            }
-            if (!isset($requiredClaims['iat'])) {
-                throw new ConfigurationException('OpenID ID-token policies must require iat.');
-            }
-
-            return;
+    /** @param array<string, true> $requiredClaims */
+    private static function validateOpenIdProfile(
+        string $type,
+        array $requiredClaims,
+        ?AuthTokenClass $tokenClass,
+    ): void {
+        if ($tokenClass !== AuthTokenClass::OIDC_ID_TOKEN
+            || $type !== AuthTokenClass::OIDC_ID_TOKEN->joseType()) {
+            throw new ConfigurationException('OpenID ID-token policies require the OIDC ID-token class and typ=JWT.');
         }
+        self::requireProfileClaims($requiredClaims, ['iat'], 'OpenID ID-token');
+    }
 
+    /** @param array<string, true> $requiredClaims */
+    private static function validatePersonalAccessTokenProfile(
+        string $type,
+        array $requiredClaims,
+        ?AuthTokenClass $tokenClass,
+    ): void {
+        if ($tokenClass !== AuthTokenClass::PERSONAL_ACCESS_TOKEN
+            || $type !== AuthTokenClass::PERSONAL_ACCESS_TOKEN->joseType()) {
+            throw new ConfigurationException('Personal access-token policies require the PAT token class and typ=pat+jwt.');
+        }
+        self::requireProfileClaims($requiredClaims, ['sub', 'iat', 'jti'], 'Personal access-token');
+    }
+
+    private static function validateUnclassifiedProfile(?AuthTokenClass $tokenClass): void
+    {
         if ($tokenClass !== null) {
             throw new ConfigurationException('Authentication token classes require a matching JWT profile.');
+        }
+    }
+
+    /**
+     * @param array<string, true> $requiredClaims
+     * @param list<string> $claims
+     */
+    private static function requireProfileClaims(array $requiredClaims, array $claims, string $profile): void
+    {
+        foreach ($claims as $claim) {
+            if (!isset($requiredClaims[$claim])) {
+                throw new ConfigurationException(sprintf('%s policies must require %s.', $profile, $claim));
+            }
         }
     }
 
