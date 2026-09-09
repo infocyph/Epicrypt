@@ -257,7 +257,10 @@ final readonly class Jws
         return $normalized;
     }
 
-    /** @param array<string, mixed> $protectedHeaders */
+    /**
+     * @param array<string, mixed> $protectedHeaders
+     * @return array<string, mixed>
+     */
     private function applyPayloadEncodingHeaders(array $protectedHeaders, bool $base64Payload): array
     {
         if (!$base64Payload) {
@@ -360,11 +363,10 @@ final readonly class Jws
         if (!is_bool($base64Payload)) {
             throw new ConfigurationException('JWS b64 must be boolean.');
         }
-        if (!$base64Payload) {
-            if (($protected['crit'] ?? null) !== ['b64']) {
-                throw new ConfigurationException('Unencoded JWS payload requires crit=["b64"].');
-            }
-        } elseif (isset($protected['crit'])) {
+        if (!$base64Payload && ($protected['crit'] ?? null) !== ['b64']) {
+            throw new ConfigurationException('Unencoded JWS payload requires crit=["b64"].');
+        }
+        if ($base64Payload && isset($protected['crit'])) {
             throw new ConfigurationException('Unknown or unnecessary JWS critical headers are not supported.');
         }
 
