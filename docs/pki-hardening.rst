@@ -4,16 +4,18 @@ Epicrypt 3 PKI hardening
 Epicrypt 3 deliberately uses two certificate backends for different jobs rather
 than hiding either behind a lowest-common-denominator abstraction.
 
-* phpseclib 4 is the portable parser/container boundary for X.509, CSR and PFX.
-* OpenSSL remains the accelerated key-generation, certificate-issuance and
-  purpose-aware chain-verification backend.
+* phpseclib 4 is the portable parser/model boundary for X.509, CSR and PFX
+  import/validation.
+* OpenSSL remains the accelerated key-generation, certificate-issuance,
+  purpose-aware chain-verification and interoperable PKCS#12 serialization
+  backend.
 * Public Epicrypt APIs return strings, arrays, enums and Epicrypt exceptions;
   phpseclib/OpenSSL implementation objects are not part of the public contract.
 
 This split keeps ``ext-openssl`` mandatory in Epicrypt 3. Removing the extension
-would currently remove certificate issuance, native key generation and the
-explicit purpose-aware chain verifier, so making it optional would be false
-modularity rather than a useful capability split.
+would currently remove certificate issuance, native key generation, the
+explicit purpose-aware chain verifier and the PKCS#12 export backend, so making
+it optional would be false modularity rather than a useful capability split.
 
 Portable X.509 and CSR inspection
 ----------------------------------
@@ -73,15 +75,24 @@ client that owns the connection must still verify the peer DNS name or IP.
 PFX / PKCS#12
 -------------
 
-``Pkcs12`` now uses phpseclib 4's PFX model rather than OpenSSL's PKCS#12 parser.
+``Pkcs12`` uses phpseclib 4 as the bounded PFX parser/model and OpenSSL as the
+container serializer. The split is deliberate: CI interoperability testing
+showed that OpenSSL serialization is the portable output boundary required for
+third-party PKCS#12 consumers, while phpseclib provides the cleaner bounded
+import/model API. Every exported OpenSSL container is loaded again through
+phpseclib before it is returned.
+
 The public API bounds the whole container, certificate count, PEM inputs,
 password size and friendly-name size. Export proves that the private key matches
-the leaf certificate before publication; import requires exactly one supported
-private key and a matching certificate.
+the leaf certificate before serialization. Import normalizes the PFX after
+password verification, requires exactly one supported private key and a matching
+certificate, returns an unencrypted PKCS#8 private key, and preserves the CA
+certificate set and available friendly-name metadata.
 
-PFX output uses SHA-256 MAC parameters and remains interoperable with OpenSSL.
-Tests cover both directions: Epicrypt-generated PFX read by OpenSSL and
-OpenSSL-generated PKCS#12 read by Epicrypt.
+Tests cover both directions: Epicrypt-generated/OpenSSL-serialized PFX is read
+by phpseclib and OpenSSL, while OpenSSL-generated PKCS#12 is imported through
+Epicrypt's phpseclib boundary. Wrong passwords, mismatched keys and oversized
+inputs fail through stable Epicrypt exceptions without exposing key material.
 
 .. code-block:: php
 
@@ -130,8 +141,8 @@ Performance and backend choice
 ------------------------------
 
 ``CertificateBench`` records OpenSSL certificate parsing beside phpseclib
-``CertificateInspector`` parsing and records phpseclib PFX import cost. These
-measurements are attribution data, not permission to weaken validation or
-bounds. OpenSSL remains preferred where it supplies a mature accelerated
-operation; phpseclib is preferred where its portable typed parser/container
-model removes unsafe or ambiguous backend behavior.
+``CertificateInspector`` parsing, native OpenSSL key generation and bounded PFX
+import. These measurements are attribution data, not permission to weaken
+validation or bounds. OpenSSL remains preferred where it supplies a mature,
+interoperable accelerated operation; phpseclib is preferred where its portable
+typed parser/model removes unsafe or ambiguous backend behavior.
