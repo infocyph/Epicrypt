@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Infocyph\Epicrypt\Token\Opaque;
+namespace Infocyph\Epicrypt\Auth\OAuth;
 
 final readonly class RefreshTokenRotationResult
 {

@@ -6,6 +6,7 @@ namespace Infocyph\Epicrypt\Auth\OAuth;
 
 use Infocyph\Epicrypt\Auth\Token\AuthTokenClass;
 use Infocyph\Epicrypt\Exception\ConfigurationException;
+use Infocyph\Epicrypt\Exception\Token\ExpiredTokenException;
 use Infocyph\Epicrypt\Exception\Token\InvalidTokenException;
 use Infocyph\Epicrypt\Internal\Base64Url;
 use Infocyph\Epicrypt\Internal\Clock\SystemClock;
@@ -16,18 +17,16 @@ use Infocyph\Epicrypt\Token\Jwt\Enum\JweContentEncryptionAlgorithm;
 use Infocyph\Epicrypt\Token\Jwt\Enum\JweKeyManagementAlgorithm;
 use Infocyph\Epicrypt\Token\Jwt\Jwe;
 use Infocyph\Epicrypt\Token\Jwt\Support\JosePolicy;
-use Infocyph\Epicrypt\Token\Opaque\RefreshTokenGrant;
 use Psr\Clock\ClockInterface;
 use Throwable;
 
 /**
- * Cryptographic refresh-token profile only. A successfully decrypted artifact is
- * not active until the authoritative refresh-family store accepts its token/family state.
+ * Cryptographic refresh-token profile. Authoritative active/revoked/reused state
+ * is resolved by RefreshTokenStoreInterface, never by JWE validity alone.
  */
 final readonly class RefreshTokenArtifact
 {
     public const int DEFAULT_IDLE_LIFETIME_SECONDS = 2_592_000;
-
     public const int MAXIMUM_IDLE_LIFETIME_SECONDS = 31_536_000;
 
     private const int MAXIMUM_FUTURE_SKEW_SECONDS = 30;
@@ -37,9 +36,7 @@ final readonly class RefreshTokenArtifact
         private string $issuer,
         private ClockInterface $clock = new SystemClock(),
     ) {
-        if ($this->issuer === ''
-            || strlen($this->issuer) > 2048
-            || preg_match('/[\x00-\x1F\x7F]/', $this->issuer) === 1) {
+        if ($this->issuer === '' || strlen($this->issuer) > 2048 || preg_match('/[\x00-\x1F\x7F]/', $this->issuer) === 1) {
             throw new ConfigurationException('Refresh-token artifact issuer is invalid.');
         }
     }
@@ -51,9 +48,8 @@ final readonly class RefreshTokenArtifact
     ): RefreshTokenArtifactIssue {
         self::assertIdleLifetime($idleLifetimeSeconds);
         $now = $this->clock->now()->getTimestamp();
-        if ($grant->expiresAt <= $now
-            || ($grant->expiresAt - $now) > RefreshTokenArtifactClaims::MAXIMUM_ABSOLUTE_LIFETIME_SECONDS) {
-            throw new ConfigurationException('Refresh-token grant expiration is outside the supported lifetime.');
+        if ($grant->expiresAt <= $now || ($grant->expiresAt - $now) > RefreshTokenArtifactClaims::MAXIMUM_ABSOLUTE_LIFETIME_SECONDS) {
+            throw new ConfigurationException('Refresh-token authorization expiration is outside the supported lifetime.');
         }
         $familyId ??= Base64Url::encode(random_bytes(32));
         $claims = new RefreshTokenArtifactClaims(
@@ -74,15 +70,30 @@ final readonly class RefreshTokenArtifact
             JweKeyManagementAlgorithm::DIRECT,
             JweContentEncryptionAlgorithm::A256GCM,
             $entry->id,
-        )->encryptCompact(
-            Json::encode($claims->toArray()),
-            ['typ' => AuthTokenClass::OAUTH_REFRESH_TOKEN->joseType()],
-        );
+        )->encryptCompact(Json::encode($claims->toArray()), ['typ' => AuthTokenClass::OAUTH_REFRESH_TOKEN->joseType()]);
 
         return new RefreshTokenArtifactIssue($token, $claims);
     }
 
     public function decrypt(#[\SensitiveParameter] string $token): RefreshTokenArtifactClaims
+    {
+        $claims = $this->decryptForStateResolution($token);
+        $now = $this->clock->now()->getTimestamp();
+        if ($now >= $claims->idleExpiresAt || $now >= $claims->grant->expiresAt) {
+            throw new ExpiredTokenException('Refresh token has expired.');
+        }
+
+        return $claims;
+    }
+
+    /**
+     * Authenticates and validates the refresh-token profile but deliberately does not
+     * reject expiry. RefreshTokenManager passes the result to the authoritative store so
+     * consumed/reused/family-revoked state can take precedence over idle expiration.
+     *
+     * @internal
+     */
+    public function decryptForStateResolution(#[\SensitiveParameter] string $token): RefreshTokenArtifactClaims
     {
         [$keyId, $header] = $this->protectedHeader($token);
         $this->validateProtectedHeader($header);
@@ -103,64 +114,49 @@ final readonly class RefreshTokenArtifact
                 JweContentEncryptionAlgorithm::A256GCM,
                 $entry->id,
             )->decryptCompact($token);
-            $claims = Json::decodeToArray($plaintext);
+            $payload = Json::decodeToArray($plaintext);
         } catch (InvalidTokenException $exception) {
             throw $exception;
         } catch (Throwable $exception) {
             throw new InvalidTokenException('Refresh-token artifact payload is invalid.', 0, $exception);
         }
 
-        $artifact = $this->claimsFromPayload($claims);
+        $claims = $this->claimsFromPayload($payload);
         $now = $this->clock->now()->getTimestamp();
-        if (!hash_equals($this->issuer, $artifact->issuer)
-            || $artifact->issuedAt > ($now + self::MAXIMUM_FUTURE_SKEW_SECONDS)
-            || $now >= $artifact->idleExpiresAt
-            || $now >= $artifact->grant->expiresAt) {
-            throw new InvalidTokenException('Refresh-token artifact is outside its valid issuer or time window.');
+        if (!hash_equals($this->issuer, $claims->issuer) || $claims->issuedAt > ($now + self::MAXIMUM_FUTURE_SKEW_SECONDS)) {
+            throw new InvalidTokenException('Refresh-token artifact is outside its valid issuer or issuance window.');
         }
 
-        return $artifact;
+        return $claims;
     }
 
     /** @param array<string, mixed> $claims */
     private function claimsFromPayload(array $claims): RefreshTokenArtifactClaims
     {
         $allowed = [
-            'iss' => true,
-            'jti' => true,
-            'family_id' => true,
-            'grant_id' => true,
-            'sub' => true,
-            'client_id' => true,
-            'aud' => true,
-            'scope' => true,
-            'iat' => true,
-            'exp' => true,
-            'idle_exp' => true,
-            'token_use' => true,
+            'iss' => true, 'jti' => true, 'family_id' => true, 'authorization_id' => true,
+            'sub' => true, 'client_id' => true, 'aud' => true, 'scope' => true,
+            'iat' => true, 'exp' => true, 'idle_exp' => true, 'token_use' => true,
             'dpop_jkt' => true,
         ];
         if (array_diff_key($claims, $allowed) !== []) {
             throw new InvalidTokenException('Refresh-token artifact contains unsupported claims.');
         }
-        foreach (['iss', 'jti', 'family_id', 'grant_id', 'sub', 'client_id', 'aud', 'scope', 'iat', 'exp', 'idle_exp', 'token_use'] as $claim) {
+        foreach (['iss', 'jti', 'family_id', 'authorization_id', 'sub', 'client_id', 'aud', 'scope', 'iat', 'exp', 'idle_exp', 'token_use'] as $claim) {
             if (!array_key_exists($claim, $claims)) {
                 throw new InvalidTokenException(sprintf('Refresh-token artifact is missing %s.', $claim));
             }
         }
         if (!RefreshTokenArtifactClaims::validTokenUse($claims['token_use'] ?? null)
-            || !is_array($claims['aud'])
-            || !is_string($claims['scope'])
-            || !is_int($claims['iat'])
-            || !is_int($claims['exp'])
-            || !is_int($claims['idle_exp'])) {
+            || !is_array($claims['aud']) || !is_string($claims['scope'])
+            || !is_int($claims['iat']) || !is_int($claims['exp']) || !is_int($claims['idle_exp'])) {
             throw new InvalidTokenException('Refresh-token artifact claim profile is invalid.');
         }
         $scopes = $claims['scope'] === '' ? [] : explode(' ', $claims['scope']);
 
         try {
             $grant = new RefreshTokenGrant(
-                id: self::stringClaim($claims, 'grant_id'),
+                authorizationId: self::stringClaim($claims, 'authorization_id'),
                 subject: self::stringClaim($claims, 'sub'),
                 clientId: self::stringClaim($claims, 'client_id'),
                 audiences: $claims['aud'],
@@ -190,7 +186,6 @@ final readonly class RefreshTokenArtifact
         if (count($parts) !== 5 || $parts[0] === '') {
             throw new InvalidTokenException('Refresh-token artifact must use compact JWE serialization.');
         }
-
         try {
             $header = Json::decodeToArray(Base64Url::decode($parts[0]));
         } catch (Throwable $exception) {
@@ -230,16 +225,12 @@ final readonly class RefreshTokenArtifact
             return null;
         }
 
-        return is_string($claims[$name])
-            ? $claims[$name]
-            : throw new InvalidTokenException(sprintf('Refresh-token %s claim must be a string.', $name));
+        return is_string($claims[$name]) ? $claims[$name] : throw new InvalidTokenException(sprintf('Refresh-token %s claim must be a string.', $name));
     }
 
     /** @param array<string, mixed> $claims */
     private static function stringClaim(array $claims, string $name): string
     {
-        return is_string($claims[$name] ?? null)
-            ? $claims[$name]
-            : throw new InvalidTokenException(sprintf('Refresh-token %s claim must be a string.', $name));
+        return is_string($claims[$name] ?? null) ? $claims[$name] : throw new InvalidTokenException(sprintf('Refresh-token %s claim must be a string.', $name));
     }
 }

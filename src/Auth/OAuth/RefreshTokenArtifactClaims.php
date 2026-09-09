@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Infocyph\Epicrypt\Auth\OAuth;
 
 use Infocyph\Epicrypt\Exception\ConfigurationException;
-use Infocyph\Epicrypt\Token\Opaque\RefreshTokenGrant;
 
 final readonly class RefreshTokenArtifactClaims
 {
@@ -43,7 +42,7 @@ final readonly class RefreshTokenArtifactClaims
             'iss' => $this->issuer,
             'jti' => $this->tokenId,
             'family_id' => $this->familyId,
-            'grant_id' => $this->grant->id,
+            'authorization_id' => $this->grant->authorizationId,
             'sub' => $this->grant->subject,
             'client_id' => $this->grant->clientId,
             'aud' => $this->grant->audiences,
