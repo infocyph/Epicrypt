@@ -9,6 +9,7 @@ enum OAuthErrorCode: string
     case INVALID_REQUEST = 'invalid_request';
     case INVALID_CLIENT = 'invalid_client';
     case INVALID_GRANT = 'invalid_grant';
+    case INVALID_DPOP_PROOF = 'invalid_dpop_proof';
     case UNAUTHORIZED_CLIENT = 'unauthorized_client';
     case UNSUPPORTED_GRANT_TYPE = 'unsupported_grant_type';
     case UNSUPPORTED_RESPONSE_TYPE = 'unsupported_response_type';
