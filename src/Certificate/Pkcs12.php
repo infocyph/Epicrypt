@@ -9,6 +9,7 @@ use Infocyph\Epicrypt\Exception\ConfigurationException;
 use phpseclib4\Crypt\Common\PrivateKey;
 use phpseclib4\Crypt\Common\PublicKey;
 use phpseclib4\Crypt\PublicKeyLoader;
+use phpseclib4\File\ASN1\Types\BaseString;
 use phpseclib4\File\PFX;
 use phpseclib4\File\X509;
 use Stringable;
@@ -36,49 +37,21 @@ final class Pkcs12
         ?string $friendlyName = null,
         array $caCertificatesPem = [],
     ): string {
-        $this->assertPemSize($certificatePem, 'certificate');
-        $this->assertPemSize($privateKeyPem, 'private key');
-        $this->assertPassword($password);
-        if ($privateKeyPassphrase !== null) {
-            $this->assertPassword($privateKeyPassphrase);
-        }
-        if ($friendlyName !== null && !$this->validFriendlyName($friendlyName)) {
-            throw new ConfigurationException('PKCS#12 friendly name is invalid.');
-        }
-        if (count($caCertificatesPem) > self::MAX_CERTIFICATES - 1) {
-            throw new ConfigurationException('PKCS#12 certificate count exceeds the configured bound.');
-        }
+        $this->assertExportInput($certificatePem, $privateKeyPem, $password, $privateKeyPassphrase, $friendlyName, $caCertificatesPem);
 
         try {
             $certificate = X509::load($certificatePem);
             $privateKey = PublicKeyLoader::loadPrivateKey($privateKeyPem, $privateKeyPassphrase);
-            $certificatePublicKey = $certificate->getPublicKey();
-            if (!hash_equals($this->publicIdentity($certificatePublicKey), $this->publicIdentity($privateKey->getPublicKey()))) {
-                throw new ConfigurationException('PKCS#12 certificate and private key do not match.');
-            }
-
-            foreach ($caCertificatesPem as $caCertificatePem) {
-                $this->assertPemSize($caCertificatePem, 'CA certificate');
-                X509::load($caCertificatePem);
-            }
-
-            $certificateResource = openssl_x509_read($certificatePem);
-            if ($certificateResource === false) {
-                throw new ConfigurationException('PKCS#12 certificate could not be loaded by the export backend.');
-            }
-            $privateKeyResource = Pem::requirePrivateKeyResource($privateKeyPem, $privateKeyPassphrase);
-            $options = [];
-            if ($friendlyName !== null) {
-                $options['friendly_name'] = $friendlyName;
-            }
-            if ($caCertificatesPem !== []) {
-                $options['extracerts'] = implode(PHP_EOL, $caCertificatesPem);
-            }
-
-            $encoded = '';
-            if (!openssl_pkcs12_export($certificateResource, $encoded, $privateKeyResource, $password, $options)) {
-                throw new ConfigurationException('PKCS#12 export failed.');
-            }
+            $this->assertCertificateKeyPair($certificate, $privateKey);
+            $this->validateCaCertificates($caCertificatesPem);
+            $encoded = $this->serializeOpenSsl(
+                $certificatePem,
+                $privateKeyPem,
+                $password,
+                $privateKeyPassphrase,
+                $friendlyName,
+                $caCertificatesPem,
+            );
             PFX::load($encoded, $password);
         } catch (ConfigurationException $exception) {
             throw $exception;
@@ -86,7 +59,7 @@ final class Pkcs12
             throw new ConfigurationException('PKCS#12 export failed.', 0, $exception);
         }
 
-        if ($encoded === '' || strlen($encoded) > self::MAX_CONTAINER_BYTES) {
+        if (strlen($encoded) > self::MAX_CONTAINER_BYTES) {
             throw new ConfigurationException('PKCS#12 export exceeds the configured size bound.');
         }
 
@@ -107,8 +80,10 @@ final class Pkcs12
 
         try {
             $pfx = PFX::load($pkcs12, $password);
+            $pfx->removePassword();
             $certificates = $this->certificates($pfx->getCertificates());
             $privateKey = $this->singlePrivateKey($pfx->getPrivateKeys());
+            $friendlyNames = $this->friendlyNames($pfx->getFriendlyNames());
         } catch (ConfigurationException $exception) {
             throw $exception;
         } catch (Throwable $exception) {
@@ -131,7 +106,7 @@ final class Pkcs12
             throw new ConfigurationException('PKCS#12 private key has no matching certificate.');
         }
 
-        $privateKeyPem = $privateKey->withPassword()->toString('PKCS8');
+        $privateKeyPem = $privateKey->toString('PKCS8');
         $this->assertPemSize($certificate, 'certificate');
         $this->assertPemSize($privateKeyPem, 'private key');
         foreach ($caCertificates as $caCertificate) {
@@ -142,8 +117,44 @@ final class Pkcs12
             'certificate' => $certificate,
             'private_key' => $privateKeyPem,
             'ca_certificates' => $caCertificates,
-            'friendly_names' => $this->friendlyNames($pfx->getFriendlyNames()),
+            'friendly_names' => $friendlyNames,
         ];
+    }
+
+    private function assertCertificateKeyPair(X509 $certificate, #[\SensitiveParameter] PrivateKey $privateKey): void
+    {
+        if (!hash_equals(
+            $this->publicIdentity($certificate->getPublicKey()),
+            $this->publicIdentity($privateKey->getPublicKey()),
+        )) {
+            throw new ConfigurationException('PKCS#12 certificate and private key do not match.');
+        }
+    }
+
+    /** @param list<string> $caCertificatesPem */
+    private function assertExportInput(
+        string $certificatePem,
+        #[\SensitiveParameter]
+        string $privateKeyPem,
+        #[\SensitiveParameter]
+        string $password,
+        #[\SensitiveParameter]
+        ?string $privateKeyPassphrase,
+        ?string $friendlyName,
+        array $caCertificatesPem,
+    ): void {
+        $this->assertPemSize($certificatePem, 'certificate');
+        $this->assertPemSize($privateKeyPem, 'private key');
+        $this->assertPassword($password);
+        if ($privateKeyPassphrase !== null) {
+            $this->assertPassword($privateKeyPassphrase);
+        }
+        if ($friendlyName !== null && !$this->validFriendlyName($friendlyName)) {
+            throw new ConfigurationException('PKCS#12 friendly name is invalid.');
+        }
+        if (count($caCertificatesPem) > self::MAX_CERTIFICATES - 1) {
+            throw new ConfigurationException('PKCS#12 certificate count exceeds the configured bound.');
+        }
     }
 
     private function assertPassword(#[\SensitiveParameter] string $password): void
@@ -183,6 +194,23 @@ final class Pkcs12
     }
 
     /**
+     * @param list<string> $caCertificatesPem
+     * @return array<string, string>
+     */
+    private function exportOptions(?string $friendlyName, array $caCertificatesPem): array
+    {
+        $options = [];
+        if ($friendlyName !== null) {
+            $options['friendly_name'] = $friendlyName;
+        }
+        if ($caCertificatesPem !== []) {
+            $options['extracerts'] = implode(PHP_EOL, $caCertificatesPem);
+        }
+
+        return $options;
+    }
+
+    /**
      * @param array<array-key, mixed> $names
      * @return list<string>
      */
@@ -191,7 +219,9 @@ final class Pkcs12
         /** @var list<string> $result */
         $result = [];
         foreach ($names as $name) {
-            if (is_string($name)) {
+            if ($name instanceof BaseString) {
+                $result[] = (string) $name->toUTF8String();
+            } elseif (is_string($name)) {
                 $result[] = $name;
             } elseif ($name instanceof Stringable) {
                 $result[] = (string) $name;
@@ -206,6 +236,38 @@ final class Pkcs12
         return $publicKey->toString('PKCS8');
     }
 
+    /** @param list<string> $caCertificatesPem */
+    private function serializeOpenSsl(
+        string $certificatePem,
+        #[\SensitiveParameter]
+        string $privateKeyPem,
+        #[\SensitiveParameter]
+        string $password,
+        #[\SensitiveParameter]
+        ?string $privateKeyPassphrase,
+        ?string $friendlyName,
+        array $caCertificatesPem,
+    ): string {
+        $certificateResource = openssl_x509_read($certificatePem);
+        if ($certificateResource === false) {
+            throw new ConfigurationException('PKCS#12 certificate could not be loaded by the export backend.');
+        }
+        $privateKeyResource = Pem::requirePrivateKeyResource($privateKeyPem, $privateKeyPassphrase);
+        $encoded = null;
+        $exported = openssl_pkcs12_export(
+            $certificateResource,
+            $encoded,
+            $privateKeyResource,
+            $password,
+            $this->exportOptions($friendlyName, $caCertificatesPem),
+        );
+        if (!$exported || !is_string($encoded) || $encoded === '') {
+            throw new ConfigurationException('PKCS#12 export failed.');
+        }
+
+        return $encoded;
+    }
+
     /** @param array<array-key, mixed> $privateKeys */
     private function singlePrivateKey(#[\SensitiveParameter] array $privateKeys): PrivateKey
     {
@@ -215,6 +277,15 @@ final class Pkcs12
         }
 
         return $privateKey;
+    }
+
+    /** @param list<string> $caCertificatesPem */
+    private function validateCaCertificates(array $caCertificatesPem): void
+    {
+        foreach ($caCertificatesPem as $caCertificatePem) {
+            $this->assertPemSize($caCertificatePem, 'CA certificate');
+            X509::load($caCertificatePem);
+        }
     }
 
     private function validFriendlyName(string $name): bool
