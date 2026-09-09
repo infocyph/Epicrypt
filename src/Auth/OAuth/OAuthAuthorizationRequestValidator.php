@@ -31,7 +31,7 @@ final readonly class OAuthAuthorizationRequestValidator
      * Epicrypt can reject duplicate singleton OAuth parameters instead of relying
      * on framework parsing behavior.
      *
-     * @param array<string, string|list<string>> $parameters
+     * @param array<array-key, mixed> $parameters
      */
     public function validate(array $parameters): OAuthAuthorizationResult
     {
@@ -40,13 +40,9 @@ final readonly class OAuthAuthorizationRequestValidator
         }
 
         $clientId = $this->singleton($parameters, 'client_id');
-        if ($clientId === null || !AuthProtocolPolicy::validText($clientId, AuthProtocolPolicy::MAX_IDENTIFIER_BYTES)) {
-            return $this->reject(OAuthErrorCode::INVALID_REQUEST);
-        }
-
-        $client = $this->clients->find($clientId);
-        if ($client === null || !$client->enabled) {
-            return $this->reject(OAuthErrorCode::UNAUTHORIZED_CLIENT);
+        $client = $this->resolveClient($clientId);
+        if (!$client instanceof OAuthClient) {
+            return $this->reject($clientId === null ? OAuthErrorCode::INVALID_REQUEST : OAuthErrorCode::UNAUTHORIZED_CLIENT);
         }
 
         $redirectUri = $this->resolveRedirectUri($parameters, $client);
@@ -59,54 +55,29 @@ final readonly class OAuthAuthorizationRequestValidator
             return $this->reject(OAuthErrorCode::INVALID_REQUEST, $redirectUri);
         }
 
-        $responseType = $this->singleton($parameters, 'response_type');
-        if ($responseType === null || $responseType === '') {
-            return $this->reject(OAuthErrorCode::INVALID_REQUEST, $redirectUri, $state);
-        }
-        if ($responseType !== 'code') {
-            return $this->reject(OAuthErrorCode::UNSUPPORTED_RESPONSE_TYPE, $redirectUri, $state);
-        }
-        if (!$client->allowsGrant(OAuthGrantType::AUTHORIZATION_CODE)) {
-            return $this->reject(OAuthErrorCode::UNAUTHORIZED_CLIENT, $redirectUri, $state);
+        $profileError = $this->authorizationProfileError($parameters, $client);
+        if ($profileError !== null) {
+            return $this->reject($profileError, $redirectUri, $state);
         }
 
         $challenge = $this->singleton($parameters, 'code_challenge');
-        $challengeMethod = $this->singleton($parameters, 'code_challenge_method');
-        if ($challenge === null
-            || !AuthProtocolPolicy::validSha256Base64Url($challenge)
-            || $challengeMethod !== 'S256') {
-            return $this->reject(OAuthErrorCode::INVALID_REQUEST, $redirectUri, $state);
-        }
-
         $scopes = $this->resolveScopes($parameters);
-        if ($scopes === null || array_any($scopes, static fn(string $scope): bool => !$client->allowsScope($scope))) {
+        if ($challenge === null || $scopes === null || $this->containsUnregisteredScope($client, $scopes)) {
             return $this->reject(OAuthErrorCode::INVALID_SCOPE, $redirectUri, $state);
         }
 
-        try {
-            $resolvedAudiences = $this->audienceResolver->resolve($client, $scopes);
-        } catch (Throwable) {
-            return $this->reject(OAuthErrorCode::SERVER_ERROR, $redirectUri, $state);
-        }
-        try {
-            $audiences = AuthProtocolPolicy::normalizeAudiences(
-                $resolvedAudiences,
-                'OAuth authorization request audiences',
-            );
-        } catch (Throwable) {
-            return $this->reject(OAuthErrorCode::INVALID_REQUEST, $redirectUri, $state);
-        }
-        if (array_any($audiences, static fn(string $audience): bool => !$client->allowsAudience($audience))) {
-            return $this->reject(OAuthErrorCode::INVALID_REQUEST, $redirectUri, $state);
+        $audiences = $this->resolveAudiences($client, $scopes);
+        if ($audiences instanceof OAuthErrorCode) {
+            return $this->reject($audiences, $redirectUri, $state);
         }
 
         return OAuthAuthorizationResult::accepted(
-            new OAuthAuthorizationRequest($clientId, $redirectUri, $scopes, $audiences, $challenge, $state),
+            new OAuthAuthorizationRequest($client->clientId, $redirectUri, $scopes, $audiences, $challenge, $state),
             $client,
         );
     }
 
-    /** @param array<string, string|list<string>> $parameters */
+    /** @param array<array-key, mixed> $parameters */
     private function validParameterEnvelope(array $parameters): bool
     {
         if (count($parameters) > AuthProtocolPolicy::MAX_PARAMETERS) {
@@ -115,31 +86,16 @@ final readonly class OAuthAuthorizationRequestValidator
 
         $occurrences = 0;
         foreach ($parameters as $name => $value) {
-            if (!AuthProtocolPolicy::validParameterName($name)) {
+            if (!is_string($name) || !AuthProtocolPolicy::validParameterName($name)) {
                 return false;
             }
-            if (is_string($value)) {
-                $occurrences++;
-                if ($occurrences > AuthProtocolPolicy::MAX_PARAMETERS
-                    || !AuthProtocolPolicy::validParameterValue($value)) {
-                    return false;
-                }
-
-                continue;
-            }
-            if (!array_is_list($value) || $value === [] || count($value) > AuthProtocolPolicy::MAX_PARAMETERS) {
+            $values = $this->parameterValues($value);
+            if ($values === null || (is_array($value) && in_array($name, self::SINGLETON_PARAMETERS, true))) {
                 return false;
             }
-            $occurrences += count($value);
-            if ($occurrences > AuthProtocolPolicy::MAX_PARAMETERS) {
-                return false;
-            }
-            foreach ($value as $item) {
-                if (!is_string($item) || !AuthProtocolPolicy::validParameterValue($item)) {
-                    return false;
-                }
-            }
-            if (in_array($name, self::SINGLETON_PARAMETERS, true)) {
+            $occurrences += count($values);
+            if ($occurrences > AuthProtocolPolicy::MAX_PARAMETERS
+                || array_any($values, static fn(string $item): bool => !AuthProtocolPolicy::validParameterValue($item))) {
                 return false;
             }
         }
@@ -147,7 +103,61 @@ final readonly class OAuthAuthorizationRequestValidator
         return true;
     }
 
-    /** @param array<string, string|list<string>> $parameters */
+    /** @return list<string>|null */
+    private function parameterValues(mixed $value): ?array
+    {
+        if (is_string($value)) {
+            return [$value];
+        }
+        if (!is_array($value)
+            || $value === []
+            || !array_is_list($value)
+            || count($value) > AuthProtocolPolicy::MAX_PARAMETERS) {
+            return null;
+        }
+        if (array_any($value, static fn(mixed $item): bool => !is_string($item))) {
+            return null;
+        }
+
+        /** @var list<string> $value */
+        return $value;
+    }
+
+    private function resolveClient(?string $clientId): ?OAuthClient
+    {
+        if ($clientId === null || !AuthProtocolPolicy::validText($clientId, AuthProtocolPolicy::MAX_IDENTIFIER_BYTES)) {
+            return null;
+        }
+        $client = $this->clients->find($clientId);
+
+        return $client?->enabled === true ? $client : null;
+    }
+
+    /** @param array<array-key, mixed> $parameters */
+    private function authorizationProfileError(array $parameters, OAuthClient $client): ?OAuthErrorCode
+    {
+        $responseType = $this->singleton($parameters, 'response_type');
+        if ($responseType === null || $responseType === '') {
+            return OAuthErrorCode::INVALID_REQUEST;
+        }
+        if ($responseType !== 'code') {
+            return OAuthErrorCode::UNSUPPORTED_RESPONSE_TYPE;
+        }
+        if (!$client->allowsGrant(OAuthGrantType::AUTHORIZATION_CODE)) {
+            return OAuthErrorCode::UNAUTHORIZED_CLIENT;
+        }
+
+        $challenge = $this->singleton($parameters, 'code_challenge');
+        $method = $this->singleton($parameters, 'code_challenge_method');
+
+        return $challenge !== null
+            && AuthProtocolPolicy::validSha256Base64Url($challenge)
+            && $method === 'S256'
+            ? null
+            : OAuthErrorCode::INVALID_REQUEST;
+    }
+
+    /** @param array<array-key, mixed> $parameters */
     private function singleton(array $parameters, string $name): ?string
     {
         $value = $parameters[$name] ?? null;
@@ -155,7 +165,7 @@ final readonly class OAuthAuthorizationRequestValidator
         return is_string($value) ? $value : null;
     }
 
-    /** @param array<string, string|list<string>> $parameters */
+    /** @param array<array-key, mixed> $parameters */
     private function resolveRedirectUri(array $parameters, OAuthClient $client): ?string
     {
         $redirectUri = $this->singleton($parameters, 'redirect_uri');
@@ -169,10 +179,7 @@ final readonly class OAuthAuthorizationRequestValidator
         return count($client->redirectUris) === 1 ? $client->redirectUris[0] : null;
     }
 
-    /**
-     * @param array<string, string|list<string>> $parameters
-     * @return string|false|null
-     */
+    /** @param array<array-key, mixed> $parameters */
     private function state(array $parameters): string|false|null
     {
         if (!array_key_exists('state', $parameters)) {
@@ -180,15 +187,16 @@ final readonly class OAuthAuthorizationRequestValidator
         }
 
         $state = $this->singleton($parameters, 'state');
-        if ($state === null || $state === '' || !AuthProtocolPolicy::validParameterValue($state)) {
-            return false;
-        }
 
-        return $state;
+        return $state !== null
+            && $state !== ''
+            && AuthProtocolPolicy::validParameterValue($state)
+            ? $state
+            : false;
     }
 
     /**
-     * @param array<string, string|list<string>> $parameters
+     * @param array<array-key, mixed> $parameters
      * @return list<string>|null
      */
     private function resolveScopes(array $parameters): ?array
@@ -203,6 +211,31 @@ final readonly class OAuthAuthorizationRequestValidator
         } catch (Throwable) {
             return null;
         }
+    }
+
+    /** @param list<string> $scopes */
+    private function containsUnregisteredScope(OAuthClient $client, array $scopes): bool
+    {
+        return array_any($scopes, static fn(string $scope): bool => !$client->allowsScope($scope));
+    }
+
+    /**
+     * @param list<string> $scopes
+     * @return non-empty-list<string>|OAuthErrorCode
+     */
+    private function resolveAudiences(OAuthClient $client, array $scopes): array|OAuthErrorCode
+    {
+        try {
+            $resolved = $this->audienceResolver->resolve($client, $scopes);
+            /** @var non-empty-list<string> $audiences */
+            $audiences = AuthProtocolPolicy::normalizeAudiences($resolved, 'OAuth authorization request audiences');
+        } catch (Throwable) {
+            return OAuthErrorCode::SERVER_ERROR;
+        }
+
+        return array_any($audiences, static fn(string $audience): bool => !$client->allowsAudience($audience))
+            ? OAuthErrorCode::INVALID_REQUEST
+            : $audiences;
     }
 
     private function reject(
