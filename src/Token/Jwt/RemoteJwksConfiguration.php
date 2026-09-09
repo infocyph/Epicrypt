@@ -65,7 +65,7 @@ final readonly class RemoteJwksConfiguration
         if (!is_string($scheme) || !$validHost
             || (!$this->allowHttp && strtolower($scheme) !== 'https')
             || ($this->allowHttp && !in_array(strtolower($scheme), ['https', 'http'], true))
-            || (is_array($parts) && (isset($parts['user']) || isset($parts['pass']) || isset($parts['fragment'])))
+            || isset($parts['user']) || isset($parts['pass']) || isset($parts['fragment'])
             || $host === 'localhost' || $this->isPrivateIp($host)) {
             throw new ConfigurationException('Remote JOSE URL is not an allowed absolute HTTPS URL.');
         }
