@@ -123,6 +123,8 @@ jobs:
             classes: 'Infocyph\Epicrypt\Crypto\Mac,Infocyph\Epicrypt\Crypto\SecretStream,Infocyph\Epicrypt\Crypto\Signature,Infocyph\Epicrypt\Internal\EcdsaSignatureConverter'
           - shard: remote-jose
             classes: 'Infocyph\Epicrypt\Token\Jwt\RemoteJwks,Infocyph\Epicrypt\Token\Jwt\RemoteJwksConfiguration,Infocyph\Epicrypt\Token\Jwt\Support\JweKeyManager,Infocyph\Epicrypt\Token\Jwt\Support\NativeRemoteJoseHostResolver,Infocyph\Epicrypt\Token\Jwt\Support\RemoteJoseResource'
+          - shard: certificate-pki
+            classes: 'Infocyph\Epicrypt\Certificate\CertificateChainVerifier,Infocyph\Epicrypt\Certificate\CertificateInspector,Infocyph\Epicrypt\Certificate\CsrInspector,Infocyph\Epicrypt\Certificate\Pkcs12'
     steps:
       - uses: actions/checkout@v7
       - uses: shivammathur/setup-php@v2
