@@ -1,4 +1,4 @@
-Epicrypt 2.0
+Epicrypt 3.0
 ============
 
 Epicrypt provides authenticated data protection, token security, password
@@ -20,6 +20,8 @@ Complete-path examples
   token.
 - :doc:`oauth-lifecycle`: issue and verify access tokens, rotate refresh tokens,
   bind DPoP, narrow scopes, and revoke authorization.
+- :doc:`remote-jose-security`: deploy Remote JWKS/OpenID discovery with explicit
+  DNS, redirect, timeout, cache, and SSRF boundaries.
 - :doc:`error-handling`: map cryptographic failures at an application boundary.
 
 ``Internal`` is not a consumer capability and intentionally has no public
@@ -40,6 +42,7 @@ integration example.
    security
    token
    oauth-lifecycle
+   remote-jose-security
    token-storage
    error-handling
    benchmarking
