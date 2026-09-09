@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Infocyph\Epicrypt\Tests\Support;
 
+use Infocyph\Epicrypt\Auth\OAuth\RefreshTokenInspectionStatus;
 use Infocyph\Epicrypt\Auth\OAuth\RefreshTokenRecord;
 use Infocyph\Epicrypt\Auth\OAuth\RefreshTokenRotationStatus;
 use Infocyph\Epicrypt\Auth\OAuth\RefreshTokenStoreInterface;
@@ -29,6 +30,26 @@ final class InMemoryRefreshTokenStore implements RefreshTokenStoreInterface
         $this->records[$record->tokenId] = ['record' => $record, 'consumed' => false];
 
         return true;
+    }
+
+    public function inspect(RefreshTokenRecord $record, int $now): RefreshTokenInspectionStatus
+    {
+        $entry = $this->records[$record->tokenId] ?? null;
+        if ($entry === null || !$entry['record']->sameState($record)) {
+            return RefreshTokenInspectionStatus::INVALID;
+        }
+        $stored = $entry['record'];
+        if (isset($this->revokedFamilies[$stored->familyId])) {
+            return RefreshTokenInspectionStatus::REVOKED;
+        }
+        if ($entry['consumed']) {
+            return RefreshTokenInspectionStatus::CONSUMED;
+        }
+        if ($now >= $stored->idleExpiresAt || $now >= $stored->grant->expiresAt) {
+            return RefreshTokenInspectionStatus::EXPIRED;
+        }
+
+        return RefreshTokenInspectionStatus::ACTIVE;
     }
 
     public function revokeFamily(string $tokenId, int $revokedAt): bool
