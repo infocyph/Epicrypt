@@ -35,6 +35,9 @@ final readonly class OAuthProtocolError
     /** @return array<string, string> */
     public function responseParameters(?string $issuer = null): array
     {
+        if ($this->mayRedirect() && $issuer === null) {
+            throw new ConfigurationException('Redirectable OAuth authorization errors require issuer identification.');
+        }
         if ($issuer !== null) {
             AuthProtocolPolicy::assertText($issuer, AuthProtocolPolicy::MAX_ISSUER_BYTES, 'OAuth response issuer');
         }
