@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Infocyph\Epicrypt\Auth\OAuth;
 
+use Infocyph\Epicrypt\Auth\Internal\AuthProtocolPolicy;
 use Infocyph\Epicrypt\Exception\ConfigurationException;
 
 final readonly class RefreshTokenArtifactClaims
@@ -20,7 +21,7 @@ final readonly class RefreshTokenArtifactClaims
         public int $issuedAt,
         public int $idleExpiresAt,
     ) {
-        self::assertIdentifier($this->issuer, 2048, 'Refresh-token issuer');
+        AuthProtocolPolicy::assertText($this->issuer, AuthProtocolPolicy::MAX_ISSUER_BYTES, 'Refresh-token issuer');
         if (preg_match('/\A[A-Za-z0-9_-]{32}\z/D', $this->tokenId) !== 1) {
             throw new ConfigurationException('Refresh-token ID must be a 192-bit Base64URL value.');
         }
@@ -58,12 +59,5 @@ final readonly class RefreshTokenArtifactClaims
     public static function validTokenUse(mixed $value): bool
     {
         return is_string($value) && hash_equals(self::TOKEN_USE, $value);
-    }
-
-    private static function assertIdentifier(string $value, int $maximumBytes, string $label): void
-    {
-        if ($value === '' || strlen($value) > $maximumBytes || preg_match('/[\x00-\x1F\x7F]/', $value) === 1) {
-            throw new ConfigurationException(sprintf('%s is invalid.', $label));
-        }
     }
 }

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Infocyph\Epicrypt\Auth\OAuth;
 
+use Infocyph\Epicrypt\Auth\Internal\AuthProtocolPolicy;
 use Infocyph\Epicrypt\Exception\ConfigurationException;
 use Infocyph\Epicrypt\Exception\Token\InvalidTokenException;
 use Infocyph\Epicrypt\Internal\Clock\SystemClock;
@@ -46,7 +47,11 @@ final readonly class RefreshTokenManager
 
     public function revokeAuthorization(string $authorizationId): int
     {
-        self::assertIdentifier($authorizationId, 'Refresh-token authorization ID');
+        AuthProtocolPolicy::assertText(
+            $authorizationId,
+            AuthProtocolPolicy::MAX_IDENTIFIER_BYTES,
+            'Refresh-token authorization ID',
+        );
 
         return $this->store->revokeAuthorization($authorizationId, $this->clock->now()->getTimestamp());
     }
@@ -60,7 +65,7 @@ final readonly class RefreshTokenManager
         int $idleLifetimeSeconds = RefreshTokenArtifact::DEFAULT_IDLE_LIFETIME_SECONDS,
         ?array $requestedScopes = null,
     ): RefreshTokenRotationResult {
-        self::assertIdentifier($clientId, 'Refresh-token client ID');
+        AuthProtocolPolicy::assertText($clientId, AuthProtocolPolicy::MAX_IDENTIFIER_BYTES, 'Refresh-token client ID');
         if ($dpopKeyThumbprint !== null && !RefreshTokenGrant::validDpopKeyThumbprint($dpopKeyThumbprint)) {
             throw new ConfigurationException('Refresh-token DPoP key thumbprint must be a SHA-256 Base64URL value.');
         }
@@ -117,12 +122,5 @@ final readonly class RefreshTokenManager
         }
 
         return RefreshTokenRotationResult::failure(RefreshTokenRotationStatus::CONFLICT);
-    }
-
-    private static function assertIdentifier(string $value, string $label): void
-    {
-        if ($value === '' || strlen($value) > 255 || preg_match('/[\x00-\x1F\x7F]/', $value) === 1) {
-            throw new ConfigurationException(sprintf('%s is invalid.', $label));
-        }
     }
 }
