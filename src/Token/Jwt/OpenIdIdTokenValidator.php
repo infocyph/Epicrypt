@@ -36,35 +36,9 @@ final readonly class OpenIdIdTokenValidator
         ?string $state = null,
         ?int $maximumAuthenticationAge = null,
     ): void {
-        if (!$this->isIdentifier($clientId, 255)) {
-            throw new ConfigurationException('OIDC client id is invalid.');
-        }
-        if ($nonce !== null && !$this->isIdentifier($nonce, self::MAX_IDENTIFIER_BYTES)) {
-            throw new ConfigurationException('OIDC nonce is invalid.');
-        }
-        if ($maximumAuthenticationAge !== null && ($maximumAuthenticationAge < 0 || $maximumAuthenticationAge > 2_678_400)) {
-            throw new ConfigurationException('OIDC maximum authentication age is invalid.');
-        }
-
-        $now = $this->clock->now()->getTimestamp();
-        $audiences = $this->audiences($claims['aud'] ?? null);
-        if (!in_array($clientId, $audiences, true)) {
-            throw new InvalidClaimException('OIDC ID token audience does not contain the client id.');
-        }
-        $azp = $claims['azp'] ?? null;
-        if ((count($audiences) > 1 || $azp !== null)
-            && (!is_string($azp) || !$this->isIdentifier($azp, 255) || !hash_equals($clientId, $azp))) {
-            throw new InvalidClaimException('OIDC ID token azp is required and must match the client id.');
-        }
-        if ($nonce !== null && (!is_string($claims['nonce'] ?? null) || !hash_equals($nonce, $claims['nonce']))) {
-            throw new InvalidClaimException('OIDC ID token nonce does not match.');
-        }
-        if ($maximumAuthenticationAge !== null) {
-            $authTime = $claims['auth_time'] ?? null;
-            if (!is_int($authTime) || $authTime > $now || ($now - $authTime) > $maximumAuthenticationAge) {
-                throw new InvalidClaimException('OIDC ID token auth_time violates maximum age.');
-            }
-        }
+        $this->validateConfiguration($clientId, $nonce, $maximumAuthenticationAge);
+        $this->validateAudience($claims, $clientId);
+        $this->validateAuthentication($claims, $nonce, $maximumAuthenticationAge);
         $this->validateHalfHash($claims, 'at_hash', $accessToken, $signingAlgorithm);
         $this->validateHalfHash($claims, 'c_hash', $authorizationCode, $signingAlgorithm);
         $this->validateHalfHash($claims, 's_hash', $state, $signingAlgorithm);
@@ -102,6 +76,59 @@ final readonly class OpenIdIdTokenValidator
         return $value !== ''
             && strlen($value) <= $maximumBytes
             && preg_match('/[\x00-\x1F\x7F]/', $value) !== 1;
+    }
+
+    /** @param array<string, mixed> $claims */
+    private function validateAuthentication(
+        array $claims,
+        #[\SensitiveParameter]
+        ?string $nonce,
+        ?int $maximumAuthenticationAge,
+    ): void {
+        if ($nonce !== null && (!is_string($claims['nonce'] ?? null) || !hash_equals($nonce, $claims['nonce']))) {
+            throw new InvalidClaimException('OIDC ID token nonce does not match.');
+        }
+        if ($maximumAuthenticationAge === null) {
+            return;
+        }
+
+        $authTime = $claims['auth_time'] ?? null;
+        $now = $this->clock->now()->getTimestamp();
+        if (!is_int($authTime) || $authTime > $now || ($now - $authTime) > $maximumAuthenticationAge) {
+            throw new InvalidClaimException('OIDC ID token auth_time violates maximum age.');
+        }
+    }
+
+    /** @param array<string, mixed> $claims */
+    private function validateAudience(array $claims, string $clientId): void
+    {
+        $audiences = $this->audiences($claims['aud'] ?? null);
+        if (!in_array($clientId, $audiences, true)) {
+            throw new InvalidClaimException('OIDC ID token audience does not contain the client id.');
+        }
+
+        $azp = $claims['azp'] ?? null;
+        if ((count($audiences) > 1 || $azp !== null)
+            && (!is_string($azp) || !$this->isIdentifier($azp, 255) || !hash_equals($clientId, $azp))) {
+            throw new InvalidClaimException('OIDC ID token azp is required and must match the client id.');
+        }
+    }
+
+    private function validateConfiguration(
+        string $clientId,
+        #[\SensitiveParameter]
+        ?string $nonce,
+        ?int $maximumAuthenticationAge,
+    ): void {
+        if (!$this->isIdentifier($clientId, 255)) {
+            throw new ConfigurationException('OIDC client id is invalid.');
+        }
+        if ($nonce !== null && !$this->isIdentifier($nonce, self::MAX_IDENTIFIER_BYTES)) {
+            throw new ConfigurationException('OIDC nonce is invalid.');
+        }
+        if ($maximumAuthenticationAge !== null && ($maximumAuthenticationAge < 0 || $maximumAuthenticationAge > 2_678_400)) {
+            throw new ConfigurationException('OIDC maximum authentication age is invalid.');
+        }
     }
 
     /** @param array<string, mixed> $claims */
