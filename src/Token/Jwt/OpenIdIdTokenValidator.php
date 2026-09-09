@@ -13,6 +13,12 @@ use Psr\Clock\ClockInterface;
 
 final readonly class OpenIdIdTokenValidator
 {
+    private const int MAX_AUDIENCES = 32;
+
+    private const int MAX_AUDIENCE_BYTES = 2048;
+
+    private const int MAX_IDENTIFIER_BYTES = 256;
+
     public function __construct(private ClockInterface $clock = new SystemClock()) {}
 
     /** @param array<string, mixed> $claims */
@@ -30,19 +36,24 @@ final readonly class OpenIdIdTokenValidator
         ?string $state = null,
         ?int $maximumAuthenticationAge = null,
     ): void {
-        if ($clientId === '' || strlen($clientId) > 255 || preg_match('/[\x00-\x1F\x7F]/', $clientId) === 1) {
+        if (!$this->isIdentifier($clientId, 255)) {
             throw new ConfigurationException('OIDC client id is invalid.');
+        }
+        if ($nonce !== null && !$this->isIdentifier($nonce, self::MAX_IDENTIFIER_BYTES)) {
+            throw new ConfigurationException('OIDC nonce is invalid.');
         }
         if ($maximumAuthenticationAge !== null && ($maximumAuthenticationAge < 0 || $maximumAuthenticationAge > 2_678_400)) {
             throw new ConfigurationException('OIDC maximum authentication age is invalid.');
         }
+
         $now = $this->clock->now()->getTimestamp();
         $audiences = $this->audiences($claims['aud'] ?? null);
         if (!in_array($clientId, $audiences, true)) {
             throw new InvalidClaimException('OIDC ID token audience does not contain the client id.');
         }
         $azp = $claims['azp'] ?? null;
-        if ((count($audiences) > 1 || $azp !== null) && (!is_string($azp) || !hash_equals($clientId, $azp))) {
+        if ((count($audiences) > 1 || $azp !== null)
+            && (!is_string($azp) || !$this->isIdentifier($azp, 255) || !hash_equals($clientId, $azp))) {
             throw new InvalidClaimException('OIDC ID token azp is required and must match the client id.');
         }
         if ($nonce !== null && (!is_string($claims['nonce'] ?? null) || !hash_equals($nonce, $claims['nonce']))) {
@@ -62,23 +73,35 @@ final readonly class OpenIdIdTokenValidator
     /** @return list<string> */
     private function audiences(mixed $audience): array
     {
-        if (is_string($audience) && $audience !== '') {
+        if (is_string($audience)) {
+            if (!$this->isIdentifier($audience, self::MAX_AUDIENCE_BYTES)) {
+                throw new InvalidClaimException('OIDC ID token aud has an invalid value.');
+            }
+
             return [$audience];
         }
-        if (!is_array($audience) || $audience === [] || !array_is_list($audience)
-            || !array_all($audience, static fn(mixed $value): bool => is_string($value) && $value !== '')) {
+        if (!is_array($audience) || $audience === [] || !array_is_list($audience) || count($audience) > self::MAX_AUDIENCES) {
             throw new InvalidClaimException('OIDC ID token aud has an invalid shape.');
         }
 
         $normalized = [];
+        $seen = [];
         foreach ($audience as $value) {
-            if (!is_string($value)) {
-                throw new InvalidClaimException('OIDC ID token aud must contain strings.');
+            if (!is_string($value) || !$this->isIdentifier($value, self::MAX_AUDIENCE_BYTES) || isset($seen[$value])) {
+                throw new InvalidClaimException('OIDC ID token aud contains an invalid or duplicate value.');
             }
+            $seen[$value] = true;
             $normalized[] = $value;
         }
 
         return $normalized;
+    }
+
+    private function isIdentifier(string $value, int $maximumBytes): bool
+    {
+        return $value !== ''
+            && strlen($value) <= $maximumBytes
+            && preg_match('/[\x00-\x1F\x7F]/', $value) !== 1;
     }
 
     /** @param array<string, mixed> $claims */
