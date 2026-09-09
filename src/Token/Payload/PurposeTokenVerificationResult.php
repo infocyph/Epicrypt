@@ -15,6 +15,7 @@ final readonly class PurposeTokenVerificationResult
         #[\SensitiveParameter]
         public array $claims = [],
         public ?string $subjectId = null,
+        #[\SensitiveParameter]
         public ?string $tokenId = null,
         public ?int $issuedAt = null,
         public ?int $notBefore = null,
