@@ -57,7 +57,9 @@ final readonly class KeyRing
 
     public function metadataFor(string $id): ?KeyMetadata
     {
-        return $this->entries[$id]?->metadata() ?? null;
+        $entry = $this->entries[$id] ?? null;
+
+        return $entry?->metadata();
     }
 
     /** @return list<KeyRingEntry> */
