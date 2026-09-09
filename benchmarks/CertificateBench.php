@@ -31,6 +31,35 @@ final class CertificateBench
 
     private string $pfx;
 
+    #[Bench\BeforeMethods('setUp')]
+    public function benchHkdfKeyExchange(): void
+    {
+        $this->exchange->deriveKey($this->alice['private'], $this->bob['public'], 32, 'benchmark:v1');
+    }
+
+    #[Bench\BeforeMethods('setUpPki')]
+    public function benchOpenSslCertificateParse(): void
+    {
+        openssl_x509_parse($this->certificate, false);
+    }
+
+    public function benchOpenSslKeyGeneration(): void
+    {
+        KeyPairGenerator::rsa(OpenSslRsaBits::BITS_2048)->generate();
+    }
+
+    #[Bench\BeforeMethods('setUpPki')]
+    public function benchPhpseclibCertificateInspect(): void
+    {
+        new CertificateInspector()->inspect($this->certificate);
+    }
+
+    #[Bench\BeforeMethods('setUpPki')]
+    public function benchPhpseclibPfxImport(): void
+    {
+        $this->pkcs12->import($this->pfx, 'benchmark-password');
+    }
+
     public function setUp(): void
     {
         $this->exchange = KeyExchange::sodium();
@@ -48,34 +77,5 @@ final class CertificateBench
         );
         $this->pkcs12 = new Pkcs12();
         $this->pfx = $this->pkcs12->export($this->certificate, $pair['private'], 'benchmark-password');
-    }
-
-    #[Bench\BeforeMethods('setUp')]
-    public function benchHkdfKeyExchange(): void
-    {
-        $this->exchange->deriveKey($this->alice['private'], $this->bob['public'], 32, 'benchmark:v1');
-    }
-
-    public function benchOpenSslKeyGeneration(): void
-    {
-        KeyPairGenerator::rsa(OpenSslRsaBits::BITS_2048)->generate();
-    }
-
-    #[Bench\BeforeMethods('setUpPki')]
-    public function benchOpenSslCertificateParse(): void
-    {
-        openssl_x509_parse($this->certificate, false);
-    }
-
-    #[Bench\BeforeMethods('setUpPki')]
-    public function benchPhpseclibCertificateInspect(): void
-    {
-        new CertificateInspector()->inspect($this->certificate);
-    }
-
-    #[Bench\BeforeMethods('setUpPki')]
-    public function benchPhpseclibPfxImport(): void
-    {
-        $this->pkcs12->import($this->pfx, 'benchmark-password');
     }
 }
