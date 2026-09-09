@@ -158,6 +158,7 @@ final class KeyDeriver
         $length = strlen($value);
         if ((!$allowEmpty && $length === 0) || $length > $maximum || preg_match('/[\x00-\x1F\x7F]/', $value) === 1) {
             $minimum = $allowEmpty ? 0 : 1;
+
             throw new ConfigurationException(sprintf(
                 '%s must be %d..%d bytes and contain no control characters.',
                 $label,
