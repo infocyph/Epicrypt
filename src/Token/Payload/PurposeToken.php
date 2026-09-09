@@ -122,7 +122,7 @@ final readonly class PurposeToken
             return new PurposeTokenVerificationResult(false, PurposeTokenFailureReason::WRONG_CONTEXT);
         } catch (UnsupportedTokenFormatException) {
             return new PurposeTokenVerificationResult(false, PurposeTokenFailureReason::UNSUPPORTED_FORMAT);
-        } catch (TokenException|\UnexpectedValueException|\JsonException) {
+        } catch (TokenException|ConfigurationException|\JsonException) {
             return new PurposeTokenVerificationResult(false, PurposeTokenFailureReason::INVALID_TOKEN);
         }
 
@@ -222,6 +222,13 @@ final readonly class PurposeToken
     ): PurposeTokenVerificationResult {
         try {
             $payload = SignedPayloadCodec::unverifiedPayload($token);
+            $purpose = $payload['purpose'] ?? null;
+            if (!is_string($purpose) || $purpose === '') {
+                return new PurposeTokenVerificationResult(false, PurposeTokenFailureReason::INVALID_TOKEN);
+            }
+            if (!hash_equals($this->purpose, $purpose)) {
+                return new PurposeTokenVerificationResult(false, PurposeTokenFailureReason::WRONG_PURPOSE);
+            }
             $metadata = $this->metadata($payload);
         } catch (\Throwable) {
             return new PurposeTokenVerificationResult(false, PurposeTokenFailureReason::INVALID_TOKEN);
@@ -247,20 +254,33 @@ final readonly class PurposeToken
     private function metadata(#[\SensitiveParameter] array $payload): array
     {
         $tokenId = $payload['tid'] ?? null;
-        if (!is_string($tokenId) || $tokenId === '') {
-            throw new InvalidTokenException('Purpose token requires a token id.');
+        if (!is_string($tokenId) || preg_match('/\A[A-Za-z0-9_-]{16,128}\z/D', $tokenId) !== 1) {
+            throw new InvalidTokenException('Purpose token requires a valid token id.');
         }
         $subjectId = $payload['sub'] ?? null;
-        if ($subjectId !== null && (!is_string($subjectId) || $subjectId === '')) {
-            throw new InvalidTokenException('Purpose token subject must be a non-empty string.');
+        if ($subjectId !== null) {
+            if (!is_string($subjectId)) {
+                throw new InvalidTokenException('Purpose token subject must be a string.');
+            }
+            try {
+                SecurityPolicy::assertIdentifier($subjectId, 'Purpose token subject');
+            } catch (ConfigurationException $exception) {
+                throw new InvalidTokenException('Purpose token subject is invalid.', 0, $exception);
+            }
+        }
+
+        $issuedAt = $this->integerClaim($payload, 'iat', true);
+        $expiresAt = $this->integerClaim($payload, 'exp', true);
+        if ($issuedAt === null || $expiresAt === null) {
+            throw new InvalidTokenException('Purpose token temporal metadata is incomplete.');
         }
 
         return [
             'subject_id' => $subjectId,
             'token_id' => $tokenId,
-            'issued_at' => $this->integerClaim($payload, 'iat', true),
+            'issued_at' => $issuedAt,
             'not_before' => $this->integerClaim($payload, 'nbf', false),
-            'expires_at' => $this->integerClaim($payload, 'exp', true),
+            'expires_at' => $expiresAt,
         ];
     }
 
