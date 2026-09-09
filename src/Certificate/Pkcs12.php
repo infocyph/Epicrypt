@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Infocyph\Epicrypt\Certificate;
 
+use Infocyph\Epicrypt\Certificate\Support\Pem;
 use Infocyph\Epicrypt\Exception\ConfigurationException;
 use phpseclib4\Crypt\Common\PrivateKey;
 use phpseclib4\Crypt\Common\PublicKey;
@@ -56,20 +57,29 @@ final class Pkcs12
                 throw new ConfigurationException('PKCS#12 certificate and private key do not match.');
             }
 
-            $pfx = new PFX();
-            $pfx->setPassword($password);
-            $localKeyId = hash('sha256', $this->publicIdentity($certificatePublicKey), true);
-            $pfx->add($certificate, friendlyName: $friendlyName, localKeyID: $localKeyId);
-            $pfx->add($privateKey, friendlyName: $friendlyName, localKeyID: $localKeyId);
             foreach ($caCertificatesPem as $caCertificatePem) {
                 $this->assertPemSize($caCertificatePem, 'CA certificate');
-                $pfx->add(X509::load($caCertificatePem));
+                X509::load($caCertificatePem);
             }
-            $encoded = $pfx->toString([
-                'hashAlgorithm' => 'sha256',
-                'iterationCount' => 2048,
-                'saltLength' => 32,
-            ]);
+
+            $certificateResource = openssl_x509_read($certificatePem);
+            if ($certificateResource === false) {
+                throw new ConfigurationException('PKCS#12 certificate could not be loaded by the export backend.');
+            }
+            $privateKeyResource = Pem::requirePrivateKeyResource($privateKeyPem, $privateKeyPassphrase);
+            $options = [];
+            if ($friendlyName !== null) {
+                $options['friendly_name'] = $friendlyName;
+            }
+            if ($caCertificatesPem !== []) {
+                $options['extracerts'] = implode(PHP_EOL, $caCertificatesPem);
+            }
+
+            $encoded = '';
+            if (!openssl_pkcs12_export($certificateResource, $encoded, $privateKeyResource, $password, $options)) {
+                throw new ConfigurationException('PKCS#12 export failed.');
+            }
+            PFX::load($encoded, $password);
         } catch (ConfigurationException $exception) {
             throw $exception;
         } catch (Throwable $exception) {
