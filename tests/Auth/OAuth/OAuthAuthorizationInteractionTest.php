@@ -10,6 +10,7 @@ use Infocyph\Epicrypt\Auth\OAuth\OAuthAuthorizationResult;
 use Infocyph\Epicrypt\Auth\OAuth\OAuthClient;
 use Infocyph\Epicrypt\Auth\OAuth\OAuthClientAuthenticationMethod;
 use Infocyph\Epicrypt\Auth\OAuth\OAuthClientType;
+use Infocyph\Epicrypt\Auth\OAuth\OAuthErrorCode;
 use Infocyph\Epicrypt\Auth\OAuth\OAuthGrantType;
 
 function phaseDAuthorizationClient(): OAuthClient
@@ -57,6 +58,7 @@ it('represents authentication and authorization decision as typed interactions',
         ['orders:read'],
         3_600,
     );
+    $denial = $decision->accessDenied();
 
     expect($authentication->requirement)->toBe(OAuthAuthorizationInteractionRequirement::SUBJECT_AUTHENTICATION)
         ->and($authentication->subject)->toBeNull()
@@ -64,5 +66,12 @@ it('represents authentication and authorization decision as typed interactions',
         ->and($decision->subject)->toBe('user-42')
         ->and($approval->scopes)->toBe(['orders:read'])
         ->and($approval->authenticationMethods)->toBe(['pwd', 'otp'])
-        ->and($approval->authorizationLifetimeSeconds)->toBe(3_600);
+        ->and($approval->authorizationLifetimeSeconds)->toBe(3_600)
+        ->and($denial->code)->toBe(OAuthErrorCode::ACCESS_DENIED)
+        ->and($denial->redirectUri)->toBe('https://client.example/callback')
+        ->and($denial->responseParameters('https://issuer.example'))->toBe([
+            'error' => 'access_denied',
+            'iss' => 'https://issuer.example',
+            'state' => 'state-1',
+        ]);
 });

@@ -25,7 +25,7 @@ final readonly class OAuthAuthorizationCodeIssuer
         OAuthAuthorizationRequest $request,
         OAuthAuthorizationApproval $approval,
         int $codeLifetimeSeconds = AuthorizationCode::DEFAULT_LIFETIME_SECONDS,
-    ): AuthorizationCodeIssue {
+    ): OAuthAuthorizationCodeIssueResult {
         $this->assertApproval($request, $approval, $codeLifetimeSeconds);
         $now = $this->clock->now()->getTimestamp();
 
@@ -47,7 +47,12 @@ final readonly class OAuthAuthorizationCodeIssuer
                     authenticationMethods: $approval->authenticationMethods,
                 );
                 if ($this->codes->create(AuthorizationCodeRecord::fromCode($issue->code))) {
-                    return $issue;
+                    return new OAuthAuthorizationCodeIssueResult(
+                        token: $issue->token,
+                        code: $issue->code,
+                        authorization: $authorization,
+                        state: $request->state,
+                    );
                 }
             }
         } catch (Throwable $exception) {

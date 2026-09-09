@@ -85,6 +85,11 @@ it('issues a stored JOSE authorization code and consumes it exactly once', funct
     expect(explode('.', $issue->token))->toHaveCount(5)
         ->and($issue->code->scopes)->toBe(['orders:read'])
         ->and($issue->code->audiences)->toBe(['orders-api'])
+        ->and($issue->responseParameters())->toBe([
+            'code' => $issue->token,
+            'iss' => 'https://issuer.example',
+            'state' => 'state-1',
+        ])
         ->and($storedAuthorization?->subject)->toBe('user-42')
         ->and($storedAuthorization?->scopes)->toBe(['orders:read'])
         ->and($storedAuthorization?->audiences)->toBe(['orders-api']);

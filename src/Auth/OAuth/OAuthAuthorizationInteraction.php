@@ -77,6 +77,19 @@ final readonly class OAuthAuthorizationInteraction
         );
     }
 
+    public function accessDenied(): OAuthProtocolError
+    {
+        if ($this->requirement !== OAuthAuthorizationInteractionRequirement::AUTHORIZATION_DECISION) {
+            throw new ConfigurationException('OAuth access denial requires an authorization-decision interaction.');
+        }
+
+        return new OAuthProtocolError(
+            OAuthErrorCode::ACCESS_DENIED,
+            $this->request->redirectUri,
+            $this->request->state,
+        );
+    }
+
     /** @param array<array-key, mixed> $authenticationMethods */
     public static function authorizationDecisionRequired(
         OAuthAuthorizationRequest $request,
