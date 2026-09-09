@@ -15,11 +15,11 @@ use Psr\Clock\ClockInterface;
 
 final readonly class DpopProof
 {
+    private const int MAX_FUTURE_SKEW_SECONDS = 300;
+
     private const int MAX_IDENTIFIER_BYTES = 256;
 
     private const int MAX_PROOF_AGE_SECONDS = 3600;
-
-    private const int MAX_FUTURE_SKEW_SECONDS = 300;
 
     public function __construct(private ClockInterface $clock = new SystemClock()) {}
 
@@ -171,16 +171,6 @@ final readonly class DpopProof
         }
     }
 
-    private function assertTemporalPolicy(int $maximumAgeSeconds, int $maximumFutureSkewSeconds): void
-    {
-        if ($maximumAgeSeconds < 1 || $maximumAgeSeconds > self::MAX_PROOF_AGE_SECONDS) {
-            throw new ConfigurationException('DPoP maximum proof age must be between 1 and 3600 seconds.');
-        }
-        if ($maximumFutureSkewSeconds < 0 || $maximumFutureSkewSeconds > self::MAX_FUTURE_SKEW_SECONDS) {
-            throw new ConfigurationException('DPoP maximum future skew must be between 0 and 300 seconds.');
-        }
-    }
-
     /** @param array<string, mixed> $jwk */
     private function assertPublicJwk(array $jwk): void
     {
@@ -191,6 +181,16 @@ final readonly class DpopProof
         }
         if (!in_array($jwk['kty'] ?? null, ['RSA', 'EC', 'OKP'], true)) {
             throw new InvalidTokenException('DPoP requires a public asymmetric JWK.');
+        }
+    }
+
+    private function assertTemporalPolicy(int $maximumAgeSeconds, int $maximumFutureSkewSeconds): void
+    {
+        if ($maximumAgeSeconds < 1 || $maximumAgeSeconds > self::MAX_PROOF_AGE_SECONDS) {
+            throw new ConfigurationException('DPoP maximum proof age must be between 1 and 3600 seconds.');
+        }
+        if ($maximumFutureSkewSeconds < 0 || $maximumFutureSkewSeconds > self::MAX_FUTURE_SKEW_SECONDS) {
+            throw new ConfigurationException('DPoP maximum future skew must be between 0 and 300 seconds.');
         }
     }
 
