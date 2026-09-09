@@ -64,6 +64,24 @@ Epicrypt 3.0 is unreleased. **Source/API compatibility is not a constraint while
 | `Auth\OAuth\OAuthEndpointCapability/OAuthEndpointCapabilityCatalog` | Add | `ad14609c`; explicit capabilities only, no routes. |
 | auth in-memory/conformance stores | Test-only | `168c7b3e`, `8326444e`, `d2ff4c81`, `143b1c21`. |
 
+## Phase E–G public authentication surfaces
+
+| Surface | 3.0 decision | Evidence / notes |
+| --- | --- | --- |
+| `Auth\OAuth\OAuthTokenEndpoint/OAuthTokenResponse/OAuthTokenResult` | Add/final | `5b1ed2a5`; Authorization Code, Client Credentials, refresh and extension-capable token responses. |
+| `Auth\OAuth\OAuthAccessTokenService/OAuthAccessTokenInspector/OAuthResourceAccessTokenValidator` | Add/final | `5b1ed2a5`; RFC 9068 issue/verify/resource validation with optional authoritative state. |
+| `Auth\OAuth\OAuthRevocationEndpoint/OAuthRevocationResult` | Add/final | `5b1ed2a5`; RFC 7009 non-oracular revocation. |
+| `Auth\OAuth\OAuthIntrospectionEndpoint/OAuthIntrospectionResponse/OAuthIntrospectionResult` | Add/final | `5b1ed2a5`; RFC 7662 protected introspection. |
+| `Auth\OAuth\OAuthAuthorizationServerMetadata/OAuthJwksPublisher` | Add/final | `5b1ed2a5`; capability-accurate RFC 8414 metadata and purpose-scoped JWKS. |
+| `Auth\OAuth\OAuthDpopContext/OAuthDpopValidator` | Add/final | `5b1ed2a5`; RFC 9449 proof/access-token binding integration. |
+| `Auth\Oidc\OpenIdAuthorizationRequest*` + interaction model | Add/final | `f187a02b`, `5b1ed2a5`; exact `openid`, nonce/prompt/max_age/acr semantics. |
+| `Auth\Oidc\OpenIdIdTokenIssuer/OpenIdIdTokenIssue/OpenIdTokenResponseExtension` | Add/final | `5b1ed2a5`; signed ID Tokens integrated into code exchange. |
+| `Auth\Oidc\OpenIdSubjectIdentifierProviderInterface/OpenIdSubjectType` | Add/final | `5b1ed2a5`; public/pairwise subject abstraction. |
+| `Auth\Oidc\OpenIdClaimsProviderInterface/OpenIdUserInfoProjector/OpenIdProviderMetadata` | Add/final | `5b1ed2a5`; UserInfo and discovery provider core. |
+| encrypted ID Token public API | Do not add in required 3.0 scope | Deferred until explicitly justified by independent encryption interoperability. |
+| `Auth\Personal\PersonalAccessTokenManager/Policy/Abilities/WildcardPolicy` | Add/final | `2a28096f`; stateful Sanctum-style PAT semantics. |
+| `Auth\Personal\PersonalAccessTokenIssue/ValidationResult/ValidationStatus/UsageStoreInterface` | Add/final | `2a28096f`; issue-only raw JWT, authoritative metadata verification, optional usage tracking. |
+
 ## Authorization protocol position
 
 The authorization validator accepts a transport-neutral parameter map where a scalar represents one occurrence and a list preserves repeated occurrences. Singleton OAuth parameters represented as repeated values are rejected rather than delegated to framework parsing behavior.
@@ -119,4 +137,4 @@ After every public phase/batch:
 4. distinguish source/API changes from persisted-format compatibility;
 5. freeze this inventory only when the release-candidate public surface is intentionally stable.
 
-Current synchronization point: Phase D complete through `5f1fa6fc`.
+Current synchronization point: Phases E/F/G feature surfaces synchronized through `5b1ed2a5` and `2a28096f`; final release freeze remains a Phase H gate.
