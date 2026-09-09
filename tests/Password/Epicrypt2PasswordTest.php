@@ -27,6 +27,18 @@ it('defaults to Argon2id and preserves rehash detection', function () {
         ->and($hasher->needsRehash($hash))->toBeFalse();
 });
 
+it('verifies legacy Argon2i hashes and migrates them to Argon2id', function () {
+    $algorithm = defined('PASSWORD_ARGON2I') ? constant('PASSWORD_ARGON2I') : 'argon2i';
+    $legacyHash = password_hash('correct horse battery staple', $algorithm);
+    $hasher = new PasswordHasher();
+    $result = $hasher->verifyAndRehash('correct horse battery staple', $legacyHash);
+
+    expect($legacyHash)->toStartWith('$argon2i$')
+        ->and($result->verified)->toBeTrue()
+        ->and($result->needsRehash)->toBeTrue()
+        ->and($result->rehashedHash)->toStartWith('$argon2id$');
+});
+
 it('rejects bcrypt passwords over 72 bytes and invalid hashing options', function () {
     $bcrypt = new PasswordHasher(new PasswordHashOptions(PasswordHashAlgorithm::BCRYPT));
     $seventyTwo = str_repeat('x', 72);
