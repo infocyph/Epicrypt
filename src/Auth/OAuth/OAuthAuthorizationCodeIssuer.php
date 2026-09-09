@@ -25,8 +25,9 @@ final readonly class OAuthAuthorizationCodeIssuer
         OAuthAuthorizationRequest $request,
         OAuthAuthorizationApproval $approval,
         int $codeLifetimeSeconds = AuthorizationCode::DEFAULT_LIFETIME_SECONDS,
+        ?string $nonce = null,
     ): OAuthAuthorizationCodeIssueResult {
-        $this->assertApproval($request, $approval, $codeLifetimeSeconds);
+        $this->assertApproval($request, $approval, $codeLifetimeSeconds, $nonce);
         $now = $this->clock->now()->getTimestamp();
 
         $authorization = $this->createAuthorization($request, $approval, $now);
@@ -42,6 +43,7 @@ final readonly class OAuthAuthorizationCodeIssuer
                     scopes: $authorization->scopes,
                     audiences: $authorization->audiences,
                     lifetimeSeconds: $codeLifetimeSeconds,
+                    nonce: $nonce,
                     authenticationTime: $approval->authenticationTime,
                     authenticationContext: $approval->authenticationContext,
                     authenticationMethods: $approval->authenticationMethods,
@@ -91,11 +93,15 @@ final readonly class OAuthAuthorizationCodeIssuer
         OAuthAuthorizationRequest $request,
         OAuthAuthorizationApproval $approval,
         int $codeLifetimeSeconds,
+        ?string $nonce,
     ): void {
         foreach ($approval->scopes as $scope) {
             if (!in_array($scope, $request->scopes, true)) {
                 throw new ConfigurationException('OAuth authorization approval scopes may only narrow the validated request.');
             }
+        }
+        if ($nonce !== null && !in_array('openid', $approval->scopes, true)) {
+            throw new ConfigurationException('OIDC nonce can only be attached to an approved openid authorization.');
         }
 
         $now = $this->clock->now()->getTimestamp();

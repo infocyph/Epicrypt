@@ -14,10 +14,10 @@ use Psr\Clock\ClockInterface;
 final readonly class OpenIdIdTokenValidator
 {
     private const int MAX_AUDIENCE_BYTES = 2048;
-
     private const int MAX_AUDIENCES = 32;
-
     private const int MAX_IDENTIFIER_BYTES = 256;
+    private const int MAX_AUTHENTICATION_METHODS = 16;
+    private const int MAX_AUTHENTICATION_METHOD_BYTES = 64;
 
     public function __construct(private ClockInterface $clock = new SystemClock()) {}
 
@@ -100,17 +100,52 @@ final readonly class OpenIdIdTokenValidator
         ?string $nonce,
         ?int $maximumAuthenticationAge,
     ): void {
-        if ($nonce !== null && (!is_string($claims['nonce'] ?? null) || !hash_equals($nonce, $claims['nonce']))) {
+        $claimNonce = $claims['nonce'] ?? null;
+        if (array_key_exists('nonce', $claims)
+            && (!is_string($claimNonce) || !$this->isIdentifier($claimNonce, self::MAX_IDENTIFIER_BYTES))) {
+            throw new InvalidClaimException('OIDC ID token nonce has an invalid value.');
+        }
+        if ($nonce !== null && (!is_string($claimNonce) || !hash_equals($nonce, $claimNonce))) {
             throw new InvalidClaimException('OIDC ID token nonce does not match.');
         }
-        if ($maximumAuthenticationAge === null) {
-            return;
+
+        $now = $this->clock->now()->getTimestamp();
+        $authTime = $claims['auth_time'] ?? null;
+        if (array_key_exists('auth_time', $claims)
+            && (!is_int($authTime) || $authTime < 1 || $authTime > $now)) {
+            throw new InvalidClaimException('OIDC ID token auth_time is invalid.');
+        }
+        if ($maximumAuthenticationAge !== null
+            && (!is_int($authTime) || ($now - $authTime) > $maximumAuthenticationAge)) {
+            throw new InvalidClaimException('OIDC ID token auth_time violates maximum age.');
         }
 
-        $authTime = $claims['auth_time'] ?? null;
-        $now = $this->clock->now()->getTimestamp();
-        if (!is_int($authTime) || $authTime > $now || ($now - $authTime) > $maximumAuthenticationAge) {
-            throw new InvalidClaimException('OIDC ID token auth_time violates maximum age.');
+        $acr = $claims['acr'] ?? null;
+        if (array_key_exists('acr', $claims)
+            && (!is_string($acr) || !$this->isIdentifier($acr, 255))) {
+            throw new InvalidClaimException('OIDC ID token acr is invalid.');
+        }
+        if (array_key_exists('amr', $claims)) {
+            $this->validateAuthenticationMethods($claims['amr']);
+        }
+    }
+
+    private function validateAuthenticationMethods(mixed $methods): void
+    {
+        if (!is_array($methods)
+            || !array_is_list($methods)
+            || count($methods) > self::MAX_AUTHENTICATION_METHODS) {
+            throw new InvalidClaimException('OIDC ID token amr must be a bounded string list.');
+        }
+
+        $seen = [];
+        foreach ($methods as $method) {
+            if (!is_string($method)
+                || !$this->isIdentifier($method, self::MAX_AUTHENTICATION_METHOD_BYTES)
+                || isset($seen[$method])) {
+                throw new InvalidClaimException('OIDC ID token amr contains an invalid or duplicate value.');
+            }
+            $seen[$method] = true;
         }
     }
 
@@ -139,13 +174,28 @@ final readonly class OpenIdIdTokenValidator
         ?string $value,
         AsymmetricJwtAlgorithm $algorithm,
     ): void {
+        $actual = $claims[$claim] ?? null;
+        if (array_key_exists($claim, $claims)) {
+            $expectedLength = strlen($this->halfHash('', $algorithm));
+            if (!is_string($actual)
+                || preg_match('/\A[A-Za-z0-9_-]{' . $expectedLength . '}\z/D', $actual) !== 1) {
+                throw new InvalidClaimException(sprintf('OIDC ID token %s has an invalid value.', $claim));
+            }
+        }
         if ($value === null) {
             return;
         }
-        $digest = hash($algorithm->hashAlgorithm(), $value, true);
-        $expected = Base64Url::encode(substr($digest, 0, intdiv(strlen($digest), 2)));
-        if (!is_string($claims[$claim] ?? null) || !hash_equals($expected, $claims[$claim])) {
+
+        $expected = $this->halfHash($value, $algorithm);
+        if (!is_string($actual) || !hash_equals($expected, $actual)) {
             throw new InvalidClaimException(sprintf('OIDC ID token %s does not match.', $claim));
         }
+    }
+
+    private function halfHash(#[\SensitiveParameter] string $value, AsymmetricJwtAlgorithm $algorithm): string
+    {
+        $digest = hash($algorithm->hashAlgorithm(), $value, true);
+
+        return Base64Url::encode(substr($digest, 0, intdiv(strlen($digest), 2)));
     }
 }

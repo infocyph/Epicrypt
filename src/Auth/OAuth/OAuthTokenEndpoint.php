@@ -23,6 +23,7 @@ final readonly class OAuthTokenEndpoint
         private ?OAuthDpopValidator $dpop = null,
         private ?string $tokenEndpointUri = null,
         private ClockInterface $clock = new SystemClock(),
+        private ?OAuthAuthorizationCodeTokenExtensionInterface $authorizationCodeExtension = null,
     ) {
         if ($this->dpop !== null && ($this->tokenEndpointUri === null || !self::validEndpointUri($this->tokenEndpointUri))) {
             throw new ConfigurationException('OAuth DPoP token endpoint URI must be an absolute HTTPS URI without credentials or fragment.');
@@ -55,19 +56,7 @@ final readonly class OAuthTokenEndpoint
         }
 
         try {
-            $refreshToken = null;
-            if ($client->allowsGrant(OAuthGrantType::REFRESH_TOKEN)) {
-                $refreshToken = $this->refreshTokens->issue(new RefreshTokenGrant(
-                    authorizationId: $consumed->authorization->authorizationId,
-                    subject: $consumed->code->subject,
-                    clientId: $clientId,
-                    audiences: $consumed->code->audiences,
-                    scopes: $consumed->code->scopes,
-                    expiresAt: $consumed->authorization->expiresAt,
-                    dpopKeyThumbprint: $dpop?->keyThumbprint,
-                ));
-            }
-
+            $refreshToken = $this->issueRefreshToken($client, $consumed, $dpop);
             $access = $this->accessTokens->issue(
                 subject: $consumed->code->subject,
                 clientId: $clientId,
@@ -76,13 +65,24 @@ final readonly class OAuthTokenEndpoint
                 authorizationId: $consumed->authorization->authorizationId,
                 dpopKeyThumbprint: $dpop?->keyThumbprint,
             );
+            $additionalParameters = $this->authorizationCodeExtension?->parameters(
+                $consumed->code,
+                $access,
+                $code,
+            ) ?? [];
         } catch (Throwable) {
             $this->failClosedAuthorization($consumed->authorization->authorizationId);
 
             return OAuthTokenResult::failure(OAuthErrorCode::SERVER_ERROR);
         }
 
-        return OAuthTokenResult::success($this->response($access, $consumed->code->scopes, $refreshToken, $dpop));
+        return OAuthTokenResult::success($this->response(
+            $access,
+            $consumed->code->scopes,
+            $refreshToken,
+            $dpop,
+            $additionalParameters,
+        ));
     }
 
     /** @param null|array<array-key, mixed> $requestedScopes */
@@ -162,10 +162,6 @@ final readonly class OAuthTokenEndpoint
             return OAuthTokenResult::failure(OAuthErrorCode::INVALID_DPOP_PROOF);
         }
         if ($inspection->status === RefreshTokenInspectionStatus::CONSUMED) {
-            // Binding is verified before this call so a cross-client/sender guess
-            // cannot revoke another family. The authoritative rotate primitive is
-            // still invoked for a genuine consumed-token reuse so it can atomically
-            // revoke the family according to the store contract.
             $this->refreshTokens->rotate($refreshToken, $clientId, $actualDpop);
 
             return OAuthTokenResult::failure(OAuthErrorCode::INVALID_GRANT);
@@ -181,16 +177,9 @@ final readonly class OAuthTokenEndpoint
             return OAuthTokenResult::failure(OAuthErrorCode::INVALID_GRANT);
         }
 
-        $scopes = $requestedScopes ?? $grant->scopes;
-        try {
-            $scopes = AuthProtocolPolicy::normalizeScopes($scopes, 'OAuth refresh requested scopes');
-        } catch (Throwable) {
-            return OAuthTokenResult::failure(OAuthErrorCode::INVALID_SCOPE);
-        }
-        foreach ($scopes as $scope) {
-            if (!$client->allowsScope($scope) || !in_array($scope, $grant->scopes, true)) {
-                return OAuthTokenResult::failure(OAuthErrorCode::INVALID_SCOPE);
-            }
+        $scopes = $this->refreshScopes($client, $grant, $requestedScopes);
+        if ($scopes instanceof OAuthErrorCode) {
+            return OAuthTokenResult::failure($scopes);
         }
 
         $rotation = $this->refreshTokens->rotate(
@@ -225,6 +214,52 @@ final readonly class OAuthTokenEndpoint
         return OAuthTokenResult::success($this->response($access, $rotation->grant->scopes, $rotation->token, $dpop));
     }
 
+    private function issueRefreshToken(
+        OAuthClient $client,
+        OAuthAuthorizationCodeConsumeResult $consumed,
+        ?OAuthDpopContext $dpop,
+    ): ?string {
+        if (!$client->allowsGrant(OAuthGrantType::REFRESH_TOKEN)
+            || $consumed->code === null
+            || $consumed->authorization === null) {
+            return null;
+        }
+
+        return $this->refreshTokens->issue(new RefreshTokenGrant(
+            authorizationId: $consumed->authorization->authorizationId,
+            subject: $consumed->code->subject,
+            clientId: $client->clientId,
+            audiences: $consumed->code->audiences,
+            scopes: $consumed->code->scopes,
+            expiresAt: $consumed->authorization->expiresAt,
+            dpopKeyThumbprint: $dpop?->keyThumbprint,
+        ));
+    }
+
+    /**
+     * @param null|array<array-key, mixed> $requestedScopes
+     * @return list<string>|OAuthErrorCode
+     */
+    private function refreshScopes(
+        OAuthClient $client,
+        RefreshTokenGrant $grant,
+        ?array $requestedScopes,
+    ): array|OAuthErrorCode {
+        try {
+            $scopes = AuthProtocolPolicy::normalizeScopes(
+                $requestedScopes ?? $grant->scopes,
+                'OAuth refresh requested scopes',
+            );
+        } catch (Throwable) {
+            return OAuthErrorCode::INVALID_SCOPE;
+        }
+
+        return array_any(
+            $scopes,
+            static fn(string $scope): bool => !$client->allowsScope($scope) || !in_array($scope, $grant->scopes, true),
+        ) ? OAuthErrorCode::INVALID_SCOPE : $scopes;
+    }
+
     private function failClosedAuthorization(string $authorizationId): void
     {
         $now = $this->clock->now()->getTimestamp();
@@ -251,23 +286,30 @@ final readonly class OAuthTokenEndpoint
         if ($requireConfidential && $client->type !== OAuthClientType::CONFIDENTIAL) {
             return OAuthErrorCode::INVALID_CLIENT;
         }
-
-        if ($client->type === OAuthClientType::CONFIDENTIAL) {
-            if ($authentication === null
-                || !$authentication->authenticated
-                || !$authentication->client instanceof OAuthClient
-                || !hash_equals($clientId, $authentication->client->clientId)) {
-                return OAuthErrorCode::INVALID_CLIENT;
-            }
-        } elseif ($authentication !== null) {
-            if (!$authentication->authenticated
-                || !$authentication->client instanceof OAuthClient
-                || !hash_equals($clientId, $authentication->client->clientId)) {
-                return OAuthErrorCode::INVALID_CLIENT;
-            }
+        if (!$this->validAuthenticationForClient($client, $authentication)) {
+            return OAuthErrorCode::INVALID_CLIENT;
         }
 
         return $client;
+    }
+
+    private function validAuthenticationForClient(
+        OAuthClient $client,
+        ?OAuthClientAuthenticationResult $authentication,
+    ): bool {
+        if ($client->type === OAuthClientType::CONFIDENTIAL) {
+            return $authentication !== null
+                && $authentication->authenticated
+                && $authentication->client instanceof OAuthClient
+                && hash_equals($client->clientId, $authentication->client->clientId);
+        }
+        if ($authentication === null) {
+            return true;
+        }
+
+        return $authentication->authenticated
+            && $authentication->client instanceof OAuthClient
+            && hash_equals($client->clientId, $authentication->client->clientId);
     }
 
     /**
@@ -281,10 +323,8 @@ final readonly class OAuthTokenEndpoint
         } catch (Throwable) {
             return OAuthErrorCode::INVALID_SCOPE;
         }
-        foreach ($scopes as $scope) {
-            if (!$client->allowsScope($scope)) {
-                return OAuthErrorCode::INVALID_SCOPE;
-            }
+        if (array_any($scopes, static fn(string $scope): bool => !$client->allowsScope($scope))) {
+            return OAuthErrorCode::INVALID_SCOPE;
         }
 
         try {
@@ -297,10 +337,8 @@ final readonly class OAuthTokenEndpoint
         } catch (Throwable) {
             return OAuthErrorCode::INVALID_SCOPE;
         }
-        foreach ($audiences as $audience) {
-            if (!$client->allowsAudience($audience)) {
-                return OAuthErrorCode::INVALID_SCOPE;
-            }
+        if (array_any($audiences, static fn(string $audience): bool => !$client->allowsAudience($audience))) {
+            return OAuthErrorCode::INVALID_SCOPE;
         }
 
         return ['scopes' => $scopes, 'audiences' => $audiences];
@@ -323,12 +361,17 @@ final readonly class OAuthTokenEndpoint
         }
     }
 
-    /** @param list<string> $scopes */
+    /**
+     * @param list<string> $scopes
+     * @param array<string, string> $additionalParameters
+     */
     private function response(
         OAuthAccessTokenIssue $access,
         array $scopes,
         ?string $refreshToken,
         ?OAuthDpopContext $dpop,
+        #[\SensitiveParameter]
+        array $additionalParameters = [],
     ): OAuthTokenResponse {
         return new OAuthTokenResponse(
             accessToken: $access->token,
@@ -336,16 +379,20 @@ final readonly class OAuthTokenEndpoint
             expiresIn: max(0, $access->claims->expiresAt - $access->claims->issuedAt),
             scopes: $scopes,
             refreshToken: $refreshToken,
+            additionalParameters: $additionalParameters,
         );
     }
 
     private static function validEndpointUri(string $uri): bool
     {
         $parts = parse_url($uri);
+
         return is_array($parts)
             && ($parts['scheme'] ?? null) === 'https'
             && is_string($parts['host'] ?? null)
             && $parts['host'] !== ''
-            && !isset($parts['user'], $parts['pass'], $parts['fragment']);
+            && !isset($parts['user'])
+            && !isset($parts['pass'])
+            && !isset($parts['fragment']);
     }
 }

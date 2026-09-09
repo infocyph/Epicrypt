@@ -40,9 +40,12 @@ final readonly class OAuthAuthorizationRequestValidator
         }
 
         $clientId = $this->singleton($parameters, 'client_id');
-        $client = $this->resolveClient($clientId);
-        if (!$client instanceof OAuthClient) {
-            return $this->reject($clientId === null ? OAuthErrorCode::INVALID_REQUEST : OAuthErrorCode::UNAUTHORIZED_CLIENT);
+        if ($clientId === null || !AuthProtocolPolicy::validText($clientId, AuthProtocolPolicy::MAX_IDENTIFIER_BYTES)) {
+            return $this->reject(OAuthErrorCode::INVALID_REQUEST);
+        }
+        $client = $this->clients->find($clientId);
+        if (!$client instanceof OAuthClient || !$client->enabled) {
+            return $this->reject(OAuthErrorCode::UNAUTHORIZED_CLIENT);
         }
 
         $redirectUri = $this->resolveRedirectUri($parameters, $client);
@@ -121,16 +124,6 @@ final readonly class OAuthAuthorizationRequestValidator
 
         /** @var list<string> $value */
         return $value;
-    }
-
-    private function resolveClient(?string $clientId): ?OAuthClient
-    {
-        if ($clientId === null || !AuthProtocolPolicy::validText($clientId, AuthProtocolPolicy::MAX_IDENTIFIER_BYTES)) {
-            return null;
-        }
-        $client = $this->clients->find($clientId);
-
-        return $client?->enabled === true ? $client : null;
     }
 
     /** @param array<array-key, mixed> $parameters */
@@ -227,10 +220,15 @@ final readonly class OAuthAuthorizationRequestValidator
     {
         try {
             $resolved = $this->audienceResolver->resolve($client, $scopes);
+        } catch (Throwable) {
+            return OAuthErrorCode::SERVER_ERROR;
+        }
+
+        try {
             /** @var non-empty-list<string> $audiences */
             $audiences = AuthProtocolPolicy::normalizeAudiences($resolved, 'OAuth authorization request audiences');
         } catch (Throwable) {
-            return OAuthErrorCode::SERVER_ERROR;
+            return OAuthErrorCode::INVALID_REQUEST;
         }
 
         return array_any($audiences, static fn(string $audience): bool => !$client->allowsAudience($audience))
