@@ -1,66 +1,66 @@
 # Epicrypt 3 — Final Authentication Protocol Development Plan
 
-**Status:** Active scope-extension plan  
+**Status:** Active implementation plan  
 **Target:** Epicrypt 3.0  
 **Branch:** `epicrypt-3/architecture-plan`  
 **Regression baseline:** `cca7e5a93f8b5f37329053b448fbce91e9496262`  
-**Scope-extension baseline:** `0ec8744232f1c67f776a8fbd5414eee7a01369ab`  
-**Priority:** standards correctness → security → persisted-token compatibility/migration → deterministic state semantics → framework neutrality → performance → ergonomics
+**Auth scope-extension baseline:** `0ec8744232f1c67f776a8fbd5414eee7a01369ab`  
+**Priority:** standards correctness → security → deterministic state semantics → framework neutrality → performance → ergonomics
 
-> Epicrypt 3 had reached a green release-readiness baseline before this scope extension. That baseline remains a non-regression floor, not the release endpoint. Epicrypt 3 will now become the reusable transport-neutral authentication protocol core for three first-class authentication paths: **OAuth 2.1**, **OpenID Connect 1.0**, and a **Sanctum-style generic personal/API token system**.
+> Epicrypt 3.0 is still under development and has not been released. Until the 3.0 public release is cut, **source/API backward compatibility is not a design constraint**. Prefer the clean final 3.0 API and remove superseded unreleased surfaces instead of carrying compatibility wrappers or parallel implementations.
 >
-> Foundation already contains a substantial OAuth 2.1 authorization-server implementation. This plan is therefore **extraction-driven**, not a rewrite-from-zero exercise: standards-correct protocol mechanics move to Epicrypt; framework/HTTP/database/application policy stays in Foundation.
+> Persisted cryptographic compatibility is a separate concern. Frozen Epicrypt 2.x `ep2` string/file formats and signed-payload v2 fixtures remain supported where the existing 3.0 plan already established them as durable format contracts. Package API freedom does not implicitly authorize breaking those persisted formats.
+>
+> Epicrypt 3 is developed and released **independently first**. Foundation is useful as architectural reference material, but Foundation extraction, adapter replacement, persistence migration and composition proof begin only **after Epicrypt 3.0 is released** and are not Epicrypt 3.0 release blockers.
 
 ---
 
 ## 1. Final product boundary
 
-Epicrypt 3 owns reusable security/authentication protocol mechanics. It does **not** become an HTTP framework, ORM, database library, session framework, account system, consent UI, or application authorization system.
+Epicrypt 3 becomes a reusable, transport-neutral authentication/security protocol core. It does **not** become an HTTP framework, ORM, database library, session framework, account system, consent UI or application authorization system.
 
 ### Epicrypt owns
 
 - JWT/JWS/JWE/JWK/JWKS primitives and policy;
 - token-class domain separation and key selection/rotation;
-- OAuth 2.1 authorization request validation and protocol state machine;
+- OAuth 2.1 authorization request validation and protocol state machines;
 - OAuth client model and protocol-level client authentication;
-- Authorization Code + PKCE semantics;
+- Authorization Code + mandatory PKCE S256 semantics;
 - Client Credentials semantics;
 - Refresh Token rotation/reuse/revocation semantics;
-- JWT access-token issuance and resource-token validation;
-- OAuth revocation/introspection protocol semantics;
-- OAuth authorization-server metadata structures;
+- RFC 9068 JWT access-token issuance and resource-token validation;
+- OAuth revocation/introspection/metadata semantics;
 - DPoP proof validation/binding;
 - OpenID Connect request/ID-token/UserInfo/discovery mechanics;
 - generic first-party personal/API token issuance, abilities, verification and revocation semantics;
-- public persistence contracts required to make one-time use/revocation/rotation authoritative;
-- transport-neutral endpoint/request/response DTOs and error models;
-- endpoint capability/catalog metadata that frameworks can map to routes.
+- public persistence contracts required for one-time use, replay protection, revocation and rotation;
+- transport-neutral request/result/error DTOs and endpoint capability metadata.
 
 ### Framework/application owns
 
 - route paths and HTTP router registration;
-- HTTP request/body/header adaptation and response emission;
-- login/authentication UI and acquisition of the authenticated subject;
-- consent screen/UI and application decision;
-- account/user repositories and application principal mapping;
-- database/cache implementations of Epicrypt public store interfaces;
-- transactions appropriate to the chosen persistence backend;
+- request/header/body/query parsing and HTTP response emission;
+- login/authentication UI and authenticated-subject acquisition;
+- consent UI and application authorization decisions;
+- account/user repositories and principal mapping;
+- database/cache implementations of Epicrypt store contracts;
+- backend transactions/locking implementation;
 - sessions/cookies;
-- application permission mapping and business authorization;
-- rate limiting, audit/observability and telemetry;
-- configuration/env/file loading;
-- tenant/application-specific client administration policy;
-- deployment key/secret location policy.
+- application permission mapping/business authorization;
+- rate limiting, audit, observability and telemetry;
+- environment/config/file loading;
+- deployment key/secret location policy;
+- tenant/client administration policy outside protocol fields.
 
 ### Hard rule
 
-A framework adapter may adapt transport and persistence, but must not reimplement PKCE, grant validation, token claims, refresh reuse detection, OIDC nonce/hash rules, JWT access-token validation, DPoP, or personal-token ability semantics.
+A framework adapter may adapt transport and persistence, but must not reimplement PKCE, grant validation, auth-token claims, refresh reuse detection, OIDC nonce/hash rules, access-token validation, DPoP or personal-token ability semantics.
 
 ---
 
 ## 2. Three first-class authentication paths
 
-Epicrypt 3 must expose three separate but interoperable authentication paths over one shared JOSE substrate.
+Epicrypt 3 exposes three distinct but interoperable paths over one JOSE/key substrate:
 
 ```text
                          Epicrypt JOSE / Keys
@@ -69,10 +69,10 @@ Epicrypt 3 must expose three separate but interoperable authentication paths ove
              ┌────────────────────┼────────────────────┐
              │                    │                    │
         OAuth 2.1             OIDC 1.0          Generic API/PAT
-      protocol core        identity layer       Sanctum-style core
+      protocol core        identity layer       personal-token core
              │                    │                    │
        at+jwt / JWE          ID Token JWT             pat+jwt
-       refresh JWE/JWT       UserInfo claims      abilities + jti
+       refresh JWE            UserInfo claims      abilities + jti
        auth-code JWE              │             stateful revocation
              └────────────────────┴────────────────────┘
                                   │
@@ -80,87 +80,104 @@ Epicrypt 3 must expose three separate but interoperable authentication paths ove
                        (no DB implementation)
 ```
 
-### 2.1 OAuth 2.1 path
+### OAuth 2.1 required grants
 
-Primary use: delegated API authorization and machine-to-machine authorization.
-
-Required grants for 3.0:
-
-- Authorization Code + mandatory PKCE S256;
+- Authorization Code + PKCE S256;
 - Client Credentials;
 - Refresh Token.
 
-Explicitly excluded from new implementation:
+Explicitly excluded from 3.0:
 
-- Resource Owner Password Credentials grant;
-- Implicit grant / access tokens in authorization responses;
+- Resource Owner Password Credentials;
+- OAuth implicit grant;
 - PKCE `plain`;
 - bearer credentials in query strings;
-- wildcard/partial redirect URI matching.
+- wildcard/partial redirect matching.
 
-### 2.2 OpenID Connect path
-
-OIDC is implemented as an identity layer on the OAuth core, not a separate authorization engine.
-
-Required 3.0 profile:
+### OIDC 1.0 profile
 
 - Authorization Code flow only;
 - `openid` scope activation;
-- nonce handling;
-- ID Token issuance/validation;
-- `sub`, `aud`, `azp`, `auth_time`, `acr`, `amr` support;
-- `at_hash` and `c_hash` where applicable;
-- `max_age` and authentication requirement modeling;
+- nonce, `max_age`, `auth_time`, `acr`, `amr` support;
+- signed ID Token mandatory;
+- `sub`, `aud`, `azp`, `at_hash`, `c_hash` as applicable;
 - UserInfo claim projection;
-- provider discovery metadata;
-- static client metadata needed for ID-token signing/encryption policy;
-- signed ID Tokens mandatory; encrypted ID Tokens optional when explicitly configured and interoperably tested.
+- provider discovery;
+- static client metadata for ID-token policy;
+- optional encrypted ID Token only when explicitly configured and independently interoperable.
 
-OIDC implicit/hybrid flows are not added merely because OIDC Core describes them; the Epicrypt OIDC provider profile remains aligned with the safer OAuth 2.1 authorization-code path.
+### Generic personal/API token profile
 
-### 2.3 Sanctum-style generic personal/API token path
-
-This is framework-neutral personal access token / first-party API token management. It must not depend on OAuth client/grant concepts.
-
-Required semantics:
-
-- issue a token to an application-defined subject;
-- human-readable token name/label;
-- bounded ability list (`*` allowed only as an explicit policy choice);
+- application-defined subject;
+- human-readable bounded name/label;
+- bounded abilities with exact matching;
 - optional expiration;
-- JWT `jti` identity;
-- list active token metadata through the store contract;
-- verify token signature, class, subject, expiry and authoritative active record;
-- `can()` / `cannot()` ability checks with exact matching by default;
-- revoke one token;
-- revoke all tokens for a subject;
-- optional bounded last-used metadata update through a store capability/policy rather than mandatory write-on-every-request;
-- raw token is returned only at issuance; stores never require raw JWT storage.
-
-This path provides the convenience/security model people expect from Sanctum-style tokens without coupling Epicrypt to Laravel, Eloquent, cookies, middleware or routes.
+- JWT `jti` identity and private `pat+jwt` type;
+- authoritative active/revoked record;
+- issue/list/verify/revoke/revoke-all;
+- optional bounded last-used capability without mandatory write-on-read;
+- raw JWT returned only at issuance and never required in persistence.
 
 ---
 
-## 3. JWT/JOSE-first token architecture
+## 3. 3.0 API and compatibility policy
 
-All three auth paths use JWT/JOSE-family credentials. Server-side state remains mandatory where protocol semantics require one-time use, revocation or replay/reuse detection; state is **not** an excuse to fall back to ad-hoc opaque token formats.
+Until the 3.0 release tag exists:
 
-### 3.1 Token classes and wire profiles
+1. Prefer the clean final public API over compatibility aliases.
+2. Remove superseded unreleased classes instead of maintaining two lifecycle implementations.
+3. Do not retain an old namespace merely because earlier development commits exposed it.
+4. No permanent dual-format auth credential support is required for unreleased Epicrypt 3 auth artifacts.
+5. Public API inventory must record intentional removals/renames while the release is being prepared.
+6. Durable 2.x cryptographic formats already frozen by tests remain a separate format-level compatibility contract.
 
-| Credential | 3.0 representation | State requirement |
+Current example: refresh-specific `Token\Opaque\RefreshToken*` classes were removed and replaced by the final OAuth JOSE lifecycle under `Auth\OAuth`; generic `Token\Opaque\OpaqueToken` remains because it is a general-purpose primitive rather than an OAuth refresh lifecycle.
+
+---
+
+## 4. Standards baseline
+
+### OAuth
+
+- OAuth 2.1: `draft-ietf-oauth-v2-1-15` baseline at plan creation; perform a final latest-draft/RFC delta review before release.
+- RFC 9700 — OAuth 2.0 Security Best Current Practice.
+- RFC 7636 — PKCE; Epicrypt profile requires S256.
+- RFC 8414 — Authorization Server Metadata.
+- RFC 9207 — Authorization Server Issuer Identification where applicable.
+- RFC 7009 — Token Revocation.
+- RFC 7662 — Token Introspection.
+- RFC 9068 — JWT Profile for OAuth 2.0 Access Tokens.
+- RFC 7523 — JWT client authentication/assertions as applicable.
+- RFC 9449 — DPoP.
+
+Do not advertise a finalized “OAuth 2.1 RFC compliant” claim while OAuth 2.1 remains an Internet-Draft.
+
+### OpenID Connect
+
+- OpenID Connect Core 1.0 incorporating Errata Set 2;
+- OpenID Connect Discovery 1.0 incorporating Errata Set 2;
+- JOSE standards already implemented by Epicrypt.
+
+Dynamic Client Registration, logout profiles and federation are not 3.0 requirements.
+
+---
+
+## 5. Token classes and wire profiles
+
+| Credential | 3.0 representation | Authoritative state |
 | --- | --- | --- |
-| OAuth access token | RFC 9068-style signed JWT, `typ=at+jwt` | optional/required status lookup according to configured revocation policy |
-| OAuth authorization code | short-lived encrypted JOSE artifact (JWE carrying bounded JWT-style claims) | mandatory atomic one-time consume by `jti`/code id |
-| OAuth refresh token | confidentiality-preserving JWE/JWT-style artifact | mandatory refresh-family record, rotation and reuse detection |
-| OIDC ID Token | signed JWT; optional JWE when explicitly configured | normally stateless after issuance; client/session policy remains outside |
+| OAuth access token | RFC 9068-style signed JWT, `typ=at+jwt` | optional/required status lookup by deployment policy |
+| OAuth authorization code | short-lived JWE with bounded JWT-style claims | mandatory atomic one-time consume by code `jti` |
+| OAuth refresh token | confidentiality-preserving compact JWE | mandatory family/token history, rotation and reuse detection |
+| OIDC ID Token | signed JWT; optional JWE | normally stateless after issue |
 | DPoP proof | signed JWT per RFC 9449 | replay store required |
 | OAuth client assertion | signed JWT | replay/audience/time validation required |
-| Generic personal/API token | signed JWT, private media type such as `pat+jwt` | mandatory active/revoked token record keyed by `jti` |
-| existing Epicrypt `PurposeToken` | existing signed-payload family | unchanged; not interchangeable with OAuth/OIDC/PAT tokens |
+| Personal/API token | signed JWT, `typ=pat+jwt` | mandatory active/revoked record keyed by `jti` |
+| existing `PurposeToken` | existing signed-payload family | unchanged and non-interchangeable |
 
-### 3.2 Cross-token substitution must be impossible
+### Cross-token substitution
 
-Every verifier must bind at least:
+Every verifier binds:
 
 - token class / `typ`;
 - issuer where applicable;
@@ -168,128 +185,139 @@ Every verifier must bind at least:
 - key purpose;
 - allowed algorithm family;
 - required claims;
-- token-specific purpose/use marker when a registered `typ` alone is insufficient.
+- token-specific `token_use`/purpose marker when type alone is insufficient.
 
-An OAuth access token must fail as a personal token, ID Token, authorization code or refresh token. A personal token must fail as OAuth bearer authorization even if it uses the same JOSE algorithm.
+An OAuth access token must fail as a personal token, ID Token, authorization code or refresh token. A personal token must fail as OAuth bearer authorization even when the JOSE algorithm is identical.
 
-### 3.3 Separate key purposes
-
-Add/maintain explicit key domains instead of sharing one signing key implicitly:
+### Separate key purposes
 
 ```text
 oauth.access-token.signing.v1
 oauth.authorization-code.protection.v1
 oauth.refresh-token.protection.v1
 oidc.id-token.signing.v1
-oidc.id-token.encryption.v1       # only when enabled
+oidc.id-token.encryption.v1
 api.personal-token.signing.v1
 ```
 
-Frameworks may deliberately map multiple domains to one external key only through explicit configuration; Epicrypt APIs must keep purposes distinct.
+Frameworks may deliberately map more than one purpose to the same external key only through explicit configuration; Epicrypt APIs keep the domains distinct.
 
 ---
 
-## 4. Standards baseline
+## 6. Implemented auth substrate ledger
 
-### 4.1 OAuth
+| Capability | State | Evidence |
+| --- | --- | --- |
+| Explicit auth token classes/media types | Complete | `2b9c18e7` |
+| Cross-token type substitution policy/tests | Complete | `2b9c18e7` |
+| Auth-specific KeyRing purpose domains | Complete | `0b0a9d7b` |
+| OAuth/OIDC JWT verification uses token-specific key purpose | Complete | `0b0a9d7b` |
+| RFC 9068 access-token profile | Existing profile audited and hardened | baseline + `2b9c18e7`, `0b0a9d7b` |
+| Authorization-code JWE artifact | Complete | `400497b3` |
+| Refresh-token JWE artifact | Complete | `c1b30119` |
+| Refresh-token authoritative family lifecycle | Complete | `168c7b3e` |
+| Legacy refresh-specific `Token\Opaque` API | Removed before 3.0 | `168c7b3e` |
+| Refresh-store reusable conformance coverage | Complete | `168c7b3e` |
+| Central OAuth/OIDC/PAT input/claim limit policy | Pending | next batch |
 
-Implementation baseline at plan creation (2026-09-09):
-
-- **OAuth 2.1:** `draft-ietf-oauth-v2-1-15` (2026-03-02), currently the latest revision; it expired on 2026-09-03 and remains work-in-progress.
-- **OAuth Security BCP:** RFC 9700.
-- **PKCE:** RFC 7636, S256 only for this profile.
-- **Authorization Server Metadata:** RFC 8414.
-- **Authorization Server Issuer Identification:** RFC 9207 where applicable.
-- **Token Revocation:** RFC 7009.
-- **Token Introspection:** RFC 7662.
-- **JWT Profile for OAuth Access Tokens:** RFC 9068.
-- **JWT client authentication:** RFC 7523 / assertion framework as applicable.
-- **DPoP:** RFC 9449.
-
-Before final release, re-check whether OAuth 2.1 draft-16 or an RFC has replaced draft-15 and perform a normative delta review. Do not advertise a finalized “OAuth 2.1 RFC compliant” claim while the specification remains an Internet-Draft.
-
-### 4.2 OpenID Connect
-
-Baseline:
-
-- **OpenID Connect Core 1.0 incorporating Errata Set 2** (approved final/errata baseline, 2023-12-15);
-- **OpenID Connect Discovery 1.0 incorporating Errata Set 2**;
-- JWT/JWS/JWE/JWK/JWKS standards already used by Epicrypt.
-
-Dynamic Client Registration, logout profiles and federation are not required for the first Epicrypt 3 provider core unless a concrete consumer requires them and independent interoperability fixtures are added.
+The completed refresh lifecycle preserves consumed-history reuse detection, family-wide compromise revocation, client/DPoP sender binding, scope narrowing, idle/absolute expiry, exact successor-state persistence and collision handling. A successfully decrypted refresh JWE is only cryptographically valid; store state remains authoritative.
 
 ---
 
-## 5. Foundation extraction inventory
+## 7. OAuth authorization-code artifact requirements
 
-Foundation currently implements a large part of the target OAuth core under `src/Auth/OAuth` plus DBLayer/Epicrypt adapters. Extraction must classify each class as **move/refactor into Epicrypt**, **remain in Foundation**, or **replace with an Epicrypt public contract**.
+Authorization codes are short-lived, confidentiality-preserving JOSE artifacts with:
 
-### 5.1 Protocol mechanics to move/refactor into Epicrypt
+- stable unique code ID / `jti`;
+- authorization/subject identity;
+- client ID;
+- exact redirect URI binding or cryptographic digest;
+- mandatory PKCE S256 challenge;
+- scopes and audiences;
+- issuance/expiry bounds;
+- optional OIDC transaction data such as nonce/authentication context.
 
-Current Foundation examples include:
+The JWE is not sufficient for one-time semantics. `AuthorizationCodeStoreInterface` must provide atomic consume by authenticated code state; a valid JWE with a consumed `jti` is invalid.
 
-- `OAuthManager` orchestration of authorization validation, approval/code issue, exchange, revocation, introspection, metadata and JWKS;
-- `AuthorizationRequestValidator` including exact redirect validation, response type, PKCE S256 and bounded state/scope/audience parsing;
-- `AuthorizationCodeManager` and authorization-code issue/consume semantics;
-- `OAuthTokenManager` grant dispatch for authorization-code/client-credentials/refresh, scope narrowing and token response semantics;
-- `OAuthRefreshTokenCoordinator` rotation/reuse semantics;
-- `OAuthRevocationManager` protocol behavior;
-- `OAuthIntrospectionManager` protocol behavior;
-- `OAuthClient`, grant/auth-method value objects and generic client validation;
-- `OAuthScopeResolver` generic requested/allowed scope/audience selection;
-- `AuthorizationServerMetadata` protocol metadata structure;
-- generic OAuth protocol exceptions/error codes;
-- access-token claims/profile and JWKS protocol mechanics.
+---
 
-These concepts become Epicrypt protocol/core classes, renamed where necessary to be framework-neutral.
+## 8. OAuth refresh-token lifecycle requirements
 
-### 5.2 Public contracts move to Epicrypt; implementations stay outside
+The final 3.0 refresh path is `Auth\OAuth`, not `Token\Opaque`.
 
-Foundation DBLayer adapters currently implement client/authorization/code/refresh/revocation/consent stores. Epicrypt will define the authoritative interfaces and record/value objects; Foundation keeps DBLayer implementations.
-
-Required Epicrypt store contracts include at least:
+Required public concepts:
 
 ```text
-OAuthClientStoreInterface
-OAuthAuthorizationStoreInterface
-OAuthAuthorizationCodeStoreInterface
-OAuthRefreshTokenStoreInterface
-OAuthAccessTokenStatusStoreInterface
-OAuthConsentStoreInterface
-OAuthReplayStoreInterface          # assertions/DPoP where appropriate
-PersonalAccessTokenStoreInterface
+RefreshTokenArtifact
+RefreshTokenArtifactClaims
+RefreshTokenArtifactIssue
+RefreshTokenGrant
+RefreshTokenRecord
+RefreshTokenStoreInterface
+RefreshTokenManager
+RefreshTokenRotationResult
+RefreshTokenRotationStatus
 ```
 
-Contracts must state atomicity/concurrency requirements explicitly. For example, authorization-code consume and refresh rotation/reuse detection cannot be modeled as a read followed by an unrelated delete/update.
+Rules:
 
-### 5.3 Foundation-specific behavior that remains in Foundation
+- compact JWE uses the dedicated refresh-protection key purpose;
+- JWE binds token ID, family ID, authorization ID, subject, client, audiences, scopes, `iat`, absolute expiry, idle expiry and optional DPoP thumbprint;
+- raw JWE is never persisted;
+- authoritative record is keyed by authenticated token ID / `jti`;
+- `rotate()` atomically validates current state, consumes it and persists the **exact successor record represented by the newly issued JWE**;
+- consumed history is retained through the authorization lifetime;
+- reuse of a consumed ancestor revokes the entire family;
+- family revocation and consumed-token reuse detection take precedence over idle expiry;
+- client or sender mismatch never consumes the token;
+- scope may only stay equal or narrow;
+- concurrent double spend may produce only one active successor;
+- replacement token/family uniqueness conflicts are explicit and do not consume current state.
 
-- DBLayer store implementations and schema/migrations;
-- `OAuthAuditRecorder` and Foundation event taxonomy;
-- route/controller registration and Webrick response construction;
-- endpoint rate limits and CacheLayer store selection;
-- application config/env/defaults and key-file locators;
-- account/principal repositories;
-- mapping OAuth scopes to Foundation permissions;
-- consent UI and application authorization decision;
-- application session/login behavior;
-- CLI client administration commands (they may call Epicrypt core services);
-- bearer principal adaptation into Foundation principal types;
-- application authorization middleware.
-
-### 5.4 Extraction compatibility rule
-
-Do not port Foundation code blindly. Freeze the existing Foundation OAuth behavior first, compare it with the standards baseline, and preserve only standards-correct behavior. If Foundation behavior is non-compliant or over-coupled to application policy, fix it in Epicrypt and document the Foundation migration delta.
+No digest-of-raw-JWE compatibility layer is required for 3.0.
 
 ---
 
-## 6. Public protocol surface — no routes, no database implementation
+## 9. OAuth client/authentication target
 
-Epicrypt provides endpoint **operations**, not HTTP routes.
+Epicrypt defines a bounded framework-neutral client record containing protocol data only:
 
-### 6.1 Transport-neutral endpoint services
+- client ID;
+- public/confidential type;
+- enabled status;
+- exact redirect URIs;
+- allowed grants;
+- allowed scopes/resource audiences;
+- allowed client-auth methods;
+- secret-hash metadata where symmetric authentication is used;
+- client JWK/JWKS material/reference for `private_key_jwt`;
+- OIDC metadata required for ID-token policy;
+- bounded token lifetime overrides.
 
-Target public surface, naming subject to implementation review:
+Initial 3.0 client authentication:
+
+- no client authentication for public clients where permitted;
+- `client_secret_basic`;
+- `client_secret_post` only when explicitly enabled;
+- `private_key_jwt`.
+
+Rules:
+
+- simultaneous credentials through multiple methods fail;
+- raw client secrets are never recoverable from stores;
+- assertion `iss/sub/aud/exp/iat/jti` are bounded and verified;
+- assertion replay protection uses an explicit authoritative store;
+- algorithm/key selection is pinned by client policy.
+
+mTLS client authentication is deferred unless a concrete 3.0 consumer requirement is added with interoperability coverage.
+
+---
+
+## 10. Transport-neutral endpoint target
+
+Epicrypt provides endpoint **operations**, never route registration.
+
+Target services:
 
 ```text
 OAuthAuthorizationEndpoint
@@ -302,156 +330,48 @@ OidcUserInfoEndpoint
 OidcDiscoveryEndpoint
 ```
 
-Each accepts typed input/context DTOs and returns typed protocol results/errors. No PSR-7/Webrick/Symfony/Laravel request or response type appears in the core signature.
+Each accepts typed protocol DTOs and returns typed results/errors. No PSR-7, Webrick, Symfony or Laravel transport type appears in core signatures.
 
-Framework adapter example:
+Endpoint capability/catalog metadata may describe semantic endpoint names, supported methods/content types and metadata keys, but does not impose deployment paths.
 
-```text
-HTTP request
-  -> framework parses method/header/body/query
-  -> Epicrypt request DTO
-  -> Epicrypt endpoint service
-  -> typed success/error result
-  -> framework emits HTTP status/headers/body
-```
+### Protocol-safe error model
 
-### 6.2 Endpoint catalog
-
-Provide endpoint capability metadata so a framework can register conventional routes without Epicrypt registering them itself. The catalog may describe semantic endpoint names, supported methods/content types and metadata keys, but **not force route paths**.
-
-Typical adapter paths remain framework choices:
-
-```text
-/oauth/authorize
-/oauth/token
-/oauth/revoke
-/oauth/introspect
-/.well-known/oauth-authorization-server
-/.well-known/openid-configuration
-/.well-known/jwks.json
-/oauth/userinfo
-```
-
-### 6.3 Protocol error surface
-
-Create a stable transport-neutral error model carrying only protocol-safe fields such as:
+OAuth errors include bounded/safe fields only:
 
 ```text
 error
-error_description?      # bounded/safe, optional
+error_description?
 error_uri?
-state?                  # only when safe to echo
+state?                    # only when safe to echo
 redirect_allowed
 http_authentication_failure
 ```
 
-Framework adapters decide actual HTTP status/header/body serialization. Raw secrets, tokens, assertions and backend exception text never appear in the public error.
+Expected invalid credentials should return typed results where practical. Raw tokens, secrets, assertions and backend exception text never appear in public protocol errors.
 
 ---
 
-## 7. Shared client model and authentication
+## 11. OAuth authorization endpoint target
 
-### 7.1 Client registration model
-
-Epicrypt defines a framework-neutral bounded client record containing protocol data only:
-
-- client id;
-- public/confidential type;
-- enabled status;
-- exact redirect URIs;
-- allowed grants;
-- allowed scopes and resource audiences;
-- allowed client-authentication methods;
-- secret hash metadata where symmetric client auth is used;
-- client JWK/JWKS material/reference for `private_key_jwt`;
-- OIDC metadata required for ID-token policy;
-- token lifetime overrides only when bounded by server policy.
-
-Display name, owner/team, billing, tenant administration and UI metadata remain application concerns unless a protocol field needs them.
-
-### 7.2 Client authentication
-
-Initial 3.0 support:
-
-- no client authentication for public clients where permitted;
-- `client_secret_basic`;
-- `client_secret_post` only if explicitly enabled by server policy;
-- `private_key_jwt`.
-
-Rules:
-
-- credentials supplied through two authentication methods simultaneously fail;
-- raw client secrets are never recoverable from stores;
-- client assertion `iss/sub/aud/exp/iat/jti` are bounded and verified;
-- assertion replay protection uses an explicit store;
-- algorithm/key selection is pinned by client policy; no untrusted `alg` expansion.
-
-mTLS client authentication is a later extension unless a concrete consumer requires it for 3.0.
-
----
-
-## 8. OAuth 2.1 authorization endpoint core
-
-### 8.1 Authorization request validation
-
-Move and harden Foundation's existing behavior:
+Authorization request validation requires:
 
 - exact registered redirect URI matching;
 - `response_type=code` only;
 - mandatory PKCE S256;
 - bounded `client_id`, `redirect_uri`, `state`, `scope`, `audience` and extension parameters;
-- duplicate parameter rejection at adapter/parser boundary;
+- duplicate parameter rejection at parser/adapter boundary;
 - enabled-client/grant validation;
-- allowed-scope/audience selection;
-- authorization-server issuer mix-up protection where applicable;
-- no redirect on requests where redirect URI/client trust has not been established;
-- stable protocol error model.
+- allowed scope/audience selection;
+- authorization-server issuer/mix-up protection where applicable;
+- no redirect until client/redirect trust is established.
 
-### 8.2 Authentication/consent interaction boundary
-
-Epicrypt must not perform login or render consent. It returns a typed interaction requirement such as:
-
-```text
-AuthenticationRequired
-ConsentRequired
-AuthorizationReady
-ProtocolFailure
-```
-
-Framework provides an `AuthenticatedSubject`/authorization decision back to Epicrypt containing only protocol-relevant state:
-
-- stable subject id;
-- authentication time;
-- authentication methods (`amr`);
-- authentication context (`acr`) when used;
-- approved scopes/audiences;
-- optional OIDC claim availability descriptor.
-
-### 8.3 Authorization code
-
-New codes are JOSE-based, confidentiality-preserving and short lived.
-
-Required claims/state include at least:
-
-- unique code id / `jti`;
-- client id;
-- subject/authorization id;
-- exact redirect URI binding or stable digest thereof;
-- PKCE challenge/method;
-- scopes;
-- audiences;
-- issue/expiry time;
-- nonce/OIDC transaction data when OIDC is active.
-
-The code store is still mandatory for atomic one-time consume. A valid JWE with an already-consumed `jti` is invalid.
+Epicrypt does not perform login or render consent. It returns typed interaction requirements such as authentication required, consent required, authorization ready or protocol failure. The framework supplies authenticated-subject and authorization-decision state back to the protocol core.
 
 ---
 
-## 9. OAuth 2.1 token endpoint core
+## 12. OAuth token endpoint target
 
-### 9.1 Grant dispatcher
-
-Typed grant handlers rather than one growing conditional method:
+Typed grant handlers:
 
 ```text
 AuthorizationCodeGrant
@@ -459,47 +379,35 @@ ClientCredentialsGrant
 RefreshTokenGrant
 ```
 
-All grant handlers share bounded input parsing, client authentication, scope policy, error mapping and token issuer abstractions.
+### Authorization Code exchange
 
-### 9.2 Authorization Code exchange
-
-- authenticate/identify client according to client policy;
+- authenticate/identify client according to policy;
 - atomically consume code;
 - exact client + redirect binding;
 - verify PKCE S256;
-- verify authorization remains active according to store/application callback contract;
+- confirm authorization remains active through the public contract/application decision;
 - issue access token;
-- optionally issue refresh token according to authorization/client/server policy.
+- optionally issue refresh token according to policy.
 
-### 9.3 Client Credentials
+### Client Credentials
 
 - confidential/authenticated clients only;
-- no human subject claim masquerading as a user;
-- use a clear client subject convention/profile;
-- scopes/audiences must be client/server allowed;
-- no refresh token by default unless explicitly supported by a justified profile.
+- no human-user subject masquerading;
+- clear client subject convention/profile;
+- bounded client/server-approved scopes and audiences;
+- no refresh token by default.
 
-### 9.4 Refresh Token
+### Refresh Token
 
-New refresh tokens are JOSE-protected but stateful.
-
-- signed/encrypted token binds family id, token id, client id, authorization/subject, scopes, audiences, issue/expiry time and optional sender constraint;
-- store tracks authoritative family/token state;
-- every successful use rotates to a new token;
-- replay of an already-rotated token triggers the configured family compromise/revocation response;
-- scope may only narrow;
-- client/audience/sender binding cannot broaden;
-- concurrent double-spend behavior is explicitly tested.
-
-Reuse the security semantics already proven by Epicrypt's refresh-token work, but adapt the credential format to the new JWT/JOSE auth-token architecture rather than retaining an unrelated opaque auth path.
+- use completed JOSE lifecycle under `Auth\OAuth`;
+- integrate the lifecycle result into OAuth token response/error semantics;
+- all presentation failures map safely to `invalid_grant` at the protocol boundary while internal status remains observable for security/audit policy.
 
 ---
 
-## 10. OAuth JWT access-token profile
+## 13. OAuth access token, revocation, introspection, metadata and DPoP
 
-### 10.1 Access-token claims
-
-Use an RFC 9068-aligned profile with bounded claims, including as appropriate:
+RFC 9068 access-token claims include, as applicable:
 
 ```text
 iss
@@ -512,144 +420,50 @@ client_id
 scope
 ```
 
-Additional private claims require an explicit namespace/policy and must not collide with registered claims.
+Verification requires `typ=at+jwt`, pinned algorithms, trusted issuer, required audience, bounded time/leeway, scope/client shape checks and DPoP `cnf` binding where sender constrained.
 
-### 10.2 Verification
+Revocation/introspection remain meaningful for JWT access tokens through authoritative token-status contracts:
 
-Resource-token validation requires:
-
-- `typ=at+jwt`;
-- pinned allowed signature algorithms;
-- trusted issuer;
-- required audience;
-- bounded time/leeway policy;
-- client/scope shape validation;
-- DPoP confirmation (`cnf`) when sender constrained;
-- optional/required active-status or revocation-store lookup according to deployment policy.
-
-Return a backend-neutral `OAuthAccessTokenPrincipal` / claims result that frameworks map into their own principal/account model.
-
-### 10.3 Revocation and introspection
-
-Revocation and introspection remain meaningful for JWT access tokens because Epicrypt exposes authoritative token-status contracts.
-
-- access-token revocation keyed by `jti`/issuer/token class, never raw-token storage;
-- refresh revocation targets token/family/authorization according to policy;
+- status keyed by issuer/class/`jti`, never raw JWT;
 - RFC 7009 behavior must not leak token existence improperly;
-- RFC 7662 result is derived from cryptographic validation plus authoritative status as configured;
-- introspection client authorization is separate from resource-token validation.
+- RFC 7662 combines cryptographic validity with authoritative status according to policy.
 
----
+Authorization-server metadata and JWKS expose only enabled capabilities. Epicrypt never invents deployment URLs.
 
-## 11. OAuth metadata and JWKS
+Existing DPoP primitives are integrated rather than rewritten:
 
-Epicrypt exposes typed authorization-server metadata and public JWKS structures.
-
-Metadata includes only capabilities actually enabled by the composed server profile:
-
-- issuer;
-- authorization/token/revocation/introspection endpoints supplied by adapter configuration;
-- JWKS URI supplied by adapter configuration;
-- supported grants/response types;
-- PKCE methods (`S256`);
-- token endpoint auth methods;
-- access-token signing algorithms;
-- DPoP algorithms when enabled;
-- scopes only if the application elects to publish them.
-
-Epicrypt never invents deployment URLs. The framework supplies endpoint URIs and Epicrypt validates/serializes the metadata.
-
----
-
-## 12. DPoP integration
-
-Epicrypt already has DPoP verification primitives; integrate them into OAuth issuance/resource validation rather than maintaining a disconnected helper.
-
-- validate proof `typ`, JWK, algorithm, `htm`, normalized `htu`, `iat`, `jti`;
-- independent proof-age and future-skew bounds remain intact;
+- proof `typ`, JWK, algorithm, `htm`, normalized `htu`, `iat`, `jti`;
 - replay store required;
-- token endpoint binds issued access token using `cnf.jkt` when DPoP is accepted;
-- resource validator requires matching DPoP proof for sender-constrained access tokens;
-- `ath` validation where required;
-- nonce support only if/when a complete interoperable server nonce policy is implemented.
-
-Do not claim socket/TLS channel binding that DPoP does not provide.
+- `cnf.jkt` binding at issuance/resource validation;
+- `ath` where required;
+- nonce only when a complete interoperable nonce policy exists.
 
 ---
 
-## 13. OpenID Connect provider core
+## 14. OpenID Connect provider target
 
-### 13.1 OIDC activation
+OIDC semantics activate only when `openid` is requested/approved and allowed.
 
-OIDC semantics activate only when `openid` is in the approved/requested scope and the client/server profile allows OIDC.
+Required provider behavior:
 
-OAuth requests without `openid` must not accidentally receive ID Tokens or OIDC-specific subject/claim behavior.
+- nonce/prompt/max_age/acr request modeling;
+- framework-neutral interaction requirements;
+- ID Token issuer paired with existing `OpenIdIdTokenValidator`;
+- issuer/client/audience/subject binding;
+- `auth_time`, nonce, `acr`, `amr`, `azp` as required;
+- `at_hash`, `c_hash` according to token/response context;
+- `OidcSubjectIdentifierProviderInterface` for public/pairwise-capable subject policy;
+- `OidcClaimsProviderInterface` + UserInfo projection;
+- provider discovery derived from enabled profile and adapter-supplied endpoint URIs;
+- optional ID-token encryption only after independent interoperability passes.
 
-### 13.2 Authorization request additions
-
-Validate and model:
-
-- `nonce`;
-- `prompt` values supported by the server profile;
-- `max_age`;
-- OIDC scopes (`openid`, `profile`, `email`, etc.) through application claim policy;
-- requested `acr_values` when supported;
-- safe interaction requirements (`login`, `consent`, `select_account`) as framework-neutral decisions.
-
-Epicrypt tells the framework **what interaction is required**, not how to render or perform it.
-
-### 13.3 ID Token issuer
-
-Build on current `OpenIdIdTokenValidator` by adding the corresponding issuer/profile service.
-
-Required behavior:
-
-- issuer/client/audience binding;
-- `sub` from a framework-provided subject mapper;
-- `iat`/`exp`;
-- `auth_time` when required;
-- nonce;
-- `acr`/`amr` when supplied/required;
-- `azp` for multi-audience cases;
-- `at_hash`, `c_hash` and other required half-hashes according to response/token context;
-- KeyRing/asymmetric signing-key readiness;
-- optional client-configured ID-token encryption only when algorithms/keys are explicitly allowed.
-
-### 13.4 Subject identifiers
-
-Epicrypt must not assume application account IDs are always the public OIDC `sub`.
-
-Define a `OidcSubjectIdentifierProviderInterface` so frameworks can provide:
-
-- public subject identifiers;
-- pairwise identifiers if implemented later;
-- tenant/provider-specific stable subject policy.
-
-No database implementation belongs in Epicrypt.
-
-### 13.5 UserInfo
-
-Provide transport-neutral UserInfo claim resolution:
-
-- verify OAuth/OIDC access token and `openid` context;
-- subject binding must match the authorization;
-- call application `OidcClaimsProviderInterface` for allowed claims;
-- project only claims permitted by granted scopes/policy;
-- return typed claim map, not an HTTP response.
-
-### 13.6 Discovery
-
-Expose OpenID Provider Configuration derived from the active OAuth/OIDC profile and framework-supplied endpoint URIs.
-
-Do not implement route registration or dynamic URL discovery from globals.
+Application account IDs are not assumed to be public OIDC `sub` values.
 
 ---
 
-## 14. Generic personal/API token core
+## 15. Generic personal/API token target
 
-### 14.1 Public model
-
-Suggested public types:
+Suggested final public surface:
 
 ```text
 PersonalAccessTokenManager
@@ -661,341 +475,146 @@ PersonalAccessTokenPolicy
 PersonalAccessTokenAbilities
 ```
 
-Final naming should avoid framework-specific branding while documenting “Sanctum-style” behavior as the design reference.
-
-### 14.2 JWT claims
-
-Use a distinct signed JWT profile, for example `typ=pat+jwt`, containing bounded claims such as:
+JWT profile uses `typ=pat+jwt` and bounded claims such as:
 
 ```text
-iss?            # optional/configured for application tokens
+iss?
 sub
 jti
 iat
 exp?
-name            # bounded label or label id
-abilities       # bounded unique list
+name
+abilities
 token_use=personal_access
 ```
 
-Keep token values small. Ability/item count and total encoded token size are security bounds.
+Rules:
 
-### 14.3 Store semantics
-
-The store persists metadata, never the raw JWT:
-
-- `jti`;
-- subject id;
-- name;
-- abilities or canonical ability digest/metadata according to final design;
-- created/expiry/revoked timestamps;
-- optional last-used metadata;
-- optional token-version/policy marker.
-
-Verification is **stateful by default** for this Sanctum-style path so immediate revocation works.
-
-### 14.4 Ability semantics
-
-- exact string matching by default;
-- bounded unique ability list;
-- no implicit hierarchical wildcard matching;
-- `*` means all only when explicitly permitted by policy;
-- `can($ability)` / `cannot($ability)` helpers operate on a fully verified active token result;
-- application permission/authorization remains outside Epicrypt.
-
-### 14.5 Management API
-
-Transport-neutral operations:
-
-```text
-issue(subject, name, abilities, expiry?)
-verify(jwt, expectedIssuer/context?)
-list(subject)
-revoke(jti, subject?)
-revokeAll(subject)
-```
-
-Optional operations such as rename/touch-last-used must be separate store capabilities so the hot validation path does not require a database write on every request.
+- stateful verification by default for immediate revocation;
+- exact ability matching;
+- `*` means all only when explicitly permitted;
+- no implicit hierarchical wildcard behavior;
+- raw JWT never persisted;
+- list returns metadata only;
+- optional last-used update is a separate capability and never forces a write on every verification.
 
 ---
 
-## 15. Persistence contracts and atomicity
+## 16. Persistence and concurrency contracts
 
-Epicrypt ships **no DBLayer, PDO, ORM, SQL, Redis or CacheLayer implementation** for the auth protocol stores.
+Epicrypt ships **no production DBLayer, PDO, ORM, SQL, Redis or CacheLayer implementation** for auth protocol stores.
 
-Test-only in-memory/fault-injection stores are allowed under `tests/`.
+Test-only in-memory/fault stores are allowed under `tests/`.
 
-Every public store interface must document:
+Every public store interface documents:
 
 - uniqueness keys;
 - atomic operations;
-- expected conflict result;
+- conflict outcomes;
 - idempotency;
 - expiry semantics;
 - revocation semantics;
 - whether stale reads are security-sensitive;
-- required consistency for multi-process/distributed deployment.
+- consistency requirements for multi-process/distributed deployments.
 
 Critical atomic boundaries:
 
-- authorization code consume;
-- refresh-token rotate/consume/reuse detection;
+- authorization-code consume;
+- refresh-token consume/replace/reuse detection;
 - refresh family revoke;
 - DPoP/client-assertion replay claim;
 - personal-token revoke/revoke-all versus verification;
-- access-token revocation/status lookup when configured as authoritative.
+- access-token status lookup when authoritative revocation is enabled.
 
-No API may imply that `find()` then `delete()` is sufficient for one-time credentials.
-
----
-
-## 16. Server/application policy object
-
-Protocol behavior must be configurable without a framework config dependency.
-
-Introduce typed immutable policy/config value objects, not a giant associative array.
-
-Areas include:
-
-- issuer;
-- allowed grants;
-- TTL ceilings/defaults;
-- allowed algorithms;
-- access-token audiences;
-- PKCE requirement;
-- allowed client auth methods;
-- DPoP enabled/required policy;
-- OIDC enabled profile and ID-token algorithms;
-- parameter/token/claim size limits;
-- clock skew;
-- refresh reuse response;
-- personal-token bounds.
-
-Deployment paths, route paths and database/cache configuration do not belong here.
+No interface may imply that `find()` followed by unrelated `delete()` is sufficient for one-time credentials.
 
 ---
 
-## 17. Protocol parser and limit policy
+## 17. Central parser/limit policy
 
-Reuse the existing centralized `JosePolicy` approach and create equivalent bounded OAuth/OIDC parameter policies rather than scattered magic numbers.
+Auth input bounds must be centralized instead of scattered magic numbers. Reuse the design discipline of `JosePolicy` and introduce auth/OAuth/OIDC/PAT-specific immutable limits/policies.
 
-Limits must cover at least:
+Cover at least:
 
 - total parameter count;
 - parameter-name bytes;
-- individual value bytes;
-- state/nonce/verifier/challenge/client-id/redirect bytes;
-- scope and audience count/total bytes;
+- individual parameter value bytes;
+- client ID, redirect URI, state, nonce, verifier and challenge bytes;
+- scope count/item/total bytes;
+- audience count/item/total bytes;
+- authorization/subject identifier bytes;
 - JWT/JWE compact size;
-- claim count/depth/member count;
-- JWKS key/member count;
-- personal-token ability count/bytes;
+- auth claim count/depth/member count;
+- client assertion lifetime/skew;
+- personal-token name/ability count/item/total bytes;
 - metadata/discovery size;
-- store-returned collection count where a public API lists records.
+- public store list-result count.
 
 Reject malformed/oversized input before expensive signature, decryption, password-hash or repository work whenever possible.
 
 ---
 
-## 18. Error/result model
+## 18. Testing, interoperability, mutation and performance
 
-### 18.1 OAuth
-
-Stable typed errors for:
-
-```text
-invalid_request
-invalid_client
-invalid_grant
-unauthorized_client
-unsupported_grant_type
-invalid_scope
-unsupported_response_type
-access_denied
-server_error
-```
-
-Add extension errors only when defined by the adopted specification/profile.
-
-### 18.2 OIDC
-
-Map OIDC-specific request/interaction errors without leaking authentication/account details.
-
-### 18.3 Personal tokens
-
-Use application-safe verification reasons such as:
-
-```text
-VALID
-MALFORMED
-INVALID_SIGNATURE
-WRONG_TOKEN_CLASS
-EXPIRED
-NOT_YET_VALID
-UNKNOWN_TOKEN
-REVOKED
-SUBJECT_MISMATCH
-ABILITY_MISSING
-POLICY_MISMATCH
-```
-
-Expected invalid credentials should return typed results where practical; configuration/programmer failures remain exceptions.
-
----
-
-## 19. Foundation migration target
-
-Once the Epicrypt protocol core is accepted, Foundation becomes an adapter/consumer.
-
-### Foundation removes/reduces
-
-- generic OAuth request validator;
-- grant dispatcher/token manager protocol logic;
-- PKCE implementation;
-- authorization-code protocol implementation;
-- refresh protocol/reuse implementation;
-- generic OAuth revocation/introspection behavior;
-- generic authorization-server metadata builder;
-- generic client protocol model where no Foundation policy remains;
-- Epicrypt-specific OAuth adapters that exist only because the protocol core currently lives in Foundation.
-
-### Foundation keeps
-
-- DBLayer implementations of Epicrypt store interfaces;
-- auth schema/migrations;
-- account/principal lookup and mapping;
-- scope → Foundation permission mapping;
-- consent UI/application policy;
-- OAuth routes/Webrick handlers;
-- rate limiting;
-- audit/events;
-- CLI administration commands;
-- config/env/key locators;
-- middleware/principal adaptation.
-
-### Migration evidence
-
-Before deletion, freeze representative Foundation behavior for:
-
-- public Authorization Code + S256;
-- confidential Authorization Code;
-- Client Credentials;
-- Refresh rotation and replay;
-- access JWT claims;
-- revocation;
-- introspection;
-- metadata/JWKS;
-- invalid redirect/PKCE/scope/client cases;
-- consent approval/denial interaction.
-
-The same vectors must pass through Epicrypt core + thin Foundation adapters.
-
----
-
-## 20. Existing Foundation token/state migration
-
-New auth credentials are JWT/JOSE-based, but already-issued Foundation credentials/state must have an explicit rollout policy.
-
-During implementation audit determine whether current Foundation OAuth 2.1 has production/published persistence requiring compatibility.
-
-If compatibility is required:
-
-- stop issuing legacy token/code formats first;
-- allow a bounded read-only legacy verifier/consumer only for the maximum remaining TTL;
-- never reissue a legacy format;
-- preserve refresh-family reuse/revocation evidence until every legacy refresh token is impossible to use;
-- keep fallback OAuth signing public keys until all legacy access JWTs expire;
-- remove compatibility code in a later explicitly scheduled cleanup.
-
-Do not invent permanent dual-format complexity without evidence that persisted consumers need it.
-
----
-
-## 21. Test strategy
-
-### 21.1 Shared JOSE/token tests
+### Shared token/JOSE tests
 
 - strict token-class substitution matrix;
 - wrong issuer/audience/key purpose/algorithm;
-- active/fallback signing-key rotation;
+- active/fallback key rotation;
 - malformed/oversized JWT/JWE/JWK/JWKS;
-- duplicate claims/parameters;
-- key confusion and algorithm confusion;
-- clock boundary and skew tests;
-- sensitive parameter/reflection audit.
+- key/algorithm confusion;
+- temporal boundaries/skew;
+- sensitive-parameter/reflection audit.
 
-### 21.2 OAuth 2.1 tests
+### OAuth tests
 
-- Authorization Code + S256 happy path;
-- code replay and concurrent double consume;
-- redirect mismatch;
-- verifier mismatch;
-- public/confidential client auth rules;
-- client secret and private-key-JWT authentication;
+- Authorization Code + S256 happy/negative paths;
+- code replay/concurrent consume;
+- redirect/verifier mismatch;
+- public/confidential client rules;
+- client secret/private-key JWT authentication;
 - assertion replay;
-- client credentials;
+- Client Credentials;
 - scope/audience narrowing and escalation rejection;
 - refresh rotation/reuse/concurrency/family revocation;
-- access JWT validation;
-- revocation/introspection behavior;
+- access-token validation;
+- revocation/introspection;
 - RFC 9700 negative vectors;
-- authorization-server issuer/mix-up defenses where profile applies.
+- issuer/mix-up defenses where applicable.
 
-### 21.3 OIDC tests
+### OIDC tests
 
-- `openid` activation boundary;
+- `openid` activation;
 - nonce;
-- ID-token audience/`azp`;
+- audience/`azp`;
 - `auth_time`/`max_age`;
 - `acr`/`amr`;
 - `at_hash`/`c_hash`;
 - subject mapping;
-- UserInfo scope projection;
-- discovery metadata;
-- OAuth access token cannot validate as ID Token and vice versa;
-- optional encrypted ID Token interoperability if enabled.
+- UserInfo projection;
+- discovery;
+- token-class substitution;
+- encrypted ID-token interoperability if enabled.
 
-### 21.4 Personal/API token tests
+### Personal token tests
 
-- issue/verify;
-- exact abilities;
-- wildcard policy;
+- issue/verify/list;
+- exact abilities/wildcard policy;
 - expiry;
-- revoke one/revoke all;
-- concurrent revoke/verify semantics according to store contract;
-- listing metadata never returns raw JWT;
-- wrong subject/token class/key purpose;
-- optional last-used capability without mandatory hot-path writes;
-- persistent-worker/Fiber state isolation.
+- revoke/revoke-all;
+- concurrent revoke/verify semantics;
+- metadata never leaks raw JWT;
+- subject/class/key-purpose mismatch;
+- optional last-used capability;
+- persistent-worker/Fiber isolation.
 
-### 21.5 Foundation extraction tests
+### Independent interoperability
 
-Run existing Foundation OAuth suites first as frozen behavior evidence, then migrate them to adapter-contract/integration tests against Epicrypt.
+Use independent JOSE/JWT/OAuth/OIDC fixtures where feasible for RFC 9068, PKCE, `private_key_jwt`, DPoP, ID-token hashes, discovery/JWKS and malformed corpus behavior.
 
----
+### Mutation/static/security gates
 
-## 22. Interoperability and external vectors
-
-Do not validate an OAuth/OIDC implementation only against itself.
-
-Required independent checks where feasible:
-
-- JOSE/JWT access tokens against an independent JWT implementation;
-- RFC 9068 claim/header vectors;
-- `private_key_jwt` vectors;
-- DPoP RFC examples/independent verifier;
-- OIDC ID-token hashes and claim validation against published examples/another implementation;
-- discovery/JWKS consumption through a minimal independent client fixture;
-- Authorization Code/PKCE vectors from RFC examples;
-- negative malformed/duplicate/oversized corpus.
-
-If a third-party conformance suite can run reproducibly in CI without creating a fragile external service dependency, add it as a release gate; otherwise provide a documented local conformance command and freeze the resulting vectors.
-
----
-
-## 23. Mutation/static/security gates
-
-Add dedicated mutation shards rather than relying on broad incidental coverage:
+Dedicated mutation shards:
 
 ```text
 oauth-authorization
@@ -1006,191 +625,179 @@ oidc-provider
 personal-access-token
 ```
 
-Existing JOSE/DPoP/Remote-JOSE shards remain green.
+Also require PHP 8.4/8.5 lowest/stable, analyzers/PHPForge, dependency audit, no secret-bearing diagnostics, complexity caps, no global mutable trust/request state and no framework/DB production dependency.
 
-Security/static requirements:
+### Performance attribution
 
-- PHP 8.4/8.5 lowest/stable;
-- PHPStan/Psalm/PHPForge clean;
-- dependency audit clean;
-- no secret-bearing diagnostics;
-- cognitive complexity caps retained;
-- no global mutable trust/client/request state;
-- no route/framework/DB dependency added to production Composer requirements.
-
----
-
-## 24. Performance plan
-
-Correct protocol/security behavior is not weakened for benchmark numbers.
-
-Measure attribution for:
+Measure separately:
 
 1. JWT access-token issue/verify;
 2. authorization-code JWE issue/consume;
-3. refresh JWT/JWE parse + store rotation;
-4. DPoP proof validation;
+3. refresh JWE parse + store rotation;
+4. DPoP validation;
 5. ID Token issue/verify;
-6. personal token issue/verify with store lookup;
-7. direct Epicrypt endpoint operation versus thin Foundation/Webrick adapter;
-8. active-key versus fallback-key verification;
-9. persistent worker repeated validation for memory growth;
-10. capability-absent cost when OAuth/OIDC/PAT services are not composed.
+6. personal token issue/verify + status lookup;
+7. active versus fallback key verification;
+8. persistent-worker repeated validation/memory growth;
+9. capability-absent cost when auth services are not composed.
 
-Database/network/KDF/HTTP costs are measured separately from Epicrypt CPU/adapter overhead.
+Database/network/KDF/HTTP cost is attributed separately from Epicrypt protocol/crypto cost.
 
 ---
 
-## 25. Documentation deliverables
+## 19. Documentation deliverables
 
-Before release add/update:
+Before 3.0 release:
 
-- architecture overview for the three auth paths;
+- architecture overview for OAuth/OIDC/PAT;
 - OAuth 2.1 server-core guide;
 - OIDC provider guide;
 - personal/API token guide;
-- framework-adapter guide showing route/HTTP adaptation;
+- framework-adapter guide;
 - persistence-contract guide with atomicity requirements;
-- Foundation migration guide;
-- key-purpose/rotation guide across the auth token classes;
-- security hardening/deployment checklist;
-- standards matrix listing implemented RFC/draft/OIDC profiles and intentional exclusions;
-- examples that do not require a framework or database implementation.
+- key-purpose/rotation guide;
+- security deployment checklist;
+- standards matrix and intentional exclusions;
+- framework/database-free examples;
+- public API inventory and 2.x→3.0 migration notes;
+- refresh-token docs updated from the removed opaque lifecycle to the final JOSE lifecycle.
 
-Never market the Sanctum-style core as Laravel Sanctum compatibility. It is a generic JWT personal-token system inspired by the same developer-facing management model.
+Never market the personal-token core as Laravel Sanctum compatibility. It is a generic JWT personal-token system with Sanctum-style management semantics.
 
 ---
 
-## 26. Implementation phases and checkboxes
+## 20. Implementation phases and checkboxes
 
-### Phase A — rebaseline and extraction freeze
+### Phase A — Epicrypt rebaseline and API freeze
 
-- [ ] Capture exact Epicrypt current branch/API baseline and keep previous green release matrix as non-regression evidence.
-- [ ] Inventory every Foundation `Auth/OAuth` class, contract, DBLayer adapter, route/handler, schema and test.
-- [ ] Classify each as move / replace-with-Epicrypt-contract / keep-in-Foundation.
-- [ ] Freeze Foundation OAuth 2.1 happy/negative vectors before moving code.
-- [ ] Freeze current Epicrypt JWT/OIDC/DPoP/refresh-token public surface.
-- [ ] Create an auth-protocol public API inventory and update it every batch.
+- [x] Capture Epicrypt regression/scope-extension baselines and retain the previous green release matrix as the non-regression floor. (`cca7e5a9`, `0ec87442`)
+- [x] Inventory current Epicrypt JWT/JOSE/OIDC/DPoP/refresh primitives against the auth target architecture. (`8235274b` plan/inventory baseline)
+- [x] Create the Epicrypt 3 public API inventory. (`docs/plans/epicrypt-3-public-api-inventory.md`)
+- [x] Establish the pre-release 3.0 API rule: no source/API BC constraint until release; persisted frozen crypto formats remain separate compatibility contracts. (plan ledger)
+- [ ] Keep the public API inventory synchronized through every remaining implementation batch and freeze it at release.
 
-### Phase B — shared auth-token/JWT profile substrate
+> Foundation source inventory/fixture freezing was intentionally removed from Phase A. It is deferred until post-release Foundation adoption and is not an Epicrypt 3.0 implementation dependency.
 
-- [ ] Add explicit auth token classes/media types and cross-token substitution policy.
-- [ ] Implement JWT access-token RFC 9068 profile.
-- [ ] Implement JOSE authorization-code artifact profile.
-- [ ] Implement JOSE refresh-token artifact profile over authoritative family state.
-- [ ] Add explicit key purposes for OAuth/OIDC/PAT credentials.
-- [ ] Centralize auth-parameter/token/claim bounds.
-- [ ] Add token-class substitution/security mutation tests.
+### Phase B — shared auth-token/JOSE substrate
 
-### Phase C — client, store and endpoint contracts
+- [x] Add explicit auth token classes/media types and cross-token substitution policy. (`2b9c18e7`)
+- [x] Audit/harden the existing RFC 9068 JWT access-token profile. (baseline + `2b9c18e7`, `0b0a9d7b`)
+- [x] Implement the JOSE authorization-code artifact profile. (`400497b3`)
+- [x] Implement the JOSE refresh-token artifact profile. (`c1b30119`)
+- [x] Complete authoritative refresh-family rotation/reuse lifecycle over the JOSE artifact. (`168c7b3e`)
+- [x] Remove the superseded refresh-specific `Token\Opaque` API before 3.0; retain generic `OpaqueToken` only. (`168c7b3e`)
+- [x] Add explicit key purposes for OAuth/OIDC/PAT credentials. (`0b0a9d7b`)
+- [x] Add token-class/key-purpose/artifact substitution and security-negative tests. (`2b9c18e7`, `0b0a9d7b`, `400497b3`, `c1b30119`, `168c7b3e`)
+- [ ] Centralize OAuth/OIDC/PAT parameter, token and claim bounds.
+
+### Phase C — client/store/endpoint contracts
 
 - [ ] Implement framework-neutral OAuth client model/policy.
 - [ ] Implement client-secret verification and `private_key_jwt` validation/replay contract.
-- [ ] Define authoritative public store interfaces and atomicity semantics.
+- [x] Define authoritative refresh-token store contract, exact replacement-state atomicity and reusable conformance semantics. (`168c7b3e`)
+- [ ] Define authorization, authorization-code, access-token-status, consent/replay and personal-token store contracts.
 - [ ] Define protocol request/response/error DTOs.
 - [ ] Define endpoint catalog/capability metadata with no route registration.
-- [ ] Provide test-only in-memory/fault stores.
+- [x] Provide refresh-token test-only in-memory/conformance store. (`168c7b3e`)
+- [ ] Provide remaining test-only in-memory/fault stores required by public contracts.
 
 ### Phase D — OAuth 2.1 authorization core
 
-- [ ] Extract/harden Foundation authorization request validation.
-- [ ] Exact redirect + code response + PKCE S256.
+- [ ] Implement independent Epicrypt authorization request validator/state model.
+- [ ] Exact redirect + code response + mandatory PKCE S256.
 - [ ] Scope/audience bounded resolution hooks.
 - [ ] Authentication/consent interaction result model.
-- [ ] JOSE authorization-code issue + atomic consume.
+- [ ] Add authorization-code authoritative store + atomic one-time consume.
+- [ ] Integrate JOSE authorization-code issue + consume.
 - [ ] OAuth protocol errors and redirect safety.
-- [ ] RFC 9700 negative vectors.
+- [ ] RFC 9700 authorization negative vectors.
 
 ### Phase E — OAuth 2.1 token/core lifecycle
 
 - [ ] Authorization Code exchange.
 - [ ] Client Credentials.
-- [ ] JWT/JWE Refresh Token rotation and reuse detection.
-- [ ] JWT access-token issuance/validation.
+- [x] JWT/JWE refresh-token rotation/reuse state machine. (`168c7b3e`)
+- [ ] Integrate refresh grant into the OAuth token endpoint/result model.
+- [ ] JWT access-token issuance/validation service over the existing RFC 9068 profile.
 - [ ] Revocation.
 - [ ] Introspection.
 - [ ] Authorization-server metadata.
-- [ ] JWKS publication.
-- [ ] Integrate DPoP into token issuance/resource validation.
+- [ ] JWKS publication scoped to auth signing purposes.
+- [ ] Integrate DPoP into issuance/resource validation.
 - [ ] Dedicated OAuth mutation/interoperability gates.
 
 ### Phase F — OpenID Connect 1.0 provider
 
 - [ ] OIDC request extensions and `openid` activation.
-- [ ] interaction requirements for nonce/prompt/max_age/acr.
+- [ ] Interaction requirements for nonce/prompt/max_age/acr.
 - [ ] ID Token issuer paired with existing validator.
-- [ ] subject identifier provider contract.
+- [ ] Subject identifier provider contract.
 - [ ] UserInfo claims provider/projection.
 - [ ] OIDC discovery metadata.
-- [ ] optional encrypted ID Token profile only if independent interoperability passes.
+- [ ] Optional encrypted ID Token only if independent interoperability passes.
 - [ ] OIDC negative/conformance vectors and mutation gate.
 
 ### Phase G — generic personal/API tokens
 
-- [ ] Finalize public generic name/API (Sanctum-style semantics, no Laravel dependency).
-- [ ] `pat+jwt` profile and separate key purpose.
-- [ ] issue/verify/list/revoke/revoke-all public service.
-- [ ] bounded exact abilities + explicit wildcard policy.
-- [ ] authoritative store contract; raw JWT never persisted.
-- [ ] optional last-used capability without forced write-on-read.
-- [ ] state/concurrency/Fiber/persistent-runtime tests.
-- [ ] dedicated mutation/performance coverage.
+- [ ] Finalize public generic naming/API.
+- [ ] `pat+jwt` profile and separate key-purpose enforcement.
+- [ ] Issue/verify/list/revoke/revoke-all service.
+- [ ] Bounded exact abilities + explicit wildcard policy.
+- [ ] Authoritative store contract; raw JWT never persisted.
+- [ ] Optional last-used capability without forced write-on-read.
+- [ ] State/concurrency/Fiber/persistent-runtime tests.
+- [ ] Dedicated mutation/performance coverage.
 
-### Phase H — Foundation extraction and adapter proof
+### Phase H — Epicrypt release integration/hardening
 
-- [ ] Add Foundation DBLayer implementations of Epicrypt store contracts.
-- [ ] Replace Foundation protocol classes with Epicrypt services.
-- [ ] Keep Foundation routes/Webrick/consent/audit/rate-limit/principal mapping only.
-- [ ] Remove obsolete `Adapter/Epicrypt/OAuth` indirection where Foundation can consume Epicrypt directly.
-- [ ] Preserve/migrate existing OAuth persisted state/tokens only where evidence requires it.
-- [ ] Run the existing Foundation OAuth flow suites against the extracted core.
-- [ ] Update Foundation plan/docs to make Epicrypt the OAuth/OIDC/PAT protocol owner.
-
-### Phase I — release hardening
-
-- [ ] Complete standards delta review for latest OAuth 2.1 draft/RFC at release time.
+- [ ] Complete standards delta review for the latest OAuth 2.1 draft/RFC at release time.
 - [ ] Complete OIDC Core/Discovery Errata 2 requirements matrix.
-- [ ] Run all Epicrypt pre-extension A–H regression gates.
-- [ ] Run new OAuth/OIDC/PAT mutation shards.
+- [ ] Run all pre-auth Epicrypt regression gates.
+- [ ] Run OAuth/OIDC/PAT mutation shards.
 - [ ] Run PHP 8.4/8.5 lowest/stable QA and analyzers.
 - [ ] Run independent JOSE/OAuth/OIDC interoperability vectors.
 - [ ] Run performance attribution and persistent-runtime memory checks.
 - [ ] Complete docs/migration/public API inventory.
-- [ ] Prove Foundation composition/integration on PHP 8.4/8.5.
-- [ ] Mark PR release-ready only after this exact final SHA is green.
+- [ ] Verify no obsolete unreleased compatibility surfaces remain.
+- [ ] Mark the exact final SHA release-ready only after the complete Epicrypt gate is green.
+- [ ] Release Epicrypt 3.0.
+
+### Deferred post-release — Foundation adoption
+
+> **Not an Epicrypt 3.0 release gate. Start only after Epicrypt 3.0 has been released.**
+
+- [ ] Rescan Foundation OAuth/OIDC/auth source, contracts, stores, routes, schema and tests against released Epicrypt 3.0.
+- [ ] Produce move/keep/replace inventory from the released Epicrypt API.
+- [ ] Freeze Foundation OAuth behavior/migration vectors where persisted production state requires evidence.
+- [ ] Add Foundation DBLayer implementations of released Epicrypt store contracts.
+- [ ] Replace Foundation protocol mechanics with Epicrypt services.
+- [ ] Keep Foundation routes/Webrick/login/consent/audit/rate-limit/config/principal mapping/application policy only.
+- [ ] Remove obsolete Foundation Epicrypt/OAuth indirection where direct consumption is cleaner.
+- [ ] Migrate/preserve existing Foundation OAuth state only where real persisted evidence requires it.
+- [ ] Close Foundation Pathwise/Epicrypt dependency acceptance and remaining Epicrypt-dependent OTP/Passkey work.
+- [ ] Run Foundation PHP 8.4/8.5 composition/integration gates.
+- [ ] Update Foundation plan/docs to make released Epicrypt the OAuth/OIDC/PAT protocol owner.
 
 ---
 
-## 27. Initial non-goals for Epicrypt 3 auth-core release
+## 21. Immediate next batch
 
-Unless a concrete consumer requirement changes the plan with tests and interoperability evidence, do not expand the first auth-core release to include:
+**Continue Epicrypt only. Do not start Foundation adoption.**
 
-- Resource Owner Password Credentials;
-- OAuth implicit grant;
-- OIDC implicit/hybrid flows;
-- Dynamic Client Registration;
-- OAuth Device Authorization Grant;
-- Token Exchange;
-- PAR/JAR/JARM;
-- mTLS sender-constrained tokens/client authentication;
-- OIDC federation;
-- OIDC logout profiles;
-- social-provider SDKs;
-- login/session UI;
-- consent UI;
-- route registration;
-- DB/ORM/cache implementations.
-
-These are extension candidates after the three core paths are stable. DPoP is already in scope because Epicrypt has the primitive and it directly strengthens the OAuth access-token path.
+1. Centralize OAuth/OIDC/PAT parameter, token and claim bounds and migrate the new authorization-code/refresh artifact constants to that policy where appropriate.
+2. Add the authorization-code authoritative store contract and atomic one-time consume semantics with reusable in-memory/conformance coverage.
+3. Define the remaining store/client contracts needed before the authorization/token endpoint state machines.
+4. Keep this plan and the public API inventory synchronized after each implementation commit.
+5. Run focused syntax/tests available in the current environment; keep full CI/release gates unchecked until independently green.
 
 ---
 
-## 28. Final target
+## 22. Final target
 
 Epicrypt 3 is complete when a framework can implement only transport/application/persistence adapters and obtain all three secure authentication paths from one reusable core:
 
 ```text
-Framework / Foundation
+Framework / application
   ├── routes + HTTP adaptation
   ├── login + consent UI
   ├── account/principal mapping
@@ -1217,16 +824,4 @@ Framework / Foundation
             └── list/revoke lifecycle
 ```
 
-No framework should need to reimplement protocol cryptography or state-machine semantics above this surface.
-
----
-
-## 29. Immediate next batch
-
-**Start with Phase A only.**
-
-1. Rescan Foundation's current OAuth 2.1 source/tests/contracts end-to-end.
-2. Produce the move/keep/replace inventory.
-3. Freeze Foundation behavior fixtures.
-4. Inventory current Epicrypt JWT/JOSE/OIDC/DPoP/refresh primitives against the target token-class architecture.
-5. Update this plan ledger with the exact findings before beginning Phase B.
+No framework should need to reimplement protocol cryptography or authoritative auth state-machine semantics above this surface.
