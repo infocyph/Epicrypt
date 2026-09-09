@@ -122,7 +122,7 @@ jobs:
           - shard: primitive-verification
             classes: 'Infocyph\Epicrypt\Crypto\Mac,Infocyph\Epicrypt\Crypto\SecretStream,Infocyph\Epicrypt\Crypto\Signature,Infocyph\Epicrypt\Internal\EcdsaSignatureConverter'
           - shard: remote-jose
-            classes: 'Infocyph\Epicrypt\Token\Jwt\RemoteJwks,Infocyph\Epicrypt\Token\Jwt\RemoteJwksConfiguration,Infocyph\Epicrypt\Token\Jwt\Support\JweKeyManager,Infocyph\Epicrypt\Token\Jwt\Support\RemoteJoseResource'
+            classes: 'Infocyph\Epicrypt\Token\Jwt\RemoteJwks,Infocyph\Epicrypt\Token\Jwt\RemoteJwksConfiguration,Infocyph\Epicrypt\Token\Jwt\Support\JweKeyManager,Infocyph\Epicrypt\Token\Jwt\Support\NativeRemoteJoseHostResolver,Infocyph\Epicrypt\Token\Jwt\Support\RemoteJoseResource'
     steps:
       - uses: actions/checkout@v7
       - uses: shivammathur/setup-php@v2
