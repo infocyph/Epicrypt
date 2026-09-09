@@ -32,6 +32,7 @@ final readonly class RemoteJwks
             $client,
             $requestFactory,
             $configuration->maximumResponseBytes,
+            $configuration->maximumKeys,
             $hostResolver ?? new NativeRemoteJoseHostResolver(),
         );
         $this->cacheKey = 'epicrypt:jwks:' . hash('sha256', $configuration->issuer . "\0" . ($configuration->jwksUri ?? 'discovery'));
