@@ -76,6 +76,82 @@ jobs:
           tests/Integration/Pathwise4StreamInteropTest.php
           --fail-on-skipped
 
+  foundation-ecosystem-composition:
+    name: "Foundation + Epicrypt 3 + OTP 6.1 + Pathwise 4 / PHP ${{ matrix.php-version }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        php-version: [ "8.4", "8.5" ]
+    steps:
+      - name: Checkout Epicrypt 3 candidate
+        uses: actions/checkout@v7
+      - name: Checkout Foundation integration branch
+        uses: actions/checkout@v7
+        with:
+          repository: infocyph/Foundation
+          ref: foundation-3/close-26.6
+          path: _foundation
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "${{ matrix.php-version }}"
+          extensions: "hash, json, openssl, sodium, fileinfo"
+          coverage: none
+          tools: composer:v2
+        env:
+          fail-fast: true
+      - name: Point the local Foundation graph at Epicrypt 3
+        run: |
+          php -r '
+          $path = "_foundation/composer.json";
+          $composer = json_decode(file_get_contents($path), true, 512, JSON_THROW_ON_ERROR);
+          $composer["require-dev"]["infocyph/epicrypt"] = "^3.0";
+          $repository = [
+              "type" => "path",
+              "url" => "..",
+              "options" => [
+                  "symlink" => false,
+                  "versions" => ["infocyph/epicrypt" => "3.0.0"],
+              ],
+          ];
+          $composer["repositories"] = array_merge([$repository], $composer["repositories"] ?? []);
+          file_put_contents(
+              $path,
+              json_encode($composer, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR).PHP_EOL,
+          );
+          '
+      - name: Resolve the real Foundation development graph
+        working-directory: _foundation
+        run: |
+          composer validate --strict
+          composer update --no-interaction --no-progress --prefer-dist
+      - name: Prove the selected ecosystem versions
+        working-directory: _foundation
+        run: |
+          composer show infocyph/epicrypt
+          composer show infocyph/otp
+          composer show infocyph/pathwise
+          composer why infocyph/epicrypt
+          composer why infocyph/pathwise
+          php -r '
+          require "vendor/autoload.php";
+          $versions = Composer\InstalledVersions::getPrettyVersion(...);
+          foreach (["infocyph/epicrypt", "infocyph/otp", "infocyph/pathwise"] as $package) {
+              printf("%s=%s\n", $package, Composer\InstalledVersions::getPrettyVersion($package) ?? "unknown");
+          }
+          '
+      - name: Reject the legacy Pathwise 3 edge
+        working-directory: _foundation
+        run: |
+          pathwise_version="$(composer show infocyph/pathwise --format=json | php -r '$d=json_decode(stream_get_contents(STDIN), true); echo $d["versions"][0] ?? "";')"
+          case "$pathwise_version" in
+            4.*|v4.*) ;;
+            *) echo "Foundation did not resolve Pathwise 4: $pathwise_version" >&2; exit 1 ;;
+          esac
+
   phase-ab-benchmark:
     name: "Epicrypt 2.1 baseline vs Phase A+B"
     runs-on: ubuntu-latest
