@@ -9,6 +9,7 @@ use Infocyph\Epicrypt\Exception\ConfigurationException;
 use Infocyph\Epicrypt\Exception\Token\KeyResolutionException;
 use Infocyph\Epicrypt\Token\Jwt\Enum\AsymmetricJwtAlgorithm;
 use Infocyph\Epicrypt\Token\Jwt\Jwks;
+use Infocyph\Epicrypt\Token\Jwt\RemoteJoseHostResolverInterface;
 use Infocyph\Epicrypt\Token\Jwt\RemoteJwks;
 use Infocyph\Epicrypt\Token\Jwt\RemoteJwksConfiguration;
 use Nyholm\Psr7\Factory\Psr17Factory;
@@ -23,7 +24,7 @@ function remoteJwksClock(int $timestamp): ClockInterface
 
         public function now(): DateTimeImmutable
         {
-            return new DateTimeImmutable('@'.$this->timestamp);
+            return new DateTimeImmutable('@' . $this->timestamp);
         }
     };
 }
@@ -93,6 +94,26 @@ function remoteJwksCache(): CacheInterface
     };
 }
 
+/** @param array<string, list<string>> $answers */
+function remoteJwksResolver(array $answers = []): RemoteJoseHostResolverInterface
+{
+    $answers += [
+        'cdn.example' => ['9.9.9.9'],
+        'issuer.example' => ['1.1.1.1'],
+        'keys.example' => ['8.8.8.8'],
+    ];
+
+    return new class($answers) implements RemoteJoseHostResolverInterface {
+        /** @param array<string, list<string>> $answers */
+        public function __construct(private array $answers) {}
+
+        public function resolve(string $hostname): array
+        {
+            return $this->answers[$hostname] ?? [];
+        }
+    };
+}
+
 it('uses one forced refresh to resolve a rolled over remote key', function () {
     $factory = new Psr17Factory();
     $client = new Client($factory);
@@ -112,6 +133,7 @@ it('uses one forced refresh to resolve a rolled over remote key', function () {
             'https://keys.example/jwks',
             allowedJwksHosts: ['keys.example'],
         ),
+        hostResolver: remoteJwksResolver(),
     );
 
     expect($remote->resolve('current', AsymmetricJwtAlgorithm::RS256))->toContain('PUBLIC KEY')
@@ -125,8 +147,13 @@ it('binds discovery to the configured issuer and enforces response bounds', func
         'issuer' => 'https://attacker.example',
         'jwks_uri' => 'https://keys.example/jwks',
     ], JSON_THROW_ON_ERROR)));
-    $remote = new RemoteJwks($client, $factory, new RemoteJwksConfiguration('https://issuer.example'));
-    expect(fn() => $remote->load())->toThrow(KeyResolutionException::class);
+    $remote = new RemoteJwks(
+        $client,
+        $factory,
+        new RemoteJwksConfiguration('https://issuer.example'),
+        hostResolver: remoteJwksResolver(),
+    );
+    expect(fn () => $remote->load())->toThrow(KeyResolutionException::class);
 
     $oversized = new Client($factory);
     $oversized->addResponse(new Response(200, ['Content-Type' => 'application/json'], str_repeat('x', 1025)));
@@ -139,8 +166,9 @@ it('binds discovery to the configured issuer and enforces response bounds', func
             maximumResponseBytes: 1024,
             allowedJwksHosts: ['keys.example'],
         ),
+        hostResolver: remoteJwksResolver(),
     );
-    expect(fn() => $bounded->load())->toThrow(KeyResolutionException::class);
+    expect(fn () => $bounded->load())->toThrow(KeyResolutionException::class);
 });
 
 it('enforces same-host or explicitly allowed JWKS destinations', function () {
@@ -161,7 +189,7 @@ it('enforces same-host or explicitly allowed JWKS destinations', function () {
         ->toThrow(ConfigurationException::class);
 });
 
-it('requires approved media types and treats redirects as failures', function () {
+it('requires approved media types and treats visible redirects as failures', function () {
     $factory = new Psr17Factory();
     foreach ([
         new Response(200, [], '{"keys":[]}'),
@@ -174,9 +202,62 @@ it('requires approved media types and treats redirects as failures', function ()
             $client,
             $factory,
             new RemoteJwksConfiguration('https://issuer.example', 'https://issuer.example/jwks'),
+            hostResolver: remoteJwksResolver(),
         );
         expect(fn () => $remote->load())->toThrow(KeyResolutionException::class);
     }
+});
+
+it('rejects private reserved mixed empty and malformed DNS answers before sending', function (array $addresses) {
+    $factory = new Psr17Factory();
+    $client = new Client($factory);
+    $client->addResponse(new Response(200, ['Content-Type' => 'application/jwk-set+json'], '{"keys":[]}'));
+    $remote = new RemoteJwks(
+        $client,
+        $factory,
+        new RemoteJwksConfiguration('https://issuer.example', 'https://issuer.example/jwks'),
+        hostResolver: remoteJwksResolver(['issuer.example' => $addresses]),
+    );
+
+    expect(fn () => $remote->load())->toThrow(KeyResolutionException::class)
+        ->and($client->getRequests())->toHaveCount(0);
+})->with([
+    'private IPv4' => [['10.0.0.1']],
+    'loopback IPv4' => [['127.0.0.1']],
+    'link local metadata IPv4' => [['169.254.169.254']],
+    'loopback IPv6' => [['::1']],
+    'link local IPv6' => [['fe80::1']],
+    'IPv4 mapped loopback' => [['::ffff:127.0.0.1']],
+    'mixed public and private' => [['1.1.1.1', '10.0.0.1']],
+    'empty resolution' => [[]],
+    'malformed resolution' => [['not-an-ip']],
+]);
+
+it('re-resolves before every outbound request and fails a rebinding attempt closed', function () {
+    $factory = new Psr17Factory();
+    $client = new Client($factory);
+    $client->addResponse(new Response(200, ['Content-Type' => 'application/jwk-set+json'], '{"keys":[]}'));
+    $resolver = new class implements RemoteJoseHostResolverInterface {
+        public int $calls = 0;
+
+        public function resolve(string $hostname): array
+        {
+            unset($hostname);
+
+            return ++$this->calls === 1 ? ['1.1.1.1'] : ['10.0.0.1'];
+        }
+    };
+    $remote = new RemoteJwks(
+        $client,
+        $factory,
+        new RemoteJwksConfiguration('https://issuer.example', 'https://issuer.example/jwks'),
+        hostResolver: $resolver,
+    );
+
+    expect($remote->load())->toBe(['keys' => []]);
+    expect(fn () => $remote->load())->toThrow(KeyResolutionException::class)
+        ->and($resolver->calls)->toBe(2)
+        ->and($client->getRequests())->toHaveCount(1);
 });
 
 it('honors max-age no-cache and no-store using the injected clock', function (string $cacheControl, int $expectedRequests) {
@@ -197,6 +278,7 @@ it('honors max-age no-cache and no-store using the injected clock', function (st
         ),
         $cache,
         remoteJwksClock(1_700_000_000),
+        remoteJwksResolver(),
     );
 
     $remote->load();
