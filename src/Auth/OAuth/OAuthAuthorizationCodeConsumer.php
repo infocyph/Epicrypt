@@ -54,8 +54,7 @@ final readonly class OAuthAuthorizationCodeConsumer
             return OAuthAuthorizationCodeConsumeResult::failure(match ($status) {
                 AuthorizationCodeConsumeStatus::REPLAYED => OAuthAuthorizationCodeConsumeStatus::REPLAYED,
                 AuthorizationCodeConsumeStatus::EXPIRED => OAuthAuthorizationCodeConsumeStatus::EXPIRED,
-                AuthorizationCodeConsumeStatus::INVALID => OAuthAuthorizationCodeConsumeStatus::INVALID,
-                AuthorizationCodeConsumeStatus::CONSUMED => OAuthAuthorizationCodeConsumeStatus::INVALID,
+                default => OAuthAuthorizationCodeConsumeStatus::INVALID,
             });
         }
 
