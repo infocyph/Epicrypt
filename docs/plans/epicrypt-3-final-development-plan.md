@@ -375,17 +375,32 @@ Before release update/add:
 
 ### Phase H — Epicrypt release hardening — IN PROGRESS
 
-- [x] Latest OAuth 2.1 draft/RFC delta review; baseline updated to `draft-ietf-oauth-v2-1-16`, including mandatory `iss` on redirectable authorization errors. (2026-09-09 completeness pass) 
+- [x] Latest OAuth 2.1 draft/RFC delta review; baseline updated to `draft-ietf-oauth-v2-1-16`, including mandatory `iss` on redirectable authorization errors. (2026-09-09 completeness pass)
 - [ ] OIDC Core/Discovery Errata 2 requirements matrix.
-- [ ] Pre-auth Epicrypt regression gates.
+- [x] Pre-auth Epicrypt regression gates. (`Epicrypt 3 Phase A+B Gates` run `34383486509` green at `4a8213e1`.)
+- [x] Independent JOSE interoperability gate. (`Security & Standards` run `34383486883`.)
+- [x] AEGIS positive gate on libsodium 1.0.22. (`Security & Standards` run `34383486883`.)
+- [x] Clean production install/platform-requirements gate. (`Security & Standards` run `34383486883`.)
+- [ ] Canonical PHPForge QA cleanup and release matrix.
+  - [x] Reproduce the canonical release-autofix scope in CI scratch: 74 Pint style changes plus Rector auth transformations. (`Epicrypt Auth Release Autofix` run `34383486512`.)
+  - [ ] Commit the canonical Pint/Rector output to the branch.
+  - [ ] Add the seven proven non-secret `SensitiveParameterTest` allowlist entries for PAT `tokenId` and JWT-policy `tokenClass` parameters.
+  - [ ] Resolve the seven expected PHPCS unused-interface/callback parameter warnings without weakening public contracts.
+  - [ ] Re-run PHP 8.4/8.5 × prefer-lowest/prefer-stable QA after cleanup.
+  - [ ] Re-run PHP 8.4/8.5 analyzers after cleanup.
 - [ ] Execute `oauth-authorization` mutation shard.
 - [ ] Execute remaining OAuth/OIDC/PAT mutation shards.
-- [ ] PHP 8.4/8.5 lowest/stable QA/analyzers.
-- [ ] Dependency/security audit.
-- [ ] Independent interoperability vectors.
+  - [ ] `oauth-token-grants`
+  - [ ] `oauth-refresh-revocation`
+  - [ ] `oauth-client-auth`
+  - [ ] `oidc-provider`
+  - [ ] `personal-access-token`
+- [ ] Close the remaining `remote-jose` mutation failure from `Security & Standards` run `34383486883`.
+- [ ] Dependency/security audit and complete `Security & Standards` release gate. (JOSE interoperability, AEGIS, clean install, and all non-remote-JOSE legacy mutation shards are already green; QA/analyzers and `remote-jose` remain red.)
+- [ ] Independent OAuth/OIDC interoperability vectors beyond the already-green JOSE interoperability job.
 - [ ] Performance/persistent-runtime memory checks.
 - [ ] Complete docs/migration/API inventory.
-- [ ] Remove obsolete unreleased compatibility surface.
+- [ ] Remove obsolete unreleased compatibility surface and temporary release-autofix tooling after the ordinary release matrix is green.
 - [ ] Freeze final public API inventory.
 - [ ] Mark exact final SHA release-ready only after complete Epicrypt gates are green.
 - [ ] Release Epicrypt 3.0.
@@ -408,15 +423,21 @@ Before release update/add:
 
 **Phase H only — Epicrypt 3.0 release hardening.**
 
-1. Finish canonical PHPForge/Pint/PHPCS/Rector/PHPStan/Psalm cleanup on the completed A–G implementation.
-2. Add the reusable fault/concurrency fixtures needed by the final authorization/refresh/PAT mutation and concurrency shards.
-3. Replace stale mutation targets with the current OAuth/OIDC/PAT implementation shards and make the measured mutation floors green.
-4. Complete the OIDC Core/Discovery Errata 2 requirements matrix and standards/exclusions documentation.
-5. Run PHP 8.4/8.5 × prefer-lowest/prefer-stable QA/analyzers and dependency/security audit.
-6. Run independent interoperability vectors plus auth/PAT performance and persistent-runtime memory attribution.
-7. Finish docs, migration notes, and the public API inventory; remove temporary release-autofix tooling and obsolete unreleased surfaces.
-8. Freeze the final public API inventory and record the exact release-ready SHA only after all Epicrypt gates are green.
-9. Release Epicrypt 3.0; only then resume Foundation adoption.
+1. [ ] Close the canonical PHPForge QA cleanup on the completed A–G implementation.
+   - [x] Confirm the release-autofix workflow reproduces the 74 Pint style changes and Rector auth transforms. (`34383486512`)
+   - [ ] Commit canonical Pint/Rector output.
+   - [ ] Correct the seven `SensitiveParameterTest` false positives with explicit non-secret allowlist entries.
+   - [ ] Resolve the seven PHPCS unused-interface/callback parameter warnings without changing contract semantics.
+   - [ ] Re-run PHP 8.4/8.5 stable/lowest QA and analyzers until green.
+2. [ ] Close the remaining `remote-jose` mutation failure, then require the ordinary `Security & Standards` workflow to be green.
+3. [ ] Add reusable fault/concurrency fixtures needed by the final authorization/refresh/PAT mutation and concurrency shards.
+4. [ ] Run `oauth-authorization`, then the remaining bounded auth mutation shards: `oauth-token-grants`, `oauth-refresh-revocation`, `oauth-client-auth`, `oidc-provider`, `personal-access-token`.
+5. [ ] Add/finish deterministic parser fuzz/property coverage for authorization requests, client assertions, auth-code/refresh JWE claims, DPoP, ID-token verification inputs, and PAT claims.
+6. [ ] Complete the OIDC Core/Discovery Errata 2 requirements matrix and standards/exclusions documentation.
+7. [ ] Run independent OAuth/OIDC interoperability vectors plus auth/PAT performance and persistent-runtime memory attribution.
+8. [ ] Finish docs, migration notes, and the public API inventory; remove temporary release-autofix tooling and obsolete unreleased surfaces.
+9. [ ] Freeze the final public API inventory and record the exact release-ready SHA only after all Epicrypt gates are green.
+10. [ ] Release Epicrypt 3.0; only then resume Foundation adoption.
 
 ---
 
