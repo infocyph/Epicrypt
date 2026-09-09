@@ -19,4 +19,6 @@ enum KeyPurpose
     case SECRET_WRAPPING;
 
     case SIGNED_PAYLOAD;
+
+    case SIGNED_URL;
 }
