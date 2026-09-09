@@ -9,6 +9,8 @@ Complete-path examples
 
 - :doc:`certificate`: create a CA, issue a service certificate, and validate it
   before deployment.
+- :doc:`pki-hardening`: understand the Epicrypt 3 X.509, CSR, chain, PFX, CRL
+  and CMS ownership/security decisions.
 - :doc:`crypto`: sign, encrypt, decrypt, and authenticate a service message.
 - :doc:`data-protection`: protect a database value and renew it through key
   rotation.
@@ -34,6 +36,7 @@ integration example.
    architecture
    security-recommendations
    certificate
+   pki-hardening
    crypto
    data-protection
    generate
