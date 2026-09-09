@@ -180,7 +180,7 @@ final readonly class SymmetricJwt
 
         $entry = $this->key->resolveForVerification(
             $keyId,
-            KeyPurpose::JWT_SIGNING,
+            $this->policy?->keyPurpose ?? KeyPurpose::JWT_SIGNING,
             $this->algorithm->value,
             $this->policy?->expectedIssuer,
         );

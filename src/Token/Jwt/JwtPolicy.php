@@ -6,11 +6,14 @@ namespace Infocyph\Epicrypt\Token\Jwt;
 
 use Infocyph\Epicrypt\Auth\Token\AuthTokenClass;
 use Infocyph\Epicrypt\Exception\ConfigurationException;
+use Infocyph\Epicrypt\Security\KeyPurpose;
 
 final readonly class JwtPolicy
 {
     /** @var array<string, true> */
     private array $requiredClaimSet;
+
+    public KeyPurpose $keyPurpose;
 
     /**
      * @param list<string> $requiredClaims
@@ -26,6 +29,7 @@ final readonly class JwtPolicy
         public JwtProfile $profile = JwtProfile::EPICRYPT,
         public array $requiredClaims = ['iss', 'sub', 'aud', 'exp', 'nbf', 'iat', 'jti'],
         public ?AuthTokenClass $tokenClass = null,
+        ?KeyPurpose $keyPurpose = null,
     ) {
         if (!self::validPolicyValue($this->expectedIssuer, 2048)
             || !self::validPolicyValue($this->expectedAudience, 2048)
@@ -38,6 +42,13 @@ final readonly class JwtPolicy
         if ($this->requiredClaims === []) {
             throw new ConfigurationException('JWT required claims must be a non-empty list.');
         }
+
+        $classKeyPurpose = $this->tokenClass?->keyPurpose();
+        if ($classKeyPurpose !== null && $keyPurpose !== null && $classKeyPurpose !== $keyPurpose) {
+            throw new ConfigurationException('JWT key purpose does not match the selected authentication token class.');
+        }
+        $this->keyPurpose = $keyPurpose ?? $classKeyPurpose ?? KeyPurpose::JWT_SIGNING;
+
         $requiredClaimSet = self::requiredClaimSet($this->requiredClaims);
         self::validateProfile($this->profile, $this->expectedType, $requiredClaimSet, $this->tokenClass);
         if ($this->replayMode !== JwtReplayMode::NONE && !isset($requiredClaimSet['jti'])) {
