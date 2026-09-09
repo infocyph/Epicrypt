@@ -316,6 +316,23 @@ final readonly class Jws
         }
     }
 
+    /** @param array<string, mixed> $protected */
+    private function resolveBase64Payload(array $protected): bool
+    {
+        $base64Payload = $protected['b64'] ?? true;
+        if (!is_bool($base64Payload)) {
+            throw new ConfigurationException('JWS b64 must be boolean.');
+        }
+        if (!$base64Payload && ($protected['crit'] ?? null) !== ['b64']) {
+            throw new ConfigurationException('Unencoded JWS payload requires crit=["b64"].');
+        }
+        if ($base64Payload && isset($protected['crit'])) {
+            throw new ConfigurationException('Unknown or unnecessary JWS critical headers are not supported.');
+        }
+
+        return $base64Payload;
+    }
+
     /**
      * @param array<string, mixed> $protectedHeaders
      * @param array<string, mixed> $unprotectedHeaders
@@ -359,18 +376,8 @@ final readonly class Jws
         if (isset($protected['kid']) && (!is_string($protected['kid']) || !JosePolicy::isKeyId($protected['kid']))) {
             throw new ConfigurationException('JWS kid is invalid.');
         }
-        $base64Payload = $protected['b64'] ?? true;
-        if (!is_bool($base64Payload)) {
-            throw new ConfigurationException('JWS b64 must be boolean.');
-        }
-        if (!$base64Payload && ($protected['crit'] ?? null) !== ['b64']) {
-            throw new ConfigurationException('Unencoded JWS payload requires crit=["b64"].');
-        }
-        if ($base64Payload && isset($protected['crit'])) {
-            throw new ConfigurationException('Unknown or unnecessary JWS critical headers are not supported.');
-        }
 
-        return $base64Payload;
+        return $this->resolveBase64Payload($protected);
     }
 
     /**
