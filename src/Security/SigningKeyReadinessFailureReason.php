@@ -7,11 +7,17 @@ namespace Infocyph\Epicrypt\Security;
 enum SigningKeyReadinessFailureReason: string
 {
     case ACTIVE_KEY_ID_MISMATCH = 'active_key_id_mismatch';
+
     case ACTIVE_KEY_NOT_ELIGIBLE = 'active_key_not_eligible';
+
     case INVALID_ISSUER = 'invalid_issuer';
+
     case INVALID_KEY_ID = 'invalid_key_id';
+
     case KEY_PAIR_MISMATCH = 'key_pair_mismatch';
+
     case PRIVATE_KEY_INVALID = 'private_key_invalid';
+
     case PUBLIC_KEY_SET_INVALID = 'public_key_set_invalid';
 
     public function message(): string
