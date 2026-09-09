@@ -7,6 +7,7 @@ use Infocyph\Epicrypt\DataProtection\ProtectionAlgorithm;
 use Infocyph\Epicrypt\DataProtection\ProtectionOptions;
 use Infocyph\Epicrypt\DataProtection\StringProtector;
 use Infocyph\Epicrypt\Exception\Crypto\DecryptionException;
+use Infocyph\Epicrypt\Exception\Crypto\EncryptionException;
 use Infocyph\Epicrypt\Security\KeyPurpose;
 use Infocyph\Epicrypt\Security\KeyRing;
 use Infocyph\Epicrypt\Security\KeyRingEntry;
@@ -128,6 +129,34 @@ it('rejects malformed framing, corrupt content, invalid keys, and mismatched key
                 new ProtectionOptions('records', 'tenant=9', 'wrong'),
             ))->toThrow(DecryptionException::class);
     }
+});
+
+it('bounds protected values before expensive parsing or encryption work', function () {
+    $key = random_bytes(32);
+    $options = new ProtectionOptions('bounded');
+    $stringProtector = StringProtector::create();
+    $envelopeProtector = EnvelopeProtector::create();
+
+    expect(fn() => $stringProtector->protectWithBinaryKey(
+        str_repeat('x', (16 * 1024 * 1024) + 1),
+        $key,
+        $options,
+    ))->toThrow(EncryptionException::class)
+        ->and(fn() => $envelopeProtector->protectWithBinaryKeyResult(
+            str_repeat('x', (8 * 1024 * 1024) + 1),
+            $key,
+            $options,
+        ))->toThrow(EncryptionException::class)
+        ->and(fn() => $stringProtector->unprotectWithBinaryKey(
+            str_repeat('A', (24 * 1024 * 1024) + 1),
+            $key,
+            $options,
+        ))->toThrow(DecryptionException::class)
+        ->and(fn() => $stringProtector->unprotectWithBinaryKey(
+            'ep2.'.str_repeat('A', (32 * 1024) + 1).'.AA.AA',
+            $key,
+            $options,
+        ))->toThrow(DecryptionException::class);
 });
 
 it('roundtrips a property corpus across supported protection algorithms', function () {
