@@ -103,6 +103,10 @@ final readonly class JwsSignature
 
     private function opensslKey(): OpenSSLAsymmetricKey
     {
+        if (!$this->algorithm instanceof AsymmetricJwtAlgorithm || $this->algorithm->isEdDsa()) {
+            throw new ConfigurationException('The selected JWS algorithm does not use an OpenSSL key.');
+        }
+
         $key = $this->signing
             ? openssl_pkey_get_private($this->key, $this->passphrase ?? '')
             : openssl_pkey_get_public($this->key);
@@ -113,12 +117,16 @@ final readonly class JwsSignature
         if (!is_array($details)) {
             throw new ConfigurationException('Unable to inspect JWS key material.');
         }
-        if (str_starts_with($this->algorithm->value, 'RS') || str_starts_with($this->algorithm->value, 'PS')) {
+        if ($this->algorithm->isRsa()) {
             if (($details['type'] ?? null) !== OPENSSL_KEYTYPE_RSA || !is_int($details['bits'] ?? null) || $details['bits'] < 2048) {
                 throw new ConfigurationException('RSA JWS keys must contain at least 2048 bits.');
             }
-        } elseif (($details['type'] ?? null) !== OPENSSL_KEYTYPE_EC) {
-            throw new ConfigurationException('ECDSA JWS requires an EC key.');
+        } elseif ($this->algorithm->isEc()) {
+            if (($details['type'] ?? null) !== OPENSSL_KEYTYPE_EC) {
+                throw new ConfigurationException('ECDSA JWS requires an EC key.');
+            }
+        } else {
+            throw new ConfigurationException('Unsupported JWS key family.');
         }
 
         return $key;
@@ -161,11 +169,7 @@ final readonly class JwsSignature
     private function validateKey(): void
     {
         if ($this->algorithm instanceof SymmetricJwtAlgorithm) {
-            $minimum = match ($this->algorithm) {
-                SymmetricJwtAlgorithm::HS256 => 32,
-                SymmetricJwtAlgorithm::HS384 => 48,
-                SymmetricJwtAlgorithm::HS512 => 64,
-            };
+            $minimum = $this->algorithm->minimumKeyBytes();
             if (strlen($this->key) < $minimum) {
                 throw new ConfigurationException(sprintf('%s JWS keys must contain at least %d raw bytes.', $this->algorithm->value, $minimum));
             }
