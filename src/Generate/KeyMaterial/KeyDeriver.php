@@ -14,9 +14,19 @@ final class KeyDeriver
 
     private const int MAX_PASSWORD_DERIVED_KEY_BYTES = 64;
 
+    private const int MAX_PURPOSE_CONTEXT_BYTES = 512;
+
+    private const int MAX_PURPOSE_KEY_BYTES = 64;
+
+    private const int MAX_PURPOSE_LABEL_BYTES = 128;
+
     private const int MIN_PASSWORD_DERIVATION_MEMORY_BYTES = 8192;
 
     private const int MIN_PASSWORD_DERIVED_KEY_BYTES = 16;
+
+    private const int MIN_PURPOSE_KEY_BYTES = 16;
+
+    private const int MIN_PURPOSE_MASTER_KEY_BYTES = 32;
 
     public function deriveBinaryFromPassword(
         #[\SensitiveParameter]
@@ -44,6 +54,48 @@ final class KeyDeriver
             $opslimit,
             $memlimit,
         ));
+    }
+
+    public function derivePurposeKey(
+        #[\SensitiveParameter]
+        string $masterKey,
+        string $label,
+        string $context = '',
+        int $length = 32,
+        ?string $salt = null,
+    ): string {
+        return Base64Url::encode($this->derivePurposeKeyBinary(
+            Base64Url::decode($masterKey),
+            $label,
+            $context,
+            $length,
+            $salt === null ? '' : Base64Url::decode($salt),
+        ));
+    }
+
+    public function derivePurposeKeyBinary(
+        #[\SensitiveParameter]
+        string $masterKey,
+        string $label,
+        string $context = '',
+        int $length = 32,
+        string $salt = '',
+    ): string {
+        if (strlen($masterKey) < self::MIN_PURPOSE_MASTER_KEY_BYTES) {
+            throw new ConfigurationException(sprintf(
+                'Purpose master key must contain at least %d raw bytes.',
+                self::MIN_PURPOSE_MASTER_KEY_BYTES,
+            ));
+        }
+        $this->assertPurposePart($label, self::MAX_PURPOSE_LABEL_BYTES, 'Purpose key label', allowEmpty: false);
+        $this->assertPurposePart($context, self::MAX_PURPOSE_CONTEXT_BYTES, 'Purpose key context', allowEmpty: true);
+        $this->assertOutputLength($length, self::MIN_PURPOSE_KEY_BYTES, self::MAX_PURPOSE_KEY_BYTES, 'Purpose-derived key length');
+
+        $info = 'epicrypt:purpose-key:v1'
+            . pack('N', strlen($label)) . $label
+            . pack('N', strlen($context)) . $context;
+
+        return $this->deriveHkdf($masterKey, $length, HkdfAlgorithm::SHA256, $info, $salt);
     }
 
     public function hkdf(
@@ -98,6 +150,20 @@ final class KeyDeriver
     {
         if ($length < $minimum || $length > $maximum) {
             throw new ConfigurationException(sprintf('%s must be between %d and %d bytes.', $label, $minimum, $maximum));
+        }
+    }
+
+    private function assertPurposePart(string $value, int $maximum, string $label, bool $allowEmpty): void
+    {
+        $length = strlen($value);
+        if ((!$allowEmpty && $length === 0) || $length > $maximum || preg_match('/[\x00-\x1F\x7F]/', $value) === 1) {
+            $minimum = $allowEmpty ? 0 : 1;
+            throw new ConfigurationException(sprintf(
+                '%s must be %d..%d bytes and contain no control characters.',
+                $label,
+                $minimum,
+                $maximum,
+            ));
         }
     }
 
