@@ -9,6 +9,8 @@ use Infocyph\Epicrypt\Auth\OAuth\OAuthClientAuthenticationMethod;
 use Infocyph\Epicrypt\Auth\OAuth\OAuthClientType;
 use Infocyph\Epicrypt\Auth\OAuth\OAuthErrorCode;
 use Infocyph\Epicrypt\Auth\OAuth\OAuthGrantType;
+use Infocyph\Epicrypt\Auth\OAuth\OAuthProtocolError;
+use Infocyph\Epicrypt\Exception\ConfigurationException;
 use Infocyph\Epicrypt\Tests\Support\InMemoryOAuthClientStore;
 
 function phaseDSecurityClient(
@@ -79,6 +81,24 @@ it('rejects omitted ambiguous redirect and unsupported response types safely', f
         ->and($unsupportedResult->error?->code)->toBe(OAuthErrorCode::UNSUPPORTED_RESPONSE_TYPE)
         ->and($unsupportedResult->error?->redirectUri)->toBe('https://client.example/callback')
         ->and($unsupportedResult->error?->state)->toBe('state-1');
+});
+
+it('requires issuer identification when serializing a redirectable authorization error', function () {
+    $error = new OAuthProtocolError(
+        OAuthErrorCode::INVALID_REQUEST,
+        'https://client.example/callback',
+        'state-1',
+    );
+
+    expect(fn() => $error->responseParameters())->toThrow(ConfigurationException::class)
+        ->and($error->responseParameters('https://issuer.example'))->toBe([
+            'error' => 'invalid_request',
+            'iss' => 'https://issuer.example',
+            'state' => 'state-1',
+        ])
+        ->and((new OAuthProtocolError(OAuthErrorCode::INVALID_REQUEST))->responseParameters())->toBe([
+            'error' => 'invalid_request',
+        ]);
 });
 
 it('rejects malformed PKCE duplicated scope and invalid state after establishing the registered redirect', function () {
