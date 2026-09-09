@@ -241,10 +241,11 @@ The context keeps checkout state from being accepted as another token type.
 
    declare(strict_types=1);
 
+   use Infocyph\Epicrypt\Generate\KeyMaterial\Enum\KeyMaterialEncoding;
    use Infocyph\Epicrypt\Generate\KeyMaterial\KeyMaterialGenerator;
    use Infocyph\Epicrypt\Token\Payload\SignedPayload;
 
-   $signingKey = new KeyMaterialGenerator()->forMasterSecret(asBase64Url: false);
+   $signingKey = new KeyMaterialGenerator()->forMasterSecret(KeyMaterialEncoding::RAW);
    $payloads = new SignedPayload('checkout-state/v1');
    $state = $payloads->encode(
        ['cart_id' => 'cart-1847', 'return_path' => '/checkout/complete'],
