@@ -2,7 +2,7 @@
 
 Baseline: `f80092978328cccaef0d2233b08ce95b453dd90a` (Epicrypt 2.1 main when the 3.0 plan opened).
 
-Epicrypt 3.0 is unreleased. **Source/API compatibility is not a constraint while the final 3.0 surface is being built.** Superseded development APIs are removed instead of retained behind aliases/parallel implementations. Persisted cryptographic formats are tracked separately and remain compatible where explicitly frozen by fixtures.
+Epicrypt 3.0 is unreleased. **Source/API compatibility is not a constraint while the final 3.0 surface is being built.** Superseded development APIs are removed instead of retained behind aliases or parallel implementations. Persisted cryptographic formats are tracked separately and remain compatible where explicitly frozen by fixtures.
 
 ## Core/runtime decisions
 
@@ -40,42 +40,59 @@ Epicrypt 3.0 is unreleased. **Source/API compatibility is not a constraint while
 | `Auth\OAuth\AuthorizationCodeRecord/ConsumeStatus/StoreInterface` | Add | `8326444e`; atomic exact-state one-time consume. |
 | `Auth\OAuth\OAuthClientType/OAuthGrantType/OAuthClientAuthenticationMethod` | Add | `d2ff4c81`; typed registration profile. |
 | `Auth\OAuth\OAuthClientSecret` | Add | `d2ff4c81`; one-way secret material only. |
-| `Auth\OAuth\OAuthClientKeySet` | Add | `d2ff4c81`; bounded public-only assertion JWKS, explicit alg/kid. |
-| `Auth\OAuth\OAuthClient` | Add | `d2ff4c81`; immutable protocol registration snapshot. |
+| `Auth\OAuth\OAuthClientKeySet` | Add | `d2ff4c81`; bounded public-only assertion JWKS. |
+| `Auth\OAuth\OAuthClient` | Add/finalized auth-core profile | `d2ff4c81`, `5384f694`; immutable snapshot and non-empty registered resource audience(s). |
 | `Auth\OAuth\OAuthClientStoreInterface` | Add | `d2ff4c81`; exact case-sensitive read-only runtime lookup. |
-| `Auth\OAuth\OAuthClientAssertion*` + `OAuthClientAuthenticator` | Add | `5c01d1bb`; RFC-7523-style strict `private_key_jwt`, bounded claims/signature/replay. |
-| OAuth-specific replay-store duplicate | Do not add | `5c01d1bb`; reuse generic atomic `JwtReplayStoreInterface` for client assertions and DPoP. |
+| `Auth\OAuth\OAuthClientAssertion*` + `OAuthClientAuthenticator` | Add | `5c01d1bb`; strict `private_key_jwt`, bounded claims/signature/replay. |
+| OAuth-specific replay-store duplicate | Do not add | reuse `JwtReplayStoreInterface`. |
 | `Auth\OAuth\OAuthAuthorizationRecord/StoreInterface` | Add | `143b1c21`; approved authorization state/revocation. |
 | `Auth\OAuth\OAuthAccessTokenStatusRecord/StoreInterface` | Add | `143b1c21`; optional authoritative JWT `jti` status/revocation. |
 | `Auth\Personal\PersonalAccessTokenRecord/StoreInterface` | Add | `143b1c21`; metadata-only PAT state/list/revoke/revoke-all. |
-| Epicrypt consent-history store | Do not add | Consent history is application policy; Epicrypt persists approved authorization state only. |
-| `Auth\OAuth\OAuthErrorCode/OAuthProtocolError` | Add | `ad14609c`; transport-neutral OAuth error + safe redirect target/state. |
-| `Auth\OAuth\OAuthAuthorizationRequest/Result` | Add | `ad14609c`; validated authorization request/result DTOs. |
-| `Auth\OAuth\OAuthAuthorizationRequestValidator` | Add | `ad14609c`; bounded duplicate-aware parameter input, exact redirect, code-only, S256 PKCE, grant/scope checks. |
-| `Auth\OAuth\OAuthEndpointCapability/OAuthEndpointCapabilityCatalog` | Add | `ad14609c`; explicit capabilities only, no route registration. |
+| Epicrypt consent-history store | Do not add | consent history is application policy. |
+| `Auth\OAuth\OAuthErrorCode/OAuthProtocolError` | Add/harden | `ad14609c`, `5f1fa6fc`; safe redirect/state + response parameter generation. |
+| `Auth\OAuth\OAuthAuthorizationRequest/Result` | Add | `ad14609c`, `5384f694`; validated scopes/audiences and interaction entry. |
+| `Auth\OAuth\OAuthAuthorizationRequestValidator` | Add/final Phase D core | `ad14609c`, `5384f694`, `5f1fa6fc`; bounded duplicate-aware input, exact redirect, code-only, S256, scope/audience checks, invalid-state rejection. |
+| `Auth\OAuth\OAuthAuthorizationAudienceResolverInterface` | Add | `5384f694`; application scope→resource mapping hook. |
+| `Auth\OAuth\OAuthSingleAudienceResolver` | Add | `5384f694`; safe default only for single-audience clients. |
+| `Auth\OAuth\OAuthAuthorizationInteractionRequirement` | Add | `530e379d`; subject authentication vs authorization decision. |
+| `Auth\OAuth\OAuthAuthorizationInteraction` | Add | `530e379d`, `5f1fa6fc`; typed framework-neutral interaction plus safe denial. |
+| `Auth\OAuth\OAuthAuthorizationApproval` | Add | `530e379d`; scope narrowing, auth context, bounded authorization lifetime. |
+| `Auth\OAuth\OAuthAuthorizationCodeIssuer` | Add | `530e379d`, `5f1fa6fc`; approved authorization + JWE + authoritative code create. |
+| `Auth\OAuth\OAuthAuthorizationCodeIssueResult` | Add | `5f1fa6fc`; raw code only at response time, includes response `code`/`iss`/`state`. |
+| `Auth\OAuth\OAuthAuthorizationCodeConsumer` | Add | `530e379d`; decrypt + exact client/redirect/PKCE + authorization state + atomic consume. |
+| `Auth\OAuth\OAuthAuthorizationCodeConsumeResult/Status` | Add | `530e379d`; audit-safe internal consume classification. |
+| `Auth\OAuth\OAuthEndpointCapability/OAuthEndpointCapabilityCatalog` | Add | `ad14609c`; explicit capabilities only, no routes. |
 | auth in-memory/conformance stores | Test-only | `168c7b3e`, `8326444e`, `d2ff4c81`, `143b1c21`. |
 
-### Authorization-request input boundary
+## Authorization protocol position
 
-The authorization validator accepts a transport-neutral parameter map where a scalar represents one occurrence and a list preserves repeated occurrences. Singleton OAuth parameters represented as repeated values are rejected. This prevents framework parsers from silently deciding duplicate semantics for security-critical authorization parameters.
+The authorization validator accepts a transport-neutral parameter map where a scalar represents one occurrence and a list preserves repeated occurrences. Singleton OAuth parameters represented as repeated values are rejected rather than delegated to framework parsing behavior.
 
-A redirect becomes eligible for protocol-error redirection only after exact registration validation (or selection of the sole registered redirect when the request omits `redirect_uri`). Unknown/disabled clients and redirect mismatches never produce a redirect target in the result.
+A redirect becomes eligible for protocol-error redirection only after exact registration validation, or selection of the sole registered redirect when `redirect_uri` is omitted. Unknown/disabled clients, ambiguous omitted redirects, and redirect mismatches never receive a redirect target.
 
-### Authorization-code persistence position
+Every OAuth client has at least one registered resource audience. `OAuthSingleAudienceResolver` only resolves the single-audience case. Multi-resource clients must provide `OAuthAuthorizationAudienceResolverInterface`; Epicrypt validates the returned list is non-empty, bounded, unique, and contained by client registration.
+
+Subject authentication and authorization decision are typed interactions. Consent-history persistence is not part of Epicrypt. Approval may narrow scopes but cannot widen the validated request. Denial produces `access_denied` only from an already validated interaction.
+
+`OAuthAuthorizationCodeIssuer` creates authoritative approved authorization state, issues the protected JWE, and persists exact code state. `OAuthAuthorizationCodeConsumer` validates cryptography, exact client, exact redirect, PKCE S256, active authorization state, and atomic code consumption. Wrong binding attempts do not consume the code. Replay is distinguished internally but token-endpoint mapping will remain protocol-safe.
+
+Successful authorization response parameters include RFC 9207 `iss`; error responses can include the same issuer and validated `state`.
+
+## Authorization-code persistence position
 
 Raw authorization-code JWE is never persisted. Persistence uses authenticated `jti` plus exact canonical state. Successful cryptographic decryption does not provide one-time semantics; `AuthorizationCodeStoreInterface` is authoritative for consume/replay state.
 
-### Refresh persistence position
+## Refresh persistence position
 
 Raw refresh JWE is never persisted and no digest of the raw JWE is required. The authenticated credential exposes token ID/family/authorization state; the store persists exact authoritative state and atomically consumes/replaces it. Decryption proves cryptographic validity, not active lifecycle state.
 
-### Client credential position
+## Client credential position
 
 Client runtime registration is immutable/read-only. Secret credentials are stored as one-way hashes. `private_key_jwt` trusts only explicitly registered public asymmetric keys: no embedded `jwk`, remote `jku`, or `x5*` locator can choose trust material. Assertions require bounded `iss/sub/aud/exp/iat/jti`, are algorithm/key pinned, and consume replay state through `JwtReplayStoreInterface` through `exp + leeway`.
 
-### Authoritative state position
+## Authoritative state position
 
-OAuth authorization, optional access-token status and PAT active/revoked state are security-sensitive authoritative reads. Adapters must not return stale active records after revocation/disablement commits. PAT raw JWTs are never persisted. `revokeAll()` and concurrent issue for one PAT subject require a deterministic serialization point.
+OAuth authorization, optional access-token status, and PAT active/revoked state are security-sensitive authoritative reads. Adapters must not return stale active records after revocation/disablement commits. PAT raw JWTs are never persisted. `revokeAll()` and concurrent PAT issue for one subject require a deterministic serialization point.
 
 ## Confirmed 3.0 removals/renames
 
@@ -94,10 +111,12 @@ OAuth authorization-code/refresh JOSE and the new auth-state APIs are unreleased
 
 ## Update rule during 3.0 development
 
-After every public batch:
+After every public phase/batch:
 
 1. record added/removed/renamed public symbols here;
 2. prefer the final 3.0 API over compatibility shims;
 3. update focused tests and plan checkboxes with implementing commit;
 4. distinguish source/API changes from persisted-format compatibility;
 5. freeze this inventory only when the release-candidate public surface is intentionally stable.
+
+Current synchronization point: Phase D complete through `5f1fa6fc`.
