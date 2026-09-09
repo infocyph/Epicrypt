@@ -31,13 +31,6 @@ final class CertificateBench
 
     private string $pfx;
 
-    public function setUp(): void
-    {
-        $this->exchange = KeyExchange::sodium();
-        $this->alice = KeyPairGenerator::sodium()->generate(asBase64Url: true);
-        $this->bob = KeyPairGenerator::sodium()->generate(asBase64Url: true);
-    }
-
     #[Bench\BeforeMethods('setUp')]
     public function benchHkdfKeyExchange(): void
     {
@@ -65,6 +58,13 @@ final class CertificateBench
     public function benchPhpseclibPfxImport(): void
     {
         $this->pkcs12->import($this->pfx, 'benchmark-password');
+    }
+
+    public function setUp(): void
+    {
+        $this->exchange = KeyExchange::sodium();
+        $this->alice = KeyPairGenerator::sodium()->generate(asBase64Url: true);
+        $this->bob = KeyPairGenerator::sodium()->generate(asBase64Url: true);
     }
 
     public function setUpPki(): void
