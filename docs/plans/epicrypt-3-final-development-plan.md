@@ -1,206 +1,202 @@
 # Epicrypt 3.0 — Final Development and Release Plan
 
-## Status
+## Final status
 
 Target release: **Epicrypt 3.0**
 
-Planning/release-candidate branch: `epicrypt-3/architecture-plan`
+Release-candidate branch: `epicrypt-3/architecture-plan`
 
-Baseline audited from `main`: `f80092978328cccaef0d2233b08ce95b453dd90a`.
+Audited baseline: `f80092978328cccaef0d2233b08ce95b453dd90a` (`main` when the 3.0 work started).
 
-Implementation status: **Phases A–G complete. Phase H release acceptance is active.**
+Implementation status: **Phases A–H complete. Epicrypt 3.0 is release-ready pending the deliberate maintainer actions to merge/tag/publish.**
 
-Source/API backward compatibility is not a release constraint for this major. **Persisted cryptographic compatibility is a separate hard release constraint.** Existing valid Epicrypt 2.x encrypted, signed and protected-file artifacts remain readable/verifiable unless a concrete security reason requires retirement and an explicit migration path is supplied.
+Release-ready implementation head: `dd6beb75eeefc11cd253862105660d89b6fda441`.
 
-Release-candidate acceptance rule: the branch is not release-ready until the final exact branch head passes both Epicrypt acceptance workflows and the Foundation/Pathwise/OTP dependency composition is verified.
+Acceptance evidence on that head:
+
+- **Epicrypt 3 Phase A+B Gates #172** — run `34317347038` — **green**;
+- **Security & Standards #220** — run `34317347426` — **green**;
+- Foundation + Epicrypt 3 + OTP 6.1 + Pathwise 4 Composer composition — **green on PHP 8.4 and PHP 8.5** inside A+B #172;
+- PR #30 is titled **Epicrypt 3.0 release candidate**, has release-candidate scope/documentation, is open, mergeable, and **ready for review**.
+
+The final ledger/status commit after `dd6beb75` changes documentation only. It must remain green under the same PR checks before a maintainer tags/publishes the release; no additional runtime implementation work is planned.
+
+Source/API backward compatibility is intentionally not a constraint for this major. **Persisted cryptographic compatibility is a separate hard release constraint.** Valid Epicrypt 2.x encrypted/signed/protected-file artifacts remain readable/verifiable unless a future release has a concrete security reason, frozen migration fixtures and an explicit migration path.
 
 ---
 
-## Progress ledger
+## Phase ledger
 
-### Phase A — baseline, formats and API inventory — complete
+### Phase A — baseline, durable formats and API inventory — complete
 
-Completed:
+- [x] freeze stable Epicrypt 2.x string-protection fixture;
+- [x] freeze stable Epicrypt 2.x protected-file fixture;
+- [x] freeze stable signed-payload v2 fixture;
+- [x] capture comparable baseline/current benchmark evidence;
+- [x] inventory public surfaces and record intentional 3.0 removals/changes;
+- [x] separate package API compatibility from persisted cryptographic compatibility;
+- [x] reject package-major-driven wire-format bumps.
 
-- froze durable Epicrypt 2.x compatibility fixtures for protected strings, protected files and signed-payload v2 tokens;
-- captured baseline/current benchmark evidence before architectural changes;
-- inventoried public surfaces and recorded every intentional 3.0 removal/contract change in `epicrypt-3-public-api-inventory.md`;
-- separated package API compatibility from persisted-format compatibility;
-- established the rule that package major version does not automatically create a new cryptographic wire format.
+Result: 3.0 continues to read/verify the valid frozen 2.x formats.
 
-Result: the durable `ep2` string/file framing and signed-payload v2 formats remain supported by 3.0 compatibility tests.
+### Phase B — stream-first file/integrity core and Pathwise decoupling — complete
 
-### Phase B — stream-first crypto and Pathwise decoupling — complete
+- [x] make native caller-owned PHP streams the core of `SecretStream`;
+- [x] make native caller-owned PHP streams the core of `FileProtector`;
+- [x] add stream-native `FileHasher`;
+- [x] retain local-path convenience APIs;
+- [x] add bounded short-read/short-write handling;
+- [x] add shared input locking and atomic local output publication;
+- [x] add metadata-only `ProtectionMetadata` for stream operations;
+- [x] remove every production Pathwise import;
+- [x] remove `infocyph/pathwise` from production Composer `require`;
+- [x] retain Pathwise `^4.0` only in `require-dev` for interoperability;
+- [x] test independent Pathwise 4 `StorageContext` stream isolation;
+- [x] add `composer install --no-dev` / no-Pathwise production smoke gate;
+- [x] benchmark stream core versus local wrappers.
 
-Completed:
-
-- moved `SecretStream`, `FileProtector` and `FileHasher` to caller-owned native PHP stream cores;
-- retained local-path convenience APIs;
-- added bounded short-read/short-write handling;
-- added shared input locking and atomic local output publication;
-- added `ProtectionMetadata` for stream operations;
-- removed every production Pathwise import;
-- removed `infocyph/pathwise` from Composer `require`;
-- retained Pathwise `^4.0` only in `require-dev` for explicit interoperability tests;
-- added independent `StorageContext` Pathwise 4 stream-isolation coverage;
-- added production `composer install --no-dev` / no-Pathwise smoke coverage;
-- benchmarked stream-core versus local-wrapper overhead.
-
-Final ownership rule:
-
-- storage/application code resolves paths and opens remote/adapter streams;
-- Epicrypt owns authenticated streaming crypto and local atomic crypto publication;
-- caller-owned stream publication/rollback remains caller-owned;
-- Epicrypt owns no storage registry, global mount or application path policy.
+Final ownership: storage/application code resolves remote/adapter paths and owns stream publication semantics; Epicrypt owns authenticated stream crypto and the single local atomic crypto-publication layer. Epicrypt owns no storage registry, global mount or application path policy.
 
 ### Phase C — native phpseclib 4 — complete
 
-Closed migration baseline: `d1bf66b2e3a9882a6f7bf8581586b833c0aeb362`.
+- [x] require `phpseclib/phpseclib ^4.0.1`;
+- [x] migrate natively to phpseclib 4 namespaces/APIs;
+- [x] reject a `^3 || ^4` shim and runtime namespace probing;
+- [x] migrate JWT/JWS RSA-PSS support;
+- [x] migrate JWE RSA-OAEP-256 support;
+- [x] migrate BigInteger/JWK/JWKS operations;
+- [x] migrate encrypted private-key/JWK paths;
+- [x] normalize backend failures into Epicrypt-owned exceptions/results;
+- [x] prevent backend key/passphrase detail leakage;
+- [x] keep independent JOSE interoperability coverage;
+- [x] expose no phpseclib implementation object through public Epicrypt contracts.
 
-Completed:
+### Phase D — generic application crypto/key lifecycle — complete
 
-- raised phpseclib to `^4.0.1`;
-- migrated natively to the `phpseclib4\` namespace;
-- rejected a dual-major `^3 || ^4` compatibility shim;
-- migrated JWT/JWS RSA-PSS, JWE RSA-OAEP-256, BigInteger/JWK/JWKS and encrypted-private-key paths;
-- normalized backend exceptions into Epicrypt-owned error surfaces;
-- prevented private-key/passphrase/backend details from leaking into public messages;
-- superseded the old dependency-only phpseclib widening path;
-- retained independent JOSE interoperability tests.
+- [x] add generic purpose-bound timed `PurposeToken` mechanics;
+- [x] support `iat`, `exp`, optional `nbf`, generated token IDs, purpose/context/subject binding and caller claims;
+- [x] add typed token verification failure/results;
+- [x] add exact KeyRing active/fallback signing and verification with authenticated key IDs;
+- [x] add public-safe key metadata;
+- [x] add purpose/domain-separated `KeyDeriver` application subkeys;
+- [x] add `AsymmetricSigningKeySet` readiness, pair coherence and public-only JWKS export;
+- [x] add dedicated `KeyPurpose::SIGNED_URL`;
+- [x] add authenticated KeyRing signed-URL rotation while preserving raw-secret v2 signed URLs;
+- [x] add `KeyMaterialEncoding::{BASE64URL,RAW,HEX}`;
+- [x] make `KeyMaterialGenerator` the canonical master/application/token-secret generator;
+- [x] add `forTokenSecret()`;
+- [x] remove duplicate `Password\Secret\MasterSecretGenerator`;
+- [x] remove duplicate `Generate\KeyMaterial\TokenMaterialGenerator`;
+- [x] use `RandomBytesGenerator::string()` for generic opaque/random token material;
+- [x] use `KeyMaterialGenerator::forTokenSecret()` for cryptographic signing/MAC token secrets;
+- [x] keep environment-file selection/editing/config/CLI ownership in Foundation.
 
-Public Epicrypt APIs expose no phpseclib implementation objects.
+### Phase E — JOSE, OAuth, OpenID and remote-key hardening — complete
 
-### Phase D — generic application crypto extraction — complete
-
-Completed generic ownership intended for Foundation and other consumers:
-
-- `PurposeToken` for purpose-bound timed signed tokens with `iat`, `exp`, optional `nbf`, generated token ID, optional subject, context binding and typed verification results;
-- exact KeyRing active/fallback signing and verification with authenticated key IDs;
-- public-safe key metadata;
-- `KeyDeriver` for purpose-labelled/domain-separated application subkeys;
-- `AsymmetricSigningKeySet` for signing-key readiness, pair coherence, algorithm/purpose/issuer eligibility and public-only JWKS export;
-- `KeyPurpose::SIGNED_URL` and KeyRing-aware signed-URL rotation while preserving raw-secret v2 signed-URL format;
-- `KeyMaterialEncoding::{BASE64URL,RAW,HEX}`;
-- canonical `KeyMaterialGenerator::forMasterSecret()` and `forTokenSecret()`;
-- removal of duplicate `Password\Secret\MasterSecretGenerator`;
-- removal of duplicate `Generate\KeyMaterial\TokenMaterialGenerator`;
-- generic random token/identifier text now uses `RandomBytesGenerator::string()`;
-- cryptographic signing/MAC token secrets use `KeyMaterialGenerator::forTokenSecret()`;
-- file/environment crypto publication ownership documented so applications do not implement a second crypto-adjacent staging protocol.
-
-Foundation remains owner of `.env` file selection/editing/cache clearing, application config, application paths, CLI behavior and audit policy.
-
-### Phase E — JOSE, OAuth, OpenID and remote key hardening — complete
-
-Completed:
-
-- strict JWT issuer/verifier algorithm and `typ` separation;
-- curated HS/RS/PS/ES/EdDSA policies;
-- RSA size and EC curve/algorithm checks;
-- JWK/JWKS import/export validation and public/private/symmetric export separation;
-- certificate-bound JWK/JWKS checks;
-- compact, flattened and general JWS support;
-- detached JWS and RFC 7797 `b64=false` critical-header handling;
-- JWE with A256GCM content encryption and explicit supported key-management algorithms;
-- nested JOSE support without header-driven algorithm selection;
-- DPoP issue/verify/binding with atomic replay-store contract;
-- OpenID ID-token nonce, authorized-party, auth-time and half-hash validation;
-- Remote JWKS and OpenID discovery using explicit trusted configuration;
-- no token-driven `jku`/`x5u` retrieval;
-- bounded metadata/JWKS documents, cache lifetimes, stale use and unknown-`kid` forced refresh;
-- explicit HTTP-client ownership of redirects, DNS/IP policy and network timeout behavior;
-- durable opaque refresh-token lifecycle with atomic consume/replace, family reuse response, revocation and optional DPoP binding;
-- shared-store requirements documented for replay/refresh state.
+- [x] strict JWT issuer/verifier algorithm and `typ` separation;
+- [x] curated HS/RS/PS/ES/EdDSA policy;
+- [x] RSA-size and EC-curve/algorithm validation;
+- [x] validated JWK/JWKS public/private/symmetric export boundaries;
+- [x] certificate-bound JWK/JWKS validation;
+- [x] compact/flattened/general JWS;
+- [x] detached JWS and RFC 7797 `b64=false` critical-header behavior;
+- [x] JWE A256GCM content encryption with curated key-management algorithms;
+- [x] nested JOSE without untrusted-header algorithm selection;
+- [x] DPoP issue/verify/binding and atomic replay-store contract;
+- [x] OpenID nonce, authorized-party, authentication-age and half-hash validation;
+- [x] Remote JWKS/OpenID discovery from trusted configuration only;
+- [x] reject token-driven `jku`/`x5u` retrieval;
+- [x] bound remote documents, cache lifetimes, stale use and unknown-`kid` refresh;
+- [x] keep redirect/DNS/IP/network-timeout policy at the supplied HTTP-client boundary;
+- [x] durable opaque refresh-token rotation/reuse/revocation contract;
+- [x] require atomic shared stores for refresh/replay state.
 
 ### Phase F — PKI modernization — complete
 
-Completed:
+- [x] bounded backend-neutral `CertificateInspector` via phpseclib 4;
+- [x] bounded `CsrInspector` with CSR self-signature validation;
+- [x] explicit `CertificateChainVerifier` with caller-supplied trust anchors/intermediates/purpose;
+- [x] no hidden CA discovery, AIA fetching or mutable process-global trust registry;
+- [x] retain OpenSSL accelerated key generation and issuance;
+- [x] retain `Pkcs12` as the public PFX/PKCS#12 boundary;
+- [x] use phpseclib 4 for bounded PFX parsing/model validation;
+- [x] use OpenSSL for interoperable PKCS#12 serialization;
+- [x] validate exported PFX through phpseclib before publication;
+- [x] require matching supported private key + certificate on import;
+- [x] normalize imported private key to unencrypted PKCS#8 after successful password validation;
+- [x] add bidirectional OpenSSL/phpseclib interoperability coverage;
+- [x] add certificate/PKI mutation coverage;
+- [x] benchmark OpenSSL/phpseclib parsing/key-generation/PFX paths;
+- [x] explicitly defer CRL verification until an explicit-state, bounded, no-hidden-network design exists;
+- [x] explicitly exclude CMS from 3.0 until a concrete consumer justifies its surface;
+- [x] keep OCSP/AIA network retrieval outside core.
 
-- bounded backend-neutral `CertificateInspector` through phpseclib 4;
-- bounded `CsrInspector` with CSR self-signature validation;
-- explicit `CertificateChainVerifier` separating trust anchors from untrusted intermediates and certificate purpose;
-- no hidden CA discovery, AIA fetching or mutable process-global trust registry;
-- retained OpenSSL accelerated key generation and issuance APIs;
-- retained `Pkcs12` as the public PFX/PKCS#12 boundary;
-- phpseclib 4 performs bounded PFX parsing/model validation;
-- OpenSSL performs interoperable PKCS#12 serialization;
-- exported containers are reloaded/validated through phpseclib before publication;
-- import requires a supported private key and matching certificate;
-- private key is returned as normalized unencrypted PKCS#8 after successful password validation;
-- bidirectional OpenSSL/phpseclib interoperability tests added;
-- certificate/PKI mutation shard added;
-- OpenSSL/phpseclib parsing and PFX benchmark attribution added.
+### Phase G — password, bounds, secret hygiene and hardening — complete
 
-Explicit 3.0 non-features:
+- [x] make Argon2id the sole modern new-write password profile;
+- [x] remove `PasswordHashAlgorithm::ARGON2I` from the write API;
+- [x] preserve existing Argon2i verification through PHP and migrate on successful `verifyAndRehash()`;
+- [x] retain bcrypt only as explicit compatibility and enforce its 72-byte input limit;
+- [x] retain explicit Argon2/bcrypt cost bounds;
+- [x] reflection-audit secret-bearing production call chains for `#[SensitiveParameter]`;
+- [x] document safe logging/error-chain behavior;
+- [x] authenticate protected metadata and KeyRing selectors;
+- [x] bound compact protected input before expensive parse/crypto work;
+- [x] cap `StringProtector` plaintext at 16 MiB;
+- [x] cap encoded compact `ep2` at 24 MiB;
+- [x] cap encoded protected metadata header at 32 KiB;
+- [x] cap `EnvelopeProtector` plaintext at 8 MiB;
+- [x] direct larger arbitrary content to `FileProtector` streams;
+- [x] align benchmark source with PHPForge/Pint class-element ordering;
+- [x] preserve `PurposeToken` 48-character token IDs using canonical `RandomBytesGenerator::string(48)`.
 
-- no first-class CRL verifier: the available convenience validation path would reintroduce shared/global issuer state; a future API must accept issuer/CRL explicitly and remain bounded/no-network;
-- no CMS API: no current consumer justifies the parser/interoperability/misuse surface;
-- no OCSP or AIA network fetching in core.
+### Phase H — documentation, ecosystem acceptance and release readiness — complete
 
-### Phase G — password, runtime bounds, secret hygiene and release hardening — complete
+- [x] README uses only final 3.0 key-material APIs;
+- [x] generation/password/data-protection/security/token/JOSE/PKI/error docs match final behavior;
+- [x] add `docs/migration-3.0.rst`;
+- [x] link migration guide from documentation index;
+- [x] finalize public API inventory with no unresolved 3.0 release decision;
+- [x] update PR #30 to release-candidate scope;
+- [x] mark PR #30 ready for review;
+- [x] production no-Pathwise install gate green;
+- [x] Pathwise 4 explicit-context stream interop green;
+- [x] Foundation + Epicrypt 3 + OTP 6.1 + Pathwise 4 dependency composition green on PHP 8.4;
+- [x] Foundation + Epicrypt 3 + OTP 6.1 + Pathwise 4 dependency composition green on PHP 8.5;
+- [x] PHP 8.4/8.5 prefer-lowest/prefer-stable QA green;
+- [x] PHPStan/Psalm/security analysis green;
+- [x] clean production install green;
+- [x] independent JOSE interoperability green;
+- [x] AEGIS/libsodium compatibility green;
+- [x] all security-critical mutation shards green, including data protection, JWE, JWS, validation policy, JWT policy, refresh token, signed helpers, primitive verification, Remote JOSE and certificate/PKI;
+- [x] Pest release policy runs with `fail_on_skipped_tests=true` and no actionable skipped/deprecated test remains;
+- [x] release-ready implementation head `dd6beb75` accepted by A+B #172 and Security #220.
 
-Completed:
-
-- Argon2id is the sole modern password new-write profile;
-- `PasswordHashAlgorithm::ARGON2I` is removed from the write API;
-- existing Argon2i hashes remain verifiable by PHP and migrate to Argon2id via `verifyAndRehash()` after successful authentication;
-- bcrypt remains explicit compatibility and rejects passwords over 72 bytes;
-- password cost bounds remain explicit;
-- sensitive-parameter coverage is audited across production call chains by reflection;
-- safe logging/error guidance forbids plaintext, keys, passphrases, raw tokens/proofs, PKCS#12 blobs and complete attacker-controlled JOSE/protected values;
-- protected metadata remains authenticated and key-rotation aware;
-- compact protected values now fail oversized input before expensive parsing/crypto;
-- `StringProtector` plaintext maximum: 16 MiB;
-- encoded compact `ep2` maximum: 24 MiB;
-- encoded protected header maximum: 32 KiB;
-- `EnvelopeProtector` plaintext maximum: 8 MiB;
-- larger content is directed to `FileProtector` streaming;
-- benchmark class-order/style contract aligned with PHPForge;
-- `PurposeToken` token IDs use the canonical `RandomBytesGenerator::string(48)` after removal of the duplicate token-material wrapper.
-
-### Phase H — documentation, ecosystem acceptance and release — active
-
-Completed documentation/repository work:
-
-- README examples use `KeyMaterialEncoding` rather than removed boolean key-material encoding switches;
-- token/security/generation/password/data-protection/PKI/error-handling docs match final 3.0 behavior;
-- `migration-3.0.rst` documents dependency, API, password, format, size-bound, PKI and Foundation-oriented migration;
-- migration guide linked from the documentation index;
-- public API inventory finalized with no unresolved 3.0 release decision;
-- PR #30 is the release-candidate integration PR.
-
-Remaining acceptance gates before tag/publish:
-
-- [ ] final exact-head `Epicrypt 3 Phase A+B Gates` workflow is green;
-- [ ] final exact-head `Security & Standards` workflow is green across PHP 8.4/8.5, lowest/stable, static/security analysis, clean install, independent JOSE, AEGIS and all mutation shards;
-- [ ] no actionable skipped/deprecated test remains under release policy;
-- [ ] Foundation dependency composition is verified with Epicrypt 3 + OTP 6.x + Pathwise 4;
-- [ ] Foundation application integration tests are green once its constraint points at a published Epicrypt 3 RC/stable version;
-- [ ] PR #30 metadata is updated from historical phase notes to release-candidate scope.
+Downstream note: after a 3.x RC/stable version is published, Foundation should replace its temporary `^2.1` dev constraint with the consumable 3.x line and run its own application-level PHP 8.4/8.5 CI. That is a **Foundation integration/release task**, not remaining Epicrypt 3 implementation work. The Composer blocker itself is already proven closed by Epicrypt's permanent ecosystem composition gate.
 
 ---
 
-## 1. Final ownership model
+## Final ownership model
 
 ### Epicrypt owns
 
 - cryptographic primitives and safe composition;
 - secret/key generation and deterministic derivation;
-- key identifiers, key rings, eligibility, rotation and signing readiness;
-- versioned authenticated/encrypted/signed formats;
-- purpose-bound timed-token mechanics;
-- password hashing/verification/rehash/generation policy;
+- key IDs, KeyRing eligibility/rotation/readiness;
+- authenticated/encrypted/signed format rules;
+- generic purpose-bound timed-token mechanics;
+- password hashing/verification/rehash policy;
 - JWT/JWS/JWE/JWK/JWKS, DPoP and OpenID cryptographic validation;
-- opaque/refresh-token generic cryptographic lifecycle contracts;
+- generic opaque/refresh-token cryptographic lifecycle contracts;
 - certificate/key/CSR/chain/PFX cryptographic operations;
-- local/stream data-protection transforms and framing;
+- local/stream data-protection transformations and framing;
 - integrity hashing/MAC/signature operations;
 - strict crypto bounds, algorithm policy and stable result/exception types.
 
 ### Pathwise owns
 
 - storage contexts/configuration/adapters;
-- path routing and storage identity;
+- path routing/storage identity;
 - adapter localization/staging/commit mechanics;
 - generic filesystem IO, upload/download/archive/sync/retention policy.
 
@@ -208,18 +204,18 @@ Epicrypt has no production Pathwise dependency and no ambient Pathwise state.
 
 ### OTP owns
 
-- OTP algorithms and provisioning;
-- TOTP/HOTP/AOTP behavior;
-- OTP replay/claim/consume semantics;
-- OTP recovery-code semantics;
+- OTP algorithms/provisioning;
+- TOTP/HOTP/AOTP semantics;
+- OTP replay/claim/consume behavior;
+- OTP-specific recovery codes;
 - passkey/WebAuthn ceremonies and MFA orchestration;
 - OTP persistence/cache contracts.
 
-Epicrypt does not depend on OTP in production.
+Epicrypt has no OTP production dependency.
 
 ### Foundation owns
 
-- configuration/environment selection;
+- application config/environment selection;
 - DI/provider/runtime lifecycle;
 - application paths and CLI;
 - HTTP/router/session/auth/application OAuth orchestration;
@@ -227,9 +223,9 @@ Epicrypt does not depend on OTP in production.
 - database/cache repositories and transactions;
 - application audit/diagnostics;
 - selecting/configuring Epicrypt, OTP and Pathwise;
-- adapting lower-level results into application/HTTP contracts.
+- adapting lower-layer results into application/HTTP contracts.
 
-Target dependency graph:
+Target graph:
 
 ```text
 Foundation
@@ -241,300 +237,223 @@ Epicrypt 3
   └── phpseclib 4
 
 OTP 6.x
-  └── no Epicrypt/Pathwise production dependency required
+  └── no Epicrypt/Pathwise production edge
 
 Pathwise 4
-  └── no Epicrypt/OTP dependency
+  └── no Epicrypt/OTP production edge
 ```
 
-No aliases/replaces, Pathwise 3 bridge or runtime compatibility shim is allowed to solve ecosystem composition.
+No aliases/replaces, Pathwise 3 bridge or runtime compatibility shim is used.
 
 ---
 
-## 2. Composer/dependency release contract
+## Release contracts
+
+### Composer/runtime
 
 Production:
 
 - PHP `>=8.4`;
 - `ext-hash`, `ext-json`, `ext-openssl`, `ext-sodium`;
 - phpseclib `^4.0.1`;
-- PSR clock/client/factory/simple-cache contracts as required;
+- required PSR clock/HTTP/cache interfaces;
 - **no Pathwise**;
 - **no OTP**.
 
-Development:
+Development keeps Pathwise `^4.0` for interoperability and `infocyph/phpforge: dev-main@dev` as the quality/security harness.
 
-- Pathwise `^4.0` for interoperability only;
-- `infocyph/phpforge: dev-main@dev` remains the required project quality harness;
-- HTTP mock/PSR-7 packages remain test-only where possible.
+### Persisted formats
 
-Release constraint guard must reject accidental unstable production constraints or reintroduction of Pathwise runtime coupling.
+Cryptographic format versioning is independent from Composer/package major version.
 
----
+Release invariants:
 
-## 3. Persisted-format contract
+- frozen 2.x string fixture decrypts under 3.0;
+- frozen 2.x protected-file fixture decrypts under 3.0;
+- frozen signed-payload v2 fixture verifies under 3.0;
+- domain/purpose/AAD/algorithm/key-ID metadata remains authenticated;
+- missing/unknown KeyRing selectors fail closed instead of scanning keys;
+- no unplanned 3.0 write-format migration exists.
 
-Epicrypt cryptographic format versioning is independent of Composer/package major version.
+### Stream/local IO
 
-Required for release:
+Caller-owned streams:
 
-- stable 2.x string fixture decrypts under 3.0;
-- stable 2.x protected-file fixture decrypts under 3.0;
-- stable signed-payload v2 fixture verifies under 3.0;
-- format metadata remains authenticated;
-- key IDs/purpose/AAD/domain/algorithm mismatches fail closed;
-- unknown/missing KeyRing selectors do not trigger broad key scanning;
-- no unplanned write-format migration is introduced.
+- bounded reads/writes;
+- no-progress detection;
+- short-write loops;
+- final SecretStream framing/tag validation;
+- no caller-stream closing;
+- no invented remote transaction/publication semantics.
 
-A future format retirement requires security/interoperability rationale, old/new fixtures, explicit read/write policy and migration documentation.
+Local-path wrappers:
 
----
+- local filesystem paths only;
+- same-path/scheme misuse rejected;
+- shared input locks;
+- restrictive sibling staging;
+- flush + atomic publish only after complete success;
+- preserve existing destination on failure;
+- clean staging artifacts.
 
-## 4. Stream/local IO contract
-
-Stream callers own stream lifetime and publication semantics. Epicrypt:
-
-- reads/writes bounded chunks;
-- detects no-progress reads before EOF;
-- loops across short writes;
-- validates final SecretStream tag/framing;
-- does not close caller-owned streams;
-- does not invent remote transaction semantics.
-
-Local wrappers:
-
-- require local paths;
-- reject scheme/wrapper paths;
-- reject same input/output where unsafe;
-- use shared input locks;
-- stage sibling output with restrictive permissions;
-- flush and atomically publish only complete authenticated operations;
-- preserve an existing destination on failed operation;
-- remove uncommitted staging artifacts.
-
----
-
-## 5. Key material and rotation contract
+### Key/password policy
 
 - explicit `KeyMaterialEncoding` only;
-- lengths mean raw entropy bytes before encoding;
-- Base64URL default for config/secret-manager material;
-- RAW for binary crypto APIs;
-- HEX where configuration requires text hex;
-- `KeyRing` requires explicit status/purpose/algorithm eligibility;
+- lengths represent raw entropy bytes before encoding;
+- KeyRing write/read eligibility is purpose/algorithm/status bound;
 - exactly one eligible active write key;
 - fallback keys are read-only;
-- retired/disabled keys are ineligible;
-- signed key selectors are authenticated before trust;
-- generic key metadata never exposes secret bytes;
-- derivation context/labels/subkey IDs are long-lived data contracts.
+- disabled/retired keys are ineligible;
+- derivation contexts/labels/subkey IDs are durable data contracts;
+- Argon2id is the default/new-write password algorithm;
+- Argon2i is legacy verification/rehash only;
+- bcrypt is explicit compatibility only.
 
----
+### JOSE/OAuth/OpenID
 
-## 6. Password contract
-
-- default/new write: Argon2id;
-- Argon2i: legacy verification/rehash only, no new-write enum;
-- bcrypt: explicit compatibility only;
-- bcrypt inputs over 72 bytes rejected;
-- Argon2 costs bounded;
-- login migration occurs only after successful password verification;
-- passwords are never encrypted or hashed with general-purpose fast digests.
-
----
-
-## 7. JOSE/OAuth/OpenID contract
-
-- algorithm/type policy fixed by trusted verifier configuration;
-- untrusted JOSE headers never choose crypto policy or remote destinations;
+- trusted configuration fixes algorithms/types;
+- untrusted headers never choose verification policy or remote destinations;
 - unknown critical headers fail;
-- JWK key type/curve/RSA size/metadata/algorithm must agree;
-- public JWKS never includes private/symmetric material;
-- secret JWK export is explicitly named;
-- DPoP/replay state requires shared atomic storage;
-- refresh-token store must atomically consume/replace and retain reuse evidence through grant lifetime;
+- JWK type/curve/RSA-size/metadata/algorithm must agree;
+- public JWKS contains no private/symmetric material;
+- DPoP and replay state require atomic shared storage;
+- refresh-token consume/replace/reuse handling requires atomic durable storage;
 - raw refresh tokens are never persisted;
-- Remote JWKS/OIDC retrieval accepts only trusted configured origins/allowed hosts with bounded documents/cache/stale behavior;
-- redirect/DNS/IP/network timeout enforcement belongs to the HTTP client boundary.
+- Remote JWKS/OpenID origins/hosts/documents/cache/stale behavior are bounded and explicit;
+- HTTP redirect/DNS/IP/network-timeout enforcement stays at the supplied HTTP-client boundary.
 
----
+### PKI
 
-## 8. PKI contract
-
-- phpseclib 4: bounded parser/model boundary;
-- OpenSSL: accelerated key generation/issuance/chain verification and interoperable PKCS#12 serialization;
-- no backend implementation object in public Epicrypt contracts;
-- trust anchors supplied explicitly;
-- intermediates untrusted and supplied explicitly;
-- no hidden CA/AIA/OCSP network discovery;
+- phpseclib 4 is the bounded parser/model boundary;
+- OpenSSL remains the accelerated key-generation/issuance/chain-verification/interoperable-PKCS12 backend;
+- no backend implementation object leaks into public contracts;
+- trust anchors/intermediates supplied explicitly;
+- no hidden CA/AIA/OCSP discovery;
 - chain verification is distinct from hostname verification;
-- PFX import/export bounded and key/certificate coherence checked;
-- CRL/CMS remain explicit non-goals for 3.0 as documented.
+- PFX import/export is bounded and key/certificate coherence checked;
+- CRL/CMS/OCSP/AIA-fetching are explicit 3.0 non-features as documented.
 
----
-
-## 9. Exception/result and secret-hygiene contract
+### Errors, secrets and bounds
 
 - expected protocol outcomes may use typed result objects;
-- configuration/programmer errors throw stable Epicrypt exceptions;
-- backend exceptions may be retained as `previous` for operator debugging but public messages remain non-sensitive;
-- `#[SensitiveParameter]` used across secret-bearing production call chains and audited by reflection;
-- no key/plaintext/password/passphrase/raw-token/proof/container leakage through messages or recommended logging;
-- deterministic auth/configuration failures are not retried as transient operations.
+- configuration/programmer failures use stable Epicrypt exceptions;
+- backend exceptions may be retained as `previous` but public messages remain non-sensitive;
+- no plaintext/key/password/passphrase/raw-token/proof/container leakage is recommended or tested;
+- attacker-controlled parsing/crypto work is explicitly bounded before expensive work where practical;
+- large arbitrary content uses streaming APIs rather than increased in-memory limits.
 
 ---
 
-## 10. Bounds and DoS contract
+## Release acceptance evidence
 
-All attacker-controlled parsing/crypto surfaces require explicit practical bounds before expensive work where possible, including:
+### A+B #172 — `34317347038` — green on `dd6beb75`
 
-- compact protected values and metadata;
-- file crypto chunks/frame lengths;
-- JOSE compact/JSON structures;
-- JWK/JWKS document/key counts and key sizes;
-- Remote OpenID/JWKS documents;
-- PKI/CSR/certificate/PFX inputs and chain counts;
-- password costs and token TTLs;
-- identifier/purpose/context/AAD lengths;
-- refresh/replay state transitions.
+Passed:
 
-Large arbitrary content belongs on streaming APIs rather than raising in-memory limits.
+- production install without Pathwise;
+- Pathwise 4 explicit-context stream interoperability;
+- frozen Epicrypt 2.1 baseline/current benchmark evidence;
+- **Foundation + Epicrypt 3 + OTP 6.1 + Pathwise 4 Composer resolution on PHP 8.4**;
+- **Foundation + Epicrypt 3 + OTP 6.1 + Pathwise 4 Composer resolution on PHP 8.5**;
+- explicit rejection of a resolved Pathwise 3 edge.
 
----
+The Foundation gate uses the real `foundation-3/close-26.6` branch, changes only its temporary CI copy from Epicrypt `^2.1` to `^3.0`, injects the current Epicrypt checkout as version `3.0.0`, and resolves the complete Foundation development dependency graph. No Foundation repository state is changed by this proof.
 
-## 11. Performance contract
+### Security & Standards #220 — `34317347426` — green on `dd6beb75`
 
-Benchmarks are attribution tools, not permission to weaken validation.
+Passed:
 
-Required benchmark areas:
-
-- stream core versus local wrapper;
-- primitive encrypt/decrypt/sign/verify/hash;
-- JOSE issue/verify/encrypt/decrypt;
-- Remote JOSE hot-cache behavior where deterministic;
-- password hashing/verification attribution;
-- certificate parsing/key generation/PFX import;
-- generation/derivation helpers.
-
-Security, compatibility, bounds and correctness take precedence over microbenchmark gains.
-
----
-
-## 12. Documentation contract
-
-Release documentation must contain:
-
-- installation/runtime requirements;
-- migration from 2.x;
-- persisted-format compatibility statement;
-- stream ownership/publication model;
-- data-protection size limits;
-- key encoding and derivation semantics;
-- Argon2id/legacy password migration policy;
-- JOSE/OAuth/DPoP/Remote JWKS security boundaries;
-- PKI backend split and explicit CRL/CMS non-goals;
-- safe logging/error guidance;
-- complete examples using only 3.0 public APIs.
-
-No documentation example may use a removed 3.0 API.
-
----
-
-## 13. Test/security release matrix
-
-Required exact-head gates:
-
-- Composer validation and stable runtime-constraint guard;
-- PHP 8.4 and PHP 8.5;
-- prefer-lowest and prefer-stable;
-- Pest full suite with release skip/deprecation policy;
-- Pint, PHPCS, PHPProbe, Deptrac, Rector and Composer Normalize;
-- PHPStan and Psalm security analysis;
-- Composer audit;
-- production clean install/no-dev smoke;
-- no-Pathwise runtime boundary test;
-- Pathwise 4 explicit-context interop;
+- PHP 8.4 prefer-lowest QA;
+- PHP 8.4 prefer-stable QA;
+- PHP 8.5 prefer-lowest QA;
+- PHP 8.5 prefer-stable QA;
+- PHP 8.4 analysis;
+- PHP 8.5 analysis;
+- Composer stable-runtime constraint guard;
+- Pest;
+- Pint;
+- PHPCS;
+- PHPProbe;
+- Deptrac;
+- Rector;
+- Composer Normalize;
+- PHPStan/Psalm/security analysis;
+- clean `--no-dev` production install;
 - independent JOSE interoperability;
-- AEGIS/libsodium compatibility job;
-- mutation shards for data protection, JWE, JWS, validation policy, JWT policy, refresh token, signed helpers, primitive verification, Remote JOSE and certificate/PKI;
-- frozen 2.x persisted compatibility fixtures;
-- adversarial malformed/tampered/boundary tests.
+- AEGIS on libsodium 1.0.22;
+- mutation: data protection;
+- mutation: JWE;
+- mutation: JWS;
+- mutation: validation policy;
+- mutation: JWT policy;
+- mutation: refresh token;
+- mutation: signed helpers;
+- mutation: primitive verification;
+- mutation: Remote JOSE;
+- mutation: certificate/PKI.
 
-Any red exact-head lane blocks release.
-
----
-
-## 14. Foundation acceptance
-
-Foundation integration should replace application-local generic crypto mechanics, not application ownership:
-
-Move/use Epicrypt for:
-
-- generic signed/timed HMAC token mechanics -> `PurposeToken`;
-- application cryptographic subkey derivation -> `KeyDeriver`;
-- canonical deployment secret generation -> `KeyMaterialGenerator`;
-- asymmetric signing-key readiness/JWKS coherence -> `AsymmetricSigningKeySet` + JOSE primitives;
-- file crypto over application-owned storage streams -> `FileProtector`.
-
-Keep in Foundation:
-
-- environment-file selection/editing/cache clearing;
-- application paths/config/CLI;
-- HTTP/OAuth server routes, grants and consent;
-- persistence/repositories/transactions;
-- application session/cookie/rate-limit/audit behavior;
-- WebAuthn/OTP domain orchestration.
-
-Foundation release acceptance requires the real dependency graph to resolve with Epicrypt 3 + OTP 6.x + Pathwise 4 and its PHP 8.4/8.5 CI to pass after the Epicrypt 3 RC/stable constraint is consumable.
+Optional reusable-workflow report/benchmark jobs that were not configured are not skipped tests. The test workflow itself uses the release `fail_on_skipped_tests=true` policy.
 
 ---
 
-## 15. Release sequence
+## Documentation/release artifacts
 
-1. [x] freeze 2.x durable-format fixtures and baseline evidence;
-2. [x] decouple Pathwise and ship stream-native file/integrity core;
-3. [x] migrate to native phpseclib 4.0.1+;
-4. [x] extract generic purpose-token/key/signing/readiness/generation surfaces;
-5. [x] harden JOSE, DPoP, Remote JWKS/OpenID and refresh lifecycle;
-6. [x] modernize PKI and close CRL/CMS decisions;
-7. [x] finalize password/runtime/secret-hygiene/bounds policy;
-8. [x] finalize 3.0 migration docs and API inventory;
-9. [ ] pass final exact-head Epicrypt workflows;
-10. [ ] verify Foundation ecosystem dependency composition;
-11. [ ] update PR #30 as non-draft release candidate;
-12. [ ] after a consumable RC/stable version exists, run Foundation PHP 8.4/8.5 integration and close its Point 26.5;
-13. [ ] tag/publish Epicrypt 3.0 only after all release gates are green.
+- [x] README finalized;
+- [x] Sphinx documentation index finalized;
+- [x] migration guide: `docs/migration-3.0.rst`;
+- [x] public API inventory: `docs/plans/epicrypt-3-public-api-inventory.md`;
+- [x] stream/data-protection documentation;
+- [x] generation/key-derivation documentation;
+- [x] password migration documentation;
+- [x] JOSE/OAuth/OpenID/Remote JWKS documentation;
+- [x] PKI backend/non-goal documentation;
+- [x] safe logging/error documentation;
+- [x] PR #30 release-candidate description;
+- [x] PR #30 ready-for-review transition.
+
+No documentation example intentionally references a removed 3.0 public API.
 
 ---
 
-## 16. Explicit 3.0 non-goals
+## Explicit 3.0 non-goals
 
-- no Pathwise production dependency or storage registry;
-- no OTP production dependency;
+- no production Pathwise dependency or storage registry;
+- no production OTP dependency;
 - no application/framework configuration ownership;
 - no hidden filesystem/network/global trust state;
-- no generic broker/cache/database implementation inside Epicrypt;
+- no broker/cache/database implementation inside Epicrypt;
 - no token-header-driven remote key retrieval;
-- no compression or legacy RSA1_5 JWE;
-- no first-class CRL, OCSP, AIA-fetching or CMS surface without a concrete bounded explicit-state consumer design;
-- no wire-format bump solely because the Composer major is 3;
-- no security validation removal justified only by benchmark cost.
+- no JWE compression or RSA1_5;
+- no first-class CRL/OCSP/AIA-fetching/CMS API without a concrete bounded explicit-state design;
+- no package-major-only cryptographic wire-format bump;
+- no removal of security validation solely for benchmark performance.
 
 ---
 
-## 17. Final target
+## Release sequence
 
-Epicrypt 3.0 should release as a storage-independent, stream-first, phpseclib-4-native security library with:
+- [x] implement Epicrypt 3 architecture and security work;
+- [x] preserve durable 2.x compatibility fixtures;
+- [x] decouple Pathwise production dependency;
+- [x] migrate to native phpseclib 4.0.1+;
+- [x] finalize application-crypto/key-generation surfaces;
+- [x] finalize JOSE/OAuth/OpenID/Remote JWKS behavior;
+- [x] finalize PKI decisions and interoperability;
+- [x] finalize password/runtime/bounds/secret-hygiene policy;
+- [x] finalize migration docs and API inventory;
+- [x] pass release-ready implementation exact-head A+B workflow;
+- [x] pass release-ready implementation exact-head Security & Standards workflow;
+- [x] prove Foundation + Epicrypt 3 + OTP 6.1 + Pathwise 4 dependency composition on PHP 8.4/8.5;
+- [x] update PR #30 and mark it ready for review;
+- [ ] **maintainer release action:** merge/tag/publish Epicrypt 3.0 (intentionally not performed as part of implementation readiness);
+- [ ] **downstream Foundation action after a consumable 3.x version exists:** change Foundation's Epicrypt constraint and run its application-level CI.
 
-- preserved valid 2.x durable formats;
-- explicit modern key/password/algorithm policy;
-- no ambient/global storage or trust state;
-- bounded attacker-controlled parsing and cryptographic work;
-- stable typed result/exception surfaces;
-- safe key rotation/readiness and purpose separation;
-- strict JOSE/OAuth/OpenID/Remote JWKS behavior;
-- interoperable PKI/PFX tooling;
-- comprehensive PHPForge/static/security/mutation/interoperability gates;
-- a dependency graph that composes cleanly with Foundation, OTP and Pathwise 4.
+The two remaining unchecked items are release/dependent-project actions, not unfinished Epicrypt 3 implementation.
 
-The release is complete only when the final exact branch head is green and Foundation can consume the published Epicrypt 3 line without reintroducing the old Pathwise 3 conflict.
+---
+
+## Final target achieved
+
+Epicrypt 3.0 is prepared as a storage-independent, stream-first, phpseclib-4-native security library with preserved valid 2.x durable formats, explicit modern key/password policy, no ambient storage/trust state, bounded attacker-controlled work, safe rotation/readiness, strict JOSE/OAuth/OpenID/Remote JWKS behavior, interoperable PKI/PFX tooling, comprehensive PHPForge/static/security/mutation/interoperability gates, and a dependency graph proven to compose with Foundation, OTP 6.1 and Pathwise 4.
+
+No code/API task remains before a maintainer chooses to merge/tag/publish the 3.0 release candidate, provided the final documentation-only ledger commit remains green under the same PR checks.
