@@ -139,7 +139,6 @@ final class Pkcs12
         ];
     }
 
-    #[\SensitiveParameter]
     private function assertPassword(#[\SensitiveParameter] string $password): void
     {
         if (strlen($password) > self::MAX_PASSWORD_BYTES) {
