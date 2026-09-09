@@ -465,7 +465,7 @@ final readonly class SignedUrl
      * @param QueryMap $query
      * @return array{string, ?string, bool}|SignedUrlVerificationResult
      */
-    private function verificationKey(array $query, ?int $expiresAt, int $version): array|SignedUrlVerificationResult
+    private function verificationKey(array $query, ?int $expiresAt, ?int $version): array|SignedUrlVerificationResult
     {
         if (is_string($this->keys)) {
             return [$this->keys, null, false];
