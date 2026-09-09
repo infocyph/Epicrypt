@@ -30,7 +30,9 @@ final readonly class OAuthAuthorizationRequest
         AuthProtocolPolicy::assertText($this->clientId, AuthProtocolPolicy::MAX_IDENTIFIER_BYTES, 'OAuth authorization client ID');
         AuthProtocolPolicy::assertText($this->redirectUri, AuthProtocolPolicy::MAX_REDIRECT_URI_BYTES, 'OAuth authorization redirect URI');
         $this->scopes = AuthProtocolPolicy::normalizeScopes($scopes, 'OAuth authorization request scopes');
-        $this->audiences = AuthProtocolPolicy::normalizeAudiences($audiences, 'OAuth authorization request audiences');
+        /** @var non-empty-list<string> $normalizedAudiences */
+        $normalizedAudiences = AuthProtocolPolicy::normalizeAudiences($audiences, 'OAuth authorization request audiences');
+        $this->audiences = $normalizedAudiences;
         if (!AuthProtocolPolicy::validSha256Base64Url($this->codeChallenge)) {
             throw new ConfigurationException('OAuth authorization PKCE challenge must be a SHA-256 Base64URL value.');
         }
