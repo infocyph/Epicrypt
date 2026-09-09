@@ -21,6 +21,7 @@ transaction that replaces the password hash.
 
    declare(strict_types=1);
 
+   use Infocyph\Epicrypt\Generate\KeyMaterial\Enum\KeyMaterialEncoding;
    use Infocyph\Epicrypt\Generate\KeyMaterial\KeyMaterialGenerator;
    use Infocyph\Epicrypt\Password\Generator\PasswordPolicy;
    use Infocyph\Epicrypt\Password\PasswordHasher;
@@ -28,7 +29,7 @@ transaction that replaces the password hash.
    use Infocyph\Epicrypt\Security\PasswordResetToken;
 
    $ttlSeconds = 1800;
-   $resetSecret = new KeyMaterialGenerator()->forMasterSecret(asBase64Url: false);
+   $resetSecret = new KeyMaterialGenerator()->forMasterSecret(KeyMaterialEncoding::RAW);
    $passwordResets = new PasswordResetToken($resetSecret, $ttlSeconds);
 
    // Request endpoint: return the same response whether or not the user exists.
@@ -89,6 +90,7 @@ an eligible fallback.
 
    declare(strict_types=1);
 
+   use Infocyph\Epicrypt\Generate\KeyMaterial\Enum\KeyMaterialEncoding;
    use Infocyph\Epicrypt\Generate\KeyMaterial\KeyMaterialGenerator;
    use Infocyph\Epicrypt\Security\KeyPurpose;
    use Infocyph\Epicrypt\Security\KeyRing;
@@ -101,7 +103,7 @@ an eligible fallback.
    $ring = new KeyRing([
        new KeyRingEntry(
            id: 'download-2026-09',
-           key: $keys->forMasterSecret(asBase64Url: false),
+           key: $keys->forMasterSecret(KeyMaterialEncoding::RAW),
            status: KeyStatus::ACTIVE,
            purpose: KeyPurpose::SIGNED_URL,
            algorithm: 'sha256',
@@ -153,10 +155,11 @@ session identifier when the form is submitted.
 
    declare(strict_types=1);
 
+   use Infocyph\Epicrypt\Generate\KeyMaterial\Enum\KeyMaterialEncoding;
    use Infocyph\Epicrypt\Generate\KeyMaterial\KeyMaterialGenerator;
    use Infocyph\Epicrypt\Security\CsrfTokenManager;
 
-   $secret = new KeyMaterialGenerator()->forMasterSecret(asBase64Url: false);
+   $secret = new KeyMaterialGenerator()->forMasterSecret(KeyMaterialEncoding::RAW);
    $csrf = new CsrfTokenManager($secret, ttlSeconds: 3600);
    $formToken = $csrf->issueToken($sessionId);
 
@@ -176,13 +179,14 @@ password-reset token cannot be replayed as an email-verification token.
 
    declare(strict_types=1);
 
+   use Infocyph\Epicrypt\Generate\KeyMaterial\Enum\KeyMaterialEncoding;
    use Infocyph\Epicrypt\Generate\KeyMaterial\KeyMaterialGenerator;
    use Infocyph\Epicrypt\Security\ActionToken;
    use Infocyph\Epicrypt\Security\EmailVerificationToken;
    use Infocyph\Epicrypt\Security\PasswordResetToken;
    use Infocyph\Epicrypt\Security\RememberToken;
 
-   $secret = new KeyMaterialGenerator()->forMasterSecret(asBase64Url: false);
+   $secret = new KeyMaterialGenerator()->forMasterSecret(KeyMaterialEncoding::RAW);
 
    $reset = new PasswordResetToken($secret);
    $resetToken = $reset->issue('user-42');
@@ -217,6 +221,7 @@ window, and optional issuer. Retired and disabled keys are never eligible.
 
    declare(strict_types=1);
 
+   use Infocyph\Epicrypt\Generate\KeyMaterial\Enum\KeyMaterialEncoding;
    use Infocyph\Epicrypt\Generate\KeyMaterial\KeyMaterialGenerator;
    use Infocyph\Epicrypt\Security\KeyPurpose;
    use Infocyph\Epicrypt\Security\KeyRing;
@@ -228,7 +233,7 @@ window, and optional issuer. Retired and disabled keys are never eligible.
    $ring = new KeyRing([
        new KeyRingEntry(
            id: 'signing-2026-08',
-           key: $keys->forMasterSecret(asBase64Url: false),
+           key: $keys->forMasterSecret(KeyMaterialEncoding::RAW),
            status: KeyStatus::ACTIVE,
            purpose: KeyPurpose::KEY_ROTATION,
            algorithm: 'sha512',
