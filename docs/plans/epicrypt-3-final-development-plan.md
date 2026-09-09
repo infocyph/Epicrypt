@@ -672,13 +672,11 @@ iss?            # optional/configured for application tokens
 sub
 jti
 iat
-exp? 
+exp?
 name            # bounded label or label id
-aabilities       # final name must be corrected to `abilities`; bounded unique list
+abilities       # bounded unique list
 token_use=personal_access
 ```
-
-**Implementation note:** the typo-like placeholder above is not a wire decision; final claims must use the canonical `abilities` key after the claim-shape review.
 
 Keep token values small. Ability/item count and total encoded token size are security bounds.
 
