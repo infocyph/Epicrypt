@@ -118,6 +118,7 @@ final readonly class OAuthAuthorizationServerMetadata
             if ($uri === null || !self::validHttpsUri($uri)) {
                 throw new ConfigurationException(sprintf('OAuth %s must be an absolute HTTPS URI.', $label));
             }
+
             return;
         }
         if ($uri !== null) {
@@ -135,6 +136,7 @@ final readonly class OAuthAuthorizationServerMetadata
     private static function validHttpsUri(string $uri, bool $allowQuery = true): bool
     {
         $parts = parse_url($uri);
+
         return is_array($parts)
             && strtolower((string) ($parts['scheme'] ?? '')) === 'https'
             && is_string($parts['host'] ?? null)
@@ -165,9 +167,15 @@ final readonly class OAuthAuthorizationServerMetadata
         return $normalized;
     }
 
-    /** @param list<AsymmetricJwtAlgorithm> $algorithms @return list<string> */
+    /**
+     * @param list<AsymmetricJwtAlgorithm> $algorithms
+     * @return list<string>
+     */
     private static function algorithmValues(array $algorithms): array
     {
-        return array_map(static fn(AsymmetricJwtAlgorithm $algorithm): string => $algorithm->value, $algorithms);
+        return array_map(
+            static fn(AsymmetricJwtAlgorithm $algorithm): string => $algorithm->value,
+            $algorithms,
+        );
     }
 }
