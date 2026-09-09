@@ -47,29 +47,11 @@ final readonly class RemoteJoseResource
                 throw new KeyResolutionException('Remote JOSE response exceeds the configured size bound.');
             }
         }
-        $this->assertJsonDepth($json, 16);
 
-        return [JwtToken::decodeJsonObject($json, 'remote JOSE document'), $this->cachePolicy($response->getHeaderLine('Cache-Control'))];
-    }
-
-    private function assertJsonDepth(string $json, int $maximum): void
-    {
-        $depth = 0;
-        for ($offset = 0, $length = strlen($json); $offset < $length; $offset++) {
-            $character = $json[$offset];
-            if ($character === '"') {
-                $offset = $this->stringEnd($json, $offset + 1);
-
-                continue;
-            }
-            if ($character === '{' || $character === '[') {
-                if (++$depth > $maximum) {
-                    throw new KeyResolutionException('Remote JOSE JSON exceeds the configured depth bound.');
-                }
-            } elseif ($character === '}' || $character === ']') {
-                $depth--;
-            }
-        }
+        return [
+            JwtToken::decodeJsonObject($json, 'remote JOSE document', $this->maximumBytes, PHP_INT_MAX),
+            $this->cachePolicy($response->getHeaderLine('Cache-Control')),
+        ];
     }
 
     /** @return array{maxAge: int|null, noStore: bool, noCache: bool} */
@@ -84,18 +66,5 @@ final readonly class RemoteJoseResource
             'noStore' => preg_match('/(?:^|,)\s*no-store(?:\s*(?:,|$))/i', $cacheControl) === 1,
             'noCache' => preg_match('/(?:^|,)\s*no-cache(?:\s*(?:,|$))/i', $cacheControl) === 1,
         ];
-    }
-
-    private function stringEnd(string $json, int $offset): int
-    {
-        for ($length = strlen($json); $offset < $length; $offset++) {
-            if ($json[$offset] === '\\') {
-                $offset++;
-            } elseif ($json[$offset] === '"') {
-                return $offset;
-            }
-        }
-
-        throw new KeyResolutionException('Remote JOSE JSON contains an unterminated string.');
     }
 }
