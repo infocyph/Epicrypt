@@ -56,6 +56,7 @@ final readonly class RemoteJwks
 
                 return $jwks;
             }
+
             $ttl = $cachePolicy['noCache']
                 ? 0
                 : max($this->configuration->minimumTtl, min(
