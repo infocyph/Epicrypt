@@ -114,6 +114,11 @@ function remoteJwksResolver(array $answers = []): RemoteJoseHostResolverInterfac
     };
 }
 
+function remoteJwksCacheKey(string $issuer, ?string $jwksUri): string
+{
+    return 'epicrypt:jwks:' . hash('sha256', $issuer . "\0" . ($jwksUri ?? 'discovery'));
+}
+
 it('uses one forced refresh to resolve a rolled over remote key', function () {
     $factory = new Psr17Factory();
     $client = new Client($factory);
@@ -184,6 +189,8 @@ it('enforces same-host or explicitly allowed JWKS destinations', function () {
         ->and(fn () => new RemoteJwksConfiguration('http://issuer.example'))
         ->toThrow(ConfigurationException::class)
         ->and(fn () => new RemoteJwksConfiguration('https://127.0.0.1'))
+        ->toThrow(ConfigurationException::class)
+        ->and(fn () => new RemoteJwksConfiguration('https://[::1]'))
         ->toThrow(ConfigurationException::class)
         ->and(fn () => new RemoteJwksConfiguration('https://localhost'))
         ->toThrow(ConfigurationException::class);
@@ -258,6 +265,104 @@ it('re-resolves before every outbound request and fails a rebinding attempt clos
     expect(fn () => $remote->load())->toThrow(KeyResolutionException::class)
         ->and($resolver->calls)->toBe(2)
         ->and($client->getRequests())->toHaveCount(1);
+});
+
+it('rejects remote JWKS documents whose structural member budget is exceeded', function () {
+    $factory = new Psr17Factory();
+    $client = new Client($factory);
+    $jwk = [];
+    for ($index = 0; $index < 33; $index++) {
+        $jwk['field_' . $index] = 'x';
+    }
+    $client->addResponse(new Response(
+        200,
+        ['Content-Type' => 'application/jwk-set+json'],
+        json_encode(['keys' => [$jwk]], JSON_THROW_ON_ERROR),
+    ));
+    $remote = new RemoteJwks(
+        $client,
+        $factory,
+        new RemoteJwksConfiguration(
+            'https://issuer.example',
+            'https://issuer.example/jwks',
+            maximumKeys: 1,
+        ),
+        hostResolver: remoteJwksResolver(),
+    );
+
+    expect(fn () => $remote->load())->toThrow(KeyResolutionException::class);
+});
+
+it('discards malformed cached JWKS and retrieves a fresh bounded document', function () {
+    $factory = new Psr17Factory();
+    $client = new Client($factory);
+    $client->addResponse(new Response(200, ['Content-Type' => 'application/jwk-set+json'], '{"keys":[]}'));
+    $cache = remoteJwksCache();
+    $issuer = 'https://issuer.example';
+    $jwksUri = 'https://issuer.example/jwks';
+    $oversizedJwk = [];
+    for ($index = 0; $index < 33; $index++) {
+        $oversizedJwk['field_' . $index] = 'x';
+    }
+    $cache->set(remoteJwksCacheKey($issuer, $jwksUri), [
+        'jwks' => ['keys' => [$oversizedJwk]],
+        'freshUntil' => 1_700_000_100,
+        'staleUntil' => 1_700_000_200,
+    ]);
+    $remote = new RemoteJwks(
+        $client,
+        $factory,
+        new RemoteJwksConfiguration($issuer, $jwksUri, maximumKeys: 1),
+        $cache,
+        remoteJwksClock(1_700_000_000),
+        remoteJwksResolver(),
+    );
+
+    expect($remote->load())->toBe(['keys' => []])
+        ->and($client->getRequests())->toHaveCount(1);
+});
+
+it('uses stale JWKS only after an ordinary refresh failure and never for force refresh', function () {
+    $factory = new Psr17Factory();
+    $cache = remoteJwksCache();
+    $configuration = new RemoteJwksConfiguration(
+        'https://issuer.example',
+        'https://issuer.example/jwks',
+        minimumTtl: 1,
+        maximumTtl: 1,
+        staleTtl: 30,
+    );
+    $initialClient = new Client($factory);
+    $initialClient->addResponse(new Response(
+        200,
+        ['Content-Type' => 'application/jwk-set+json', 'Cache-Control' => 'max-age=1'],
+        '{"keys":[]}',
+    ));
+    $initial = new RemoteJwks(
+        $initialClient,
+        $factory,
+        $configuration,
+        $cache,
+        remoteJwksClock(1_700_000_000),
+        remoteJwksResolver(),
+    );
+    expect($initial->load())->toBe(['keys' => []]);
+
+    $failingClient = new Client($factory);
+    $failingClient->addResponse(new Response(503, ['Content-Type' => 'application/json'], '{}'));
+    $failingClient->addResponse(new Response(503, ['Content-Type' => 'application/json'], '{}'));
+    $staleReader = new RemoteJwks(
+        $failingClient,
+        $factory,
+        $configuration,
+        $cache,
+        remoteJwksClock(1_700_000_002),
+        remoteJwksResolver(),
+    );
+
+    expect($staleReader->load())->toBe(['keys' => []]);
+    expect(fn () => $staleReader->load(true))->toThrow(KeyResolutionException::class)
+        ->and($failingClient->getRequests())->toHaveCount(2);
 });
 
 it('honors max-age no-cache and no-store using the injected clock', function (string $cacheControl, int $expectedRequests) {
