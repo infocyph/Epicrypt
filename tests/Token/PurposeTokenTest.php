@@ -11,7 +11,7 @@ use Infocyph\Epicrypt\Token\Payload\PurposeToken;
 use Infocyph\Epicrypt\Token\Payload\PurposeTokenFailureReason;
 use Psr\Clock\ClockInterface;
 
-function purposeTokenClock(int $timestamp = 1_000): ClockInterface
+function genericPurposeTokenClock(int $timestamp = 1_000): ClockInterface
 {
     return new class($timestamp) implements ClockInterface {
         public function __construct(public int $timestamp) {}
@@ -24,7 +24,7 @@ function purposeTokenClock(int $timestamp = 1_000): ClockInterface
 }
 
 it('issues Foundation-friendly purpose tokens with typed metadata', function () {
-    $clock = purposeTokenClock();
+    $clock = genericPurposeTokenClock();
     $tokens = new PurposeToken(
         str_repeat('s', 64),
         'password_reset',
@@ -51,7 +51,7 @@ it('issues Foundation-friendly purpose tokens with typed metadata', function () 
 });
 
 it('covers Foundation passwordless and email verification claim mappings without a parallel HMAC codec', function () {
-    $clock = purposeTokenClock();
+    $clock = genericPurposeTokenClock();
     $secret = str_repeat('f', 64);
 
     $passwordless = new PurposeToken($secret, 'passwordless', 'foundation.auth', 600, $clock);
@@ -78,7 +78,7 @@ it('covers Foundation passwordless and email verification claim mappings without
 });
 
 it('returns stable purpose, context, expiry, and not-before failures', function () {
-    $clock = purposeTokenClock();
+    $clock = genericPurposeTokenClock();
     $secret = str_repeat('x', 64);
     $issuer = new PurposeToken($secret, 'password_reset', 'foundation.auth', 900, $clock);
 
@@ -106,7 +106,7 @@ it('returns stable purpose, context, expiry, and not-before failures', function 
 });
 
 it('uses signed key ids for constant-candidate KeyRing rotation', function () {
-    $clock = purposeTokenClock();
+    $clock = genericPurposeTokenClock();
     $oldKey = str_repeat('o', 64);
     $newKey = str_repeat('n', 64);
 
@@ -133,19 +133,25 @@ it('uses signed key ids for constant-candidate KeyRing rotation', function () {
         ->and($newResult->usedFallbackKey)->toBeFalse();
 });
 
-it('rejects unknown rotation keys, tampering, and reserved caller claims', function () {
-    $clock = purposeTokenClock();
+it('rejects unavailable rotation keys, tampering, and reserved caller claims', function () {
+    $clock = genericPurposeTokenClock();
     $ring = new KeyRing([
         new KeyRingEntry('signed-a', str_repeat('a', 64), KeyStatus::ACTIVE, KeyPurpose::SIGNED_PAYLOAD, 'sha512'),
     ], $clock);
     $tokens = new PurposeToken($ring, 'password_reset', 'foundation.auth', 900, $clock);
     $token = $tokens->issue(subjectId: 'account-1');
 
+    $otherRing = new KeyRing([
+        new KeyRingEntry('signed-b', str_repeat('b', 64), KeyStatus::ACTIVE, KeyPurpose::SIGNED_PAYLOAD, 'sha512'),
+    ], $clock);
+    $unavailable = new PurposeToken($otherRing, 'password_reset', 'foundation.auth', 900, $clock);
+
     $parts = explode('.', $token);
     $parts[2] = str_repeat('A', strlen($parts[2]));
     $tampered = implode('.', $parts);
 
-    expect($tokens->verify($tampered)->failureReason)->toBe(PurposeTokenFailureReason::INVALID_TOKEN)
+    expect($unavailable->verify($token)->failureReason)->toBe(PurposeTokenFailureReason::KEY_NOT_USABLE)
+        ->and($tokens->verify($tampered)->failureReason)->toBe(PurposeTokenFailureReason::INVALID_TOKEN)
         ->and(fn() => $tokens->issue(['purpose' => 'email_verification']))
         ->toThrow(ConfigurationException::class);
 });
