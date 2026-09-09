@@ -8,6 +8,7 @@ use Infocyph\Epicrypt\Exception\Token\ExpiredTokenException;
 use Infocyph\Epicrypt\Exception\Token\InvalidTokenException;
 use Infocyph\Epicrypt\Exception\Token\NotYetValidTokenException;
 use Infocyph\Epicrypt\Exception\Token\UnsupportedTokenFormatException;
+use Infocyph\Epicrypt\Exception\Token\WrongTokenContextException;
 use Infocyph\Epicrypt\Internal\Clock\SystemClock;
 use Infocyph\Epicrypt\Internal\Enum\SignedPayloadAlgorithm;
 use Infocyph\Epicrypt\Internal\Enum\SignedPayloadVersion;
@@ -168,7 +169,7 @@ final readonly class SignedPayloadCodec
             throw new UnsupportedTokenFormatException('Unsupported signed payload format.');
         }
         if ($expectedType !== null && $header['ctx'] !== $expectedType) {
-            throw new InvalidTokenException('Invalid signed payload context.');
+            throw new WrongTokenContextException('Signed payload context does not match the expected context.');
         }
     }
 
