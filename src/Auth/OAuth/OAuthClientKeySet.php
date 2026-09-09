@@ -9,6 +9,7 @@ use Infocyph\Epicrypt\Exception\Token\KeyResolutionException;
 use Infocyph\Epicrypt\Token\Jwt\Enum\AsymmetricJwtAlgorithm;
 use Infocyph\Epicrypt\Token\Jwt\Jwks;
 use Infocyph\Epicrypt\Token\Jwt\Support\JosePolicy;
+use LogicException;
 
 final readonly class OAuthClientKeySet
 {
@@ -71,7 +72,11 @@ final readonly class OAuthClientKeySet
         $seen = [];
         $algorithms = [];
         foreach ($this->keys as $key) {
-            $algorithm = AsymmetricJwtAlgorithm::from((string) $key['alg']);
+            $algorithmValue = $key['alg'] ?? null;
+            if (!is_string($algorithmValue)) {
+                throw new LogicException('Normalized OAuth client JWK is missing its algorithm.');
+            }
+            $algorithm = AsymmetricJwtAlgorithm::from($algorithmValue);
             if (isset($seen[$algorithm->value])) {
                 continue;
             }
