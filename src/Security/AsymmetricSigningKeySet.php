@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Infocyph\Epicrypt\Security;
 
-use Infocyph\Epicrypt\Exception\ConfigurationException;
 use Infocyph\Epicrypt\Exception\SigningKeyReadinessException;
 use Infocyph\Epicrypt\Token\Jwt\Enum\AsymmetricJwtAlgorithm;
 use Infocyph\Epicrypt\Token\Jwt\Jwks;
@@ -30,6 +29,7 @@ final readonly class AsymmetricSigningKeySet
         public AsymmetricJwtAlgorithm $algorithm,
         #[\SensitiveParameter]
         private ?string $privateKeyPassphrase = null,
+        public KeyPurpose $purpose = KeyPurpose::JWT_SIGNING,
     ) {
         $issuerLength = strlen($this->issuer);
         if ($issuerLength < 1
@@ -43,11 +43,11 @@ final readonly class AsymmetricSigningKeySet
 
         try {
             $active = $this->publicKeys->activeForWrite(
-                KeyPurpose::JWT_SIGNING,
+                $this->purpose,
                 $this->algorithm->value,
                 $this->issuer,
             );
-        } catch (ConfigurationException) {
+        } catch (Throwable) {
             throw new SigningKeyReadinessException(SigningKeyReadinessFailureReason::ACTIVE_KEY_NOT_ELIGIBLE);
         }
         if (!hash_equals($this->activeKeyId, $active->id)) {
@@ -148,24 +148,22 @@ final readonly class AsymmetricSigningKeySet
     private function exportJwks(): array
     {
         $jwks = new Jwks();
+        $keys = [];
 
         try {
-            if (!$this->algorithm->isEdDsa()) {
-                return $jwks->exportFromKeyRing($this->publicKeys, $this->algorithm, $this->issuer);
-            }
-
-            $keys = [];
             foreach ($this->publicKeys->readCandidates(
-                KeyPurpose::JWT_SIGNING,
+                $this->purpose,
                 $this->algorithm->value,
                 $this->issuer,
             ) as $entry) {
-                $keys[] = $jwks->exportOkpPublicKey(
-                    $entry->key,
-                    $entry->id,
-                    $this->algorithm->value,
-                    'Ed25519',
-                );
+                $keys[] = $this->algorithm->isEdDsa()
+                    ? $jwks->exportOkpPublicKey(
+                        $entry->key,
+                        $entry->id,
+                        $this->algorithm->value,
+                        'Ed25519',
+                    )
+                    : $jwks->exportPublicKeyToJwk($entry->key, $entry->id, $this->algorithm);
             }
 
             return ['keys' => $keys];
