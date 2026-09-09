@@ -155,6 +155,7 @@ final readonly class PurposeToken
         return $payload;
     }
 
+    /** @param array<string, mixed> $payload */
     private function integerClaim(#[\SensitiveParameter] array $payload, string $name, bool $required): ?int
     {
         if (!array_key_exists($name, $payload)) {
@@ -168,50 +169,41 @@ final readonly class PurposeToken
     }
 
     /**
-     * @return array{string, ?string}
+     * @param array<string, mixed> $payload
+     * @return array{subject_id: ?string, token_id: string, issued_at: int, not_before: ?int, expires_at: int}
      */
-    private function writeKey(): array
+    private function metadata(#[\SensitiveParameter] array $payload): array
     {
-        if (is_string($this->keys)) {
-            return [$this->keys, null];
+        $tokenId = $payload['tid'] ?? null;
+        if (!is_string($tokenId) || preg_match('/\A[A-Za-z0-9_-]{16,128}\z/D', $tokenId) !== 1) {
+            throw new InvalidTokenException('Purpose token requires a valid token id.');
+        }
+        $subjectId = $payload['sub'] ?? null;
+        if ($subjectId !== null) {
+            if (!is_string($subjectId)) {
+                throw new InvalidTokenException('Purpose token subject must be a string.');
+            }
+
+            try {
+                SecurityPolicy::assertIdentifier($subjectId, 'Purpose token subject');
+            } catch (ConfigurationException $exception) {
+                throw new InvalidTokenException('Purpose token subject is invalid.', 0, $exception);
+            }
         }
 
-        $entry = $this->keys->activeForWrite(KeyPurpose::SIGNED_PAYLOAD, self::ALGORITHM);
-        SecurityPolicy::assertHmacSecret($entry->key, 'Purpose token key');
-
-        return [$entry->key, $entry->id];
-    }
-
-    /**
-     * @return array{string, ?string, bool}|PurposeTokenVerificationResult
-     */
-    private function verificationKey(#[\SensitiveParameter] string $token): array|PurposeTokenVerificationResult
-    {
-        if (is_string($this->keys)) {
-            return [$this->keys, null, false];
+        $issuedAt = $this->integerClaim($payload, 'iat', true);
+        $expiresAt = $this->integerClaim($payload, 'exp', true);
+        if ($issuedAt === null || $expiresAt === null) {
+            throw new InvalidTokenException('Purpose token temporal metadata is incomplete.');
         }
 
-        try {
-            $untrusted = SignedPayloadCodec::unverifiedPayload($token);
-        } catch (\Throwable) {
-            return new PurposeTokenVerificationResult(false, PurposeTokenFailureReason::INVALID_TOKEN);
-        }
-
-        $keyId = $untrusted['kid'] ?? null;
-        if (!is_string($keyId) || $keyId === '') {
-            return new PurposeTokenVerificationResult(false, PurposeTokenFailureReason::KEY_NOT_USABLE);
-        }
-        $entry = $this->keys->resolveForVerification(
-            $keyId,
-            KeyPurpose::SIGNED_PAYLOAD,
-            self::ALGORITHM,
-        );
-        if (!$entry instanceof KeyRingEntry) {
-            return new PurposeTokenVerificationResult(false, PurposeTokenFailureReason::KEY_NOT_USABLE);
-        }
-        SecurityPolicy::assertHmacSecret($entry->key, 'Purpose token key');
-
-        return [$entry->key, $entry->id, $entry->status === KeyStatus::FALLBACK];
+        return [
+            'subject_id' => $subjectId,
+            'token_id' => $tokenId,
+            'issued_at' => $issuedAt,
+            'not_before' => $this->integerClaim($payload, 'nbf', false),
+            'expires_at' => $expiresAt,
+        ];
     }
 
     private function temporalFailure(
@@ -249,40 +241,35 @@ final readonly class PurposeToken
     }
 
     /**
-     * @param array<string, mixed> $payload
-     * @return array{subject_id: ?string, token_id: string, issued_at: int, not_before: ?int, expires_at: int}
+     * @return array{string, ?string, bool}|PurposeTokenVerificationResult
      */
-    private function metadata(#[\SensitiveParameter] array $payload): array
+    private function verificationKey(#[\SensitiveParameter] string $token): array|PurposeTokenVerificationResult
     {
-        $tokenId = $payload['tid'] ?? null;
-        if (!is_string($tokenId) || preg_match('/\A[A-Za-z0-9_-]{16,128}\z/D', $tokenId) !== 1) {
-            throw new InvalidTokenException('Purpose token requires a valid token id.');
-        }
-        $subjectId = $payload['sub'] ?? null;
-        if ($subjectId !== null) {
-            if (!is_string($subjectId)) {
-                throw new InvalidTokenException('Purpose token subject must be a string.');
-            }
-            try {
-                SecurityPolicy::assertIdentifier($subjectId, 'Purpose token subject');
-            } catch (ConfigurationException $exception) {
-                throw new InvalidTokenException('Purpose token subject is invalid.', 0, $exception);
-            }
+        if (is_string($this->keys)) {
+            return [$this->keys, null, false];
         }
 
-        $issuedAt = $this->integerClaim($payload, 'iat', true);
-        $expiresAt = $this->integerClaim($payload, 'exp', true);
-        if ($issuedAt === null || $expiresAt === null) {
-            throw new InvalidTokenException('Purpose token temporal metadata is incomplete.');
+        try {
+            $untrusted = SignedPayloadCodec::unverifiedPayload($token);
+        } catch (\Throwable) {
+            return new PurposeTokenVerificationResult(false, PurposeTokenFailureReason::INVALID_TOKEN);
         }
 
-        return [
-            'subject_id' => $subjectId,
-            'token_id' => $tokenId,
-            'issued_at' => $issuedAt,
-            'not_before' => $this->integerClaim($payload, 'nbf', false),
-            'expires_at' => $expiresAt,
-        ];
+        $keyId = $untrusted['kid'] ?? null;
+        if (!is_string($keyId) || $keyId === '') {
+            return new PurposeTokenVerificationResult(false, PurposeTokenFailureReason::KEY_NOT_USABLE);
+        }
+        $entry = $this->keys->resolveForVerification(
+            $keyId,
+            KeyPurpose::SIGNED_PAYLOAD,
+            self::ALGORITHM,
+        );
+        if (!$entry instanceof KeyRingEntry) {
+            return new PurposeTokenVerificationResult(false, PurposeTokenFailureReason::KEY_NOT_USABLE);
+        }
+        SecurityPolicy::assertHmacSecret($entry->key, 'Purpose token key');
+
+        return [$entry->key, $entry->id, $entry->status === KeyStatus::FALLBACK];
     }
 
     /**
@@ -319,5 +306,20 @@ final readonly class PurposeToken
             matchedKeyId: $keyId,
             usedFallbackKey: $usedFallbackKey,
         );
+    }
+
+    /**
+     * @return array{string, ?string}
+     */
+    private function writeKey(): array
+    {
+        if (is_string($this->keys)) {
+            return [$this->keys, null];
+        }
+
+        $entry = $this->keys->activeForWrite(KeyPurpose::SIGNED_PAYLOAD, self::ALGORITHM);
+        SecurityPolicy::assertHmacSecret($entry->key, 'Purpose token key');
+
+        return [$entry->key, $entry->id];
     }
 }
