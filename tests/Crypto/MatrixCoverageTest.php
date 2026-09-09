@@ -11,6 +11,7 @@ use Infocyph\Epicrypt\Crypto\SecretBoxCipher;
 use Infocyph\Epicrypt\Exception\Crypto\DecryptionException;
 use Infocyph\Epicrypt\Exception\Crypto\InvalidKeyException;
 use Infocyph\Epicrypt\Exception\Crypto\InvalidNonceException;
+use Infocyph\Epicrypt\Generate\KeyMaterial\Enum\KeyMaterialEncoding;
 use Infocyph\Epicrypt\Generate\KeyMaterial\KeyMaterialGenerator;
 use Infocyph\Epicrypt\Internal\Base64Url;
 
@@ -23,7 +24,7 @@ it('enforces the AEAD contract for each supported algorithm', function () {
 
     foreach ($algorithms as $algorithm) {
         $key = $generator->forAead($algorithm);
-        $binaryKey = $generator->forAead($algorithm, false);
+        $binaryKey = $generator->forAead($algorithm, KeyMaterialEncoding::RAW);
         $cipher = new AeadCipher($algorithm);
         $ciphertext = $cipher->encrypt('aead-matrix-payload', $key, 'matrix');
         $parts = explode('.', $ciphertext);
@@ -114,7 +115,7 @@ it('rejects tampered nonce, tampered ciphertext and invalid base64url', function
 
 it('supports secret-box key usage in binary and base64url modes', function () {
     $generator = new KeyMaterialGenerator;
-    $binaryKey = $generator->forSecretBox(asBase64Url: false);
+    $binaryKey = $generator->forSecretBox(KeyMaterialEncoding::RAW);
     $base64Key = $generator->forSecretBox();
 
     $cipher = new SecretBoxCipher;
