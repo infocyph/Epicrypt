@@ -77,6 +77,8 @@ final readonly class OAuthTokenEndpoint
                 dpopKeyThumbprint: $dpop?->keyThumbprint,
             );
         } catch (Throwable) {
+            $this->failClosedAuthorization($consumed->authorization->authorizationId);
+
             return OAuthTokenResult::failure(OAuthErrorCode::SERVER_ERROR);
         }
 
@@ -203,10 +205,19 @@ final readonly class OAuthTokenEndpoint
                 dpopKeyThumbprint: $actualDpop,
             );
         } catch (Throwable) {
+            $this->failClosedAuthorization($rotation->grant->authorizationId);
+
             return OAuthTokenResult::failure(OAuthErrorCode::SERVER_ERROR);
         }
 
         return OAuthTokenResult::success($this->response($access, $rotation->grant->scopes, $rotation->token, $dpop));
+    }
+
+    private function failClosedAuthorization(string $authorizationId): void
+    {
+        $now = $this->clock->now()->getTimestamp();
+        $this->authorizations->revoke($authorizationId, $now);
+        $this->refreshTokens->revokeAuthorization($authorizationId);
     }
 
     private function resolveClient(
