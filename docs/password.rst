@@ -128,11 +128,11 @@ in a secret manager, separate from the database.
 
    declare(strict_types=1);
 
-   use Infocyph\Epicrypt\Password\Secret\MasterSecretGenerator;
+   use Infocyph\Epicrypt\Generate\KeyMaterial\KeyMaterialGenerator;
    use Infocyph\Epicrypt\Password\Secret\SecureSecretSerializer;
    use Infocyph\Epicrypt\Password\Secret\WrappedSecretManager;
 
-   $masterSecret = new MasterSecretGenerator()->generate();
+   $masterSecret = new KeyMaterialGenerator()->forMasterSecret();
    $serializer = new SecureSecretSerializer();
    $manager = new WrappedSecretManager();
 
