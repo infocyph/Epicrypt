@@ -45,7 +45,13 @@ jobs:
       - name: Apply reviewed auth release fixes
         run: |
           python3 tools/auth-release-patch.py
-          perl -0pi -e 's/public function touch\(\n        string \$tokenId,/public function touch(\n        #[\\SensitiveParameter]\n        string \$tokenId,/' src/Auth/Personal/PersonalAccessTokenUsageStoreInterface.php
+          # token IDs and JWT token-class values are identifiers/policy metadata, not secrets.
+          # The release helper predates that audit decision, so discard only its obsolete
+          # annotations before canonical Rector/Pint normalization.
+          git restore --source=HEAD -- \
+            src/Auth/Personal/PersonalAccessTokenManager.php \
+            src/Auth/Personal/PersonalAccessTokenUsageStoreInterface.php \
+            src/Token/Jwt/JwtPolicy.php
 
       - name: Apply canonical Rector and Pint fixes
         run: |

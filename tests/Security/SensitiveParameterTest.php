@@ -50,11 +50,18 @@ it('redacts secret-bearing parameters throughout production call chains', functi
         'Infocyph\\Epicrypt\\Auth\\OAuth\\RefreshTokenArtifactClaims::__construct::$tokenId',
         'Infocyph\\Epicrypt\\Auth\\OAuth\\RefreshTokenRecord::__construct::$tokenId',
         'Infocyph\\Epicrypt\\Auth\\OAuth\\RefreshTokenStoreInterface::revokeFamily::$tokenId',
+        'Infocyph\\Epicrypt\\Auth\\Personal\\PersonalAccessTokenManager::revoke::$tokenId',
         'Infocyph\\Epicrypt\\Auth\\Personal\\PersonalAccessTokenRecord::__construct::$tokenId',
         'Infocyph\\Epicrypt\\Auth\\Personal\\PersonalAccessTokenStoreInterface::find::$tokenId',
         'Infocyph\\Epicrypt\\Auth\\Personal\\PersonalAccessTokenStoreInterface::revoke::$tokenId',
+        'Infocyph\\Epicrypt\\Auth\\Personal\\PersonalAccessTokenUsageStoreInterface::touch::$tokenId',
+        'Infocyph\\Epicrypt\\Auth\\Personal\\PersonalAccessTokenUsageStoreInterface::lastUsedAt::$tokenId',
         'Infocyph\\Epicrypt\\Token\\Jwt\\JwtPolicy::__construct::$tokenClass',
+        'Infocyph\\Epicrypt\\Token\\Jwt\\JwtPolicy::validateOAuthAccessTokenProfile::$tokenClass',
+        'Infocyph\\Epicrypt\\Token\\Jwt\\JwtPolicy::validateOpenIdProfile::$tokenClass',
+        'Infocyph\\Epicrypt\\Token\\Jwt\\JwtPolicy::validatePersonalAccessTokenProfile::$tokenClass',
         'Infocyph\\Epicrypt\\Token\\Jwt\\JwtPolicy::validateProfile::$tokenClass',
+        'Infocyph\\Epicrypt\\Token\\Jwt\\JwtPolicy::validateUnclassifiedProfile::$tokenClass',
     ], true);
 
     $missing = [];
