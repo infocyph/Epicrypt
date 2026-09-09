@@ -37,6 +37,7 @@ final readonly class PurposeToken
         private ?string $context = null,
         private int $ttlSeconds = 3600,
         private ClockInterface $clock = new SystemClock(),
+        #[\SensitiveParameter]
         private TokenMaterialGenerator $tokenIdGenerator = new TokenMaterialGenerator(),
     ) {
         SecurityPolicy::assertIdentifier($this->purpose, 'Purpose token purpose');
