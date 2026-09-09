@@ -16,9 +16,24 @@ This inventory exists to prevent accidental source/API breakage while the 3.0 ma
 | `DataProtection\ProtectionMetadata` | Add | Represents protection metadata without inventing a fake output path/value for stream operations. |
 | phpseclib 3 types/namespaces used internally | Replace in Phase C | Epicrypt 3 will be native phpseclib 4; no dual-major compatibility layer. |
 
+## Phase D decisions
+
+| Surface | 3.0 decision | Notes |
+| --- | --- | --- |
+| `Generate\KeyMaterial\KeyMaterialGenerator` boolean encoding parameters | Replace | Use `KeyMaterialEncoding::BASE64URL`, `RAW`, or `HEX`; requested lengths always mean raw entropy bytes before encoding. |
+| `Generate\KeyMaterial\KeyMaterialGenerator::forTokenSecret()` | Add | Canonical 32-byte application/token secret generator with explicit output encoding; HEX directly replaces application-side `bin2hex(random_bytes(32))` rules. |
+| `Password\Secret\MasterSecretGenerator` | Remove | It duplicated entropy/Base64URL generation with no password-domain semantics. Use `Generate\KeyMaterial\KeyMaterialGenerator::forMasterSecret()` instead. Wrapped-secret wire formats and default Base64URL master-secret representation are unchanged. |
+| `Security\KeyPurpose::SIGNED_URL` | Add | Signed URLs use a dedicated key domain rather than reusing generic signed-payload keys. |
+| `Security\SignedUrl` raw-secret constructor | Keep | Existing v2 raw-secret wire format remains supported; KeyRing mode adds authenticated key selection/rotation. |
+| `Security\AsymmetricSigningKeySet` | Add | Owns generic asymmetric signing-key readiness, key-pair coherence, eligibility, and validated public JWKS export. |
+| `Token\Payload\PurposeToken` | Add | Owns generic purpose-bound timed signed-token mechanics and KeyRing-aware verification. |
+
 ## Confirmed 3.0 removals/renames
 
-No additional public PHP symbol removal is confirmed during Phase A/B. Later phases may intentionally break API, but those changes must update this inventory before implementation.
+- `Password\Secret\MasterSecretGenerator` is removed in favor of the canonical `Generate\KeyMaterial\KeyMaterialGenerator::forMasterSecret()` boundary.
+- `KeyMaterialGenerator` encoding booleans are replaced by `KeyMaterialEncoding` so raw, Base64URL, and hex representations are explicit.
+
+These are source/API changes only. They do not retire or alter any persisted Epicrypt cryptographic format.
 
 ## Later-phase API decisions that are still open
 
@@ -27,7 +42,6 @@ The following are review points, not approved removals yet:
 - whether Argon2i remains selectable for new password hashes or becomes legacy-verification-only;
 - whether backend-specific certificate classes under `Certificate\OpenSSL` remain public, move behind backend-neutral facades, or become explicitly low-level APIs;
 - whether `Pkcs12` keeps its name or gains a backend-neutral PFX-facing API while preserving PKCS#12 interoperability;
-- whether key-ring/key-rotation helpers consolidate into stronger key-set/readiness services;
 - whether dedicated purpose-token convenience classes remain after the generic timed/purpose-token engine is completed;
 - whether any phpseclib implementation types currently visible in signatures require replacement with Epicrypt-owned value objects.
 
