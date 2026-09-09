@@ -110,7 +110,7 @@ jobs:
           - shard: jwe
             classes: 'Infocyph\Epicrypt\Token\Jwt\Jwe'
           - shard: jws
-            classes: 'Infocyph\Epicrypt\Token\Jwt\Jws'
+            classes: 'Infocyph\Epicrypt\Token\Jwt\Jws,Infocyph\Epicrypt\Token\Jwt\Support\JosePolicy,Infocyph\Epicrypt\Token\Jwt\Support\JwtToken'
           - shard: validation-policy
             classes: 'Infocyph\Epicrypt\Password\PasswordHasher,Infocyph\Epicrypt\Token\Jwt\JwtValidator,Infocyph\Epicrypt\Security\AsymmetricSigningKeySet,Infocyph\Epicrypt\Security\KeyRing'
           - shard: jwt-policy
