@@ -79,6 +79,21 @@ final readonly class OpenIdIdTokenValidator
     }
 
     /** @param array<string, mixed> $claims */
+    private function validateAudience(array $claims, string $clientId): void
+    {
+        $audiences = $this->audiences($claims['aud'] ?? null);
+        if (!in_array($clientId, $audiences, true)) {
+            throw new InvalidClaimException('OIDC ID token audience does not contain the client id.');
+        }
+
+        $azp = $claims['azp'] ?? null;
+        if ((count($audiences) > 1 || $azp !== null)
+            && (!is_string($azp) || !$this->isIdentifier($azp, 255) || !hash_equals($clientId, $azp))) {
+            throw new InvalidClaimException('OIDC ID token azp is required and must match the client id.');
+        }
+    }
+
+    /** @param array<string, mixed> $claims */
     private function validateAuthentication(
         array $claims,
         #[\SensitiveParameter]
@@ -96,21 +111,6 @@ final readonly class OpenIdIdTokenValidator
         $now = $this->clock->now()->getTimestamp();
         if (!is_int($authTime) || $authTime > $now || ($now - $authTime) > $maximumAuthenticationAge) {
             throw new InvalidClaimException('OIDC ID token auth_time violates maximum age.');
-        }
-    }
-
-    /** @param array<string, mixed> $claims */
-    private function validateAudience(array $claims, string $clientId): void
-    {
-        $audiences = $this->audiences($claims['aud'] ?? null);
-        if (!in_array($clientId, $audiences, true)) {
-            throw new InvalidClaimException('OIDC ID token audience does not contain the client id.');
-        }
-
-        $azp = $claims['azp'] ?? null;
-        if ((count($audiences) > 1 || $azp !== null)
-            && (!is_string($azp) || !$this->isIdentifier($azp, 255) || !hash_equals($clientId, $azp))) {
-            throw new InvalidClaimException('OIDC ID token azp is required and must match the client id.');
         }
     }
 
