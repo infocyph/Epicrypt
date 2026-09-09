@@ -20,7 +20,7 @@ final readonly class OAuthClient
     /** @var list<string> */
     public array $scopes;
 
-    /** @var list<string> */
+    /** @var non-empty-list<string> */
     public array $audiences;
 
     /** @var non-empty-list<OAuthClientAuthenticationMethod> */
@@ -49,9 +49,7 @@ final readonly class OAuthClient
         $this->redirectUris = self::normalizeRedirectUris($redirectUris);
         $this->grantTypes = self::normalizeGrantTypes($grantTypes);
         $this->scopes = AuthProtocolPolicy::normalizeScopes($scopes, 'OAuth client scopes');
-        $this->audiences = $audiences === []
-            ? []
-            : AuthProtocolPolicy::normalizeAudiences($audiences, 'OAuth client audiences');
+        $this->audiences = AuthProtocolPolicy::normalizeAudiences($audiences, 'OAuth client audiences');
         $this->authenticationMethods = self::normalizeAuthenticationMethods($authenticationMethods);
 
         $this->assertGrantProfile();

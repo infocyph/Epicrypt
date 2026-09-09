@@ -47,6 +47,21 @@ it('models a confidential client with one-way secret authentication', function (
         ->and($secret->encodedHash())->not->toContain('a-secret-value-long-enough-for-a-real-client');
 });
 
+it('requires at least one registered resource audience', function () {
+    $create = static fn() => new OAuthClient(
+        clientId: 'audienceless-client',
+        type: OAuthClientType::PUBLIC,
+        enabled: true,
+        redirectUris: ['https://client.example/callback'],
+        grantTypes: [OAuthGrantType::AUTHORIZATION_CODE],
+        scopes: [],
+        audiences: [],
+        authenticationMethods: [OAuthClientAuthenticationMethod::NONE],
+    );
+
+    expect($create)->toThrow(ConfigurationException::class);
+});
+
 it('rejects public clients that carry confidential credentials', function () {
     $create = static fn() => new OAuthClient(
         clientId: 'bad-public-client',
@@ -55,7 +70,7 @@ it('rejects public clients that carry confidential credentials', function () {
         redirectUris: ['https://client.example/callback'],
         grantTypes: [OAuthGrantType::AUTHORIZATION_CODE],
         scopes: [],
-        audiences: [],
+        audiences: ['orders-api'],
         authenticationMethods: [OAuthClientAuthenticationMethod::NONE],
         secret: OAuthClientSecret::hash('a-secret-value-long-enough-for-a-real-client'),
     );
@@ -71,7 +86,7 @@ it('rejects unsupported grant and redirect profiles', function () {
         redirectUris: [],
         grantTypes: [OAuthGrantType::CLIENT_CREDENTIALS],
         scopes: [],
-        audiences: [],
+        audiences: ['orders-api'],
         authenticationMethods: [OAuthClientAuthenticationMethod::NONE],
     );
     $refreshOnly = static fn() => new OAuthClient(
@@ -81,7 +96,7 @@ it('rejects unsupported grant and redirect profiles', function () {
         redirectUris: [],
         grantTypes: [OAuthGrantType::REFRESH_TOKEN],
         scopes: [],
-        audiences: [],
+        audiences: ['orders-api'],
         authenticationMethods: [OAuthClientAuthenticationMethod::NONE],
     );
     $fragmentRedirect = static fn() => new OAuthClient(
@@ -91,7 +106,7 @@ it('rejects unsupported grant and redirect profiles', function () {
         redirectUris: ['https://client.example/callback#fragment'],
         grantTypes: [OAuthGrantType::AUTHORIZATION_CODE],
         scopes: [],
-        audiences: [],
+        audiences: ['orders-api'],
         authenticationMethods: [OAuthClientAuthenticationMethod::NONE],
     );
 

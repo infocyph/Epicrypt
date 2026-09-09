@@ -19,7 +19,10 @@ final readonly class OAuthAuthorizationRequestValidator
         'code_challenge_method',
     ];
 
-    public function __construct(private OAuthClientStoreInterface $clients) {}
+    public function __construct(
+        private OAuthClientStoreInterface $clients,
+        private OAuthAuthorizationAudienceResolverInterface $audienceResolver = new OAuthSingleAudienceResolver(),
+    ) {}
 
     /**
      * Transport-neutral parameter input.
@@ -76,8 +79,25 @@ final readonly class OAuthAuthorizationRequestValidator
             return $this->reject(OAuthErrorCode::INVALID_SCOPE, $redirectUri, $state);
         }
 
+        try {
+            $resolvedAudiences = $this->audienceResolver->resolve($client, $scopes);
+        } catch (Throwable) {
+            return $this->reject(OAuthErrorCode::SERVER_ERROR, $redirectUri, $state);
+        }
+        try {
+            $audiences = AuthProtocolPolicy::normalizeAudiences(
+                $resolvedAudiences,
+                'OAuth authorization request audiences',
+            );
+        } catch (Throwable) {
+            return $this->reject(OAuthErrorCode::INVALID_REQUEST, $redirectUri, $state);
+        }
+        if (array_any($audiences, static fn(string $audience): bool => !$client->allowsAudience($audience))) {
+            return $this->reject(OAuthErrorCode::INVALID_REQUEST, $redirectUri, $state);
+        }
+
         return OAuthAuthorizationResult::accepted(
-            new OAuthAuthorizationRequest($clientId, $redirectUri, $scopes, $challenge, $state),
+            new OAuthAuthorizationRequest($clientId, $redirectUri, $scopes, $audiences, $challenge, $state),
             $client,
         );
     }

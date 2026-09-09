@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Infocyph\Epicrypt\Auth\OAuth\OAuthAuthorizationAudienceResolverInterface;
 use Infocyph\Epicrypt\Auth\OAuth\OAuthAuthorizationRequestValidator;
 use Infocyph\Epicrypt\Auth\OAuth\OAuthClient;
 use Infocyph\Epicrypt\Auth\OAuth\OAuthClientAuthenticationMethod;
@@ -10,7 +11,7 @@ use Infocyph\Epicrypt\Auth\OAuth\OAuthErrorCode;
 use Infocyph\Epicrypt\Auth\OAuth\OAuthGrantType;
 use Infocyph\Epicrypt\Tests\Support\InMemoryOAuthClientStore;
 
-function authorizationClient(): OAuthClient
+function authorizationClient(array $audiences = ['orders-api']): OAuthClient
 {
     return new OAuthClient(
         clientId: 'client-1',
@@ -19,14 +20,18 @@ function authorizationClient(): OAuthClient
         redirectUris: ['https://client.example/callback'],
         grantTypes: [OAuthGrantType::AUTHORIZATION_CODE],
         scopes: ['read', 'openid'],
-        audiences: [],
+        audiences: $audiences,
         authenticationMethods: [OAuthClientAuthenticationMethod::NONE],
     );
 }
 
-function authorizationValidator(): OAuthAuthorizationRequestValidator
+function authorizationValidator(?OAuthAuthorizationAudienceResolverInterface $resolver = null): OAuthAuthorizationRequestValidator
 {
-    return new OAuthAuthorizationRequestValidator(new InMemoryOAuthClientStore([authorizationClient()]));
+    $store = new InMemoryOAuthClientStore([authorizationClient()]);
+
+    return $resolver === null
+        ? new OAuthAuthorizationRequestValidator($store)
+        : new OAuthAuthorizationRequestValidator($store, $resolver);
 }
 
 /** @return array<string, string|list<string>> */
@@ -43,13 +48,14 @@ function validAuthorizationParameters(): array
     ];
 }
 
-it('accepts an exact authorization-code request with S256 PKCE', function () {
+it('accepts an exact authorization-code request with S256 PKCE and one resource audience', function () {
     $result = authorizationValidator()->validate(validAuthorizationParameters());
 
     expect($result->error)->toBeNull()
         ->and($result->acceptedRequest()->clientId)->toBe('client-1')
         ->and($result->acceptedRequest()->redirectUri)->toBe('https://client.example/callback')
         ->and($result->acceptedRequest()->scopes)->toBe(['read'])
+        ->and($result->acceptedRequest()->audiences)->toBe(['orders-api'])
         ->and($result->acceptedRequest()->state)->toBe('state-1');
 });
 
@@ -105,4 +111,41 @@ it('uses the sole registered redirect when redirect_uri is omitted', function ()
 
     expect($result->error)->toBeNull()
         ->and($result->acceptedRequest()->redirectUri)->toBe('https://client.example/callback');
+});
+
+it('requires an explicit audience resolver for a multi-resource client', function () {
+    $client = authorizationClient(['orders-api', 'billing-api']);
+    $validator = new OAuthAuthorizationRequestValidator(new InMemoryOAuthClientStore([$client]));
+    $result = $validator->validate(validAuthorizationParameters());
+
+    expect($result->error?->code)->toBe(OAuthErrorCode::INVALID_REQUEST)
+        ->and($result->error?->mayRedirect())->toBeTrue();
+});
+
+it('accepts an explicit registered audience resolution for a multi-resource client', function () {
+    $client = authorizationClient(['orders-api', 'billing-api']);
+    $resolver = new class implements OAuthAuthorizationAudienceResolverInterface {
+        public function resolve(OAuthClient $client, array $scopes): array
+        {
+            return ['billing-api'];
+        }
+    };
+    $validator = new OAuthAuthorizationRequestValidator(new InMemoryOAuthClientStore([$client]), $resolver);
+    $result = $validator->validate(validAuthorizationParameters());
+
+    expect($result->error)->toBeNull()
+        ->and($result->acceptedRequest()->audiences)->toBe(['billing-api']);
+});
+
+it('rejects an audience resolver that expands beyond client registration', function () {
+    $resolver = new class implements OAuthAuthorizationAudienceResolverInterface {
+        public function resolve(OAuthClient $client, array $scopes): array
+        {
+            return ['attacker-api'];
+        }
+    };
+    $result = authorizationValidator($resolver)->validate(validAuthorizationParameters());
+
+    expect($result->error?->code)->toBe(OAuthErrorCode::INVALID_REQUEST)
+        ->and($result->error?->redirectUri)->toBe('https://client.example/callback');
 });
