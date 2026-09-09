@@ -18,6 +18,7 @@ final readonly class RemoteJoseResource
         private ClientInterface $client,
         private RequestFactoryInterface $requestFactory,
         private int $maximumBytes,
+        private int $maximumKeys,
         private RemoteJoseHostResolverInterface $hostResolver,
     ) {}
 
@@ -53,8 +54,12 @@ final readonly class RemoteJoseResource
             }
         }
 
+        $maximumMembers = $jwks
+            ? 1 + ($this->maximumKeys * JosePolicy::MAX_JWK_MEMBERS)
+            : JosePolicy::MAX_DOCUMENT_MEMBERS;
+
         return [
-            JwtToken::decodeJsonObject($json, 'remote JOSE document', $this->maximumBytes, PHP_INT_MAX),
+            JwtToken::decodeJsonObject($json, 'remote JOSE document', $this->maximumBytes, $maximumMembers),
             $this->cachePolicy($response->getHeaderLine('Cache-Control')),
         ];
     }
@@ -65,11 +70,12 @@ final readonly class RemoteJoseResource
         if (!is_string($host) || $host === '') {
             throw new KeyResolutionException('Remote JOSE target host is invalid.');
         }
+        $host = strtolower(trim($host, '[]'));
 
         try {
             $addresses = filter_var($host, FILTER_VALIDATE_IP) !== false
                 ? [$host]
-                : $this->hostResolver->resolve(strtolower($host));
+                : $this->hostResolver->resolve($host);
         } catch (Throwable $exception) {
             throw new KeyResolutionException('Remote JOSE host resolution failed.', 0, $exception);
         }
