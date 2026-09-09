@@ -146,6 +146,7 @@ final readonly class RemoteJwks
             if (!is_array($key)) {
                 return null;
             }
+
             try {
                 JosePolicy::assertMemberCount($key, JosePolicy::MAX_JWK_MEMBERS, 'Remote JWK');
             } catch (Throwable) {
