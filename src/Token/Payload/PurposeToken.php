@@ -37,7 +37,7 @@ final readonly class PurposeToken
         private ?string $context = null,
         private int $ttlSeconds = 3600,
         private ClockInterface $clock = new SystemClock(),
-        private TokenMaterialGenerator $tokenMaterial = new TokenMaterialGenerator(),
+        private TokenMaterialGenerator $tokenIdGenerator = new TokenMaterialGenerator(),
     ) {
         SecurityPolicy::assertIdentifier($this->purpose, 'Purpose token purpose');
         if ($this->context !== null) {
@@ -71,7 +71,7 @@ final readonly class PurposeToken
 
         $payload = $claims + [
             'purpose' => $this->purpose,
-            'tid' => $this->tokenMaterial->generate(),
+            'tid' => $this->tokenIdGenerator->generate(),
         ];
         if ($subjectId !== null) {
             $payload['sub'] = $subjectId;
