@@ -6,6 +6,8 @@ namespace Infocyph\Epicrypt\Auth\Personal;
 
 interface PersonalAccessTokenUsageStoreInterface
 {
+    public function lastUsedAt(string $tokenId, string $subject): ?int;
+
     /**
      * Atomically records usage no more often than the supplied interval.
      *
@@ -19,6 +21,4 @@ interface PersonalAccessTokenUsageStoreInterface
         int $usedAt,
         int $minimumIntervalSeconds,
     ): ?int;
-
-    public function lastUsedAt(string $tokenId, string $subject): ?int;
 }

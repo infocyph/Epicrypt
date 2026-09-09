@@ -11,13 +11,14 @@ use Infocyph\Epicrypt\Exception\ConfigurationException;
 final readonly class OpenIdAuthorizationRequest
 {
     private const int MAX_ACR_VALUES = 16;
-    private const int MAX_AUTHENTICATION_AGE_SECONDS = 2_678_400;
 
-    /** @var list<OpenIdPrompt> */
-    public array $prompts;
+    private const int MAX_AUTHENTICATION_AGE_SECONDS = 2_678_400;
 
     /** @var list<string> */
     public array $acrValues;
+
+    /** @var list<OpenIdPrompt> */
+    public array $prompts;
 
     /**
      * @param array<array-key, mixed> $prompts
@@ -52,29 +53,6 @@ final readonly class OpenIdAuthorizationRequest
         return in_array($prompt, $this->prompts, true);
     }
 
-    /** @param array<array-key, mixed> $prompts @return list<OpenIdPrompt> */
-    private static function normalizePrompts(array $prompts): array
-    {
-        if (!array_is_list($prompts) || count($prompts) > count(OpenIdPrompt::cases())) {
-            throw new ConfigurationException('OpenID Connect prompt values must be a bounded list.');
-        }
-
-        $seen = [];
-        $normalized = [];
-        foreach ($prompts as $prompt) {
-            if (!$prompt instanceof OpenIdPrompt || isset($seen[$prompt->value])) {
-                throw new ConfigurationException('OpenID Connect prompt values must be unique typed values.');
-            }
-            $seen[$prompt->value] = true;
-            $normalized[] = $prompt;
-        }
-        if (isset($seen[OpenIdPrompt::NONE->value]) && count($normalized) !== 1) {
-            throw new ConfigurationException('OpenID Connect prompt=none cannot be combined with another prompt value.');
-        }
-
-        return $normalized;
-    }
-
     /** @param array<array-key, mixed> $acrValues @return list<string> */
     private static function normalizeAcrValues(array $acrValues): array
     {
@@ -93,6 +71,29 @@ final readonly class OpenIdAuthorizationRequest
             }
             $seen[$acr] = true;
             $normalized[] = $acr;
+        }
+
+        return $normalized;
+    }
+
+    /** @param array<array-key, mixed> $prompts @return list<OpenIdPrompt> */
+    private static function normalizePrompts(array $prompts): array
+    {
+        if (!array_is_list($prompts) || count($prompts) > count(OpenIdPrompt::cases())) {
+            throw new ConfigurationException('OpenID Connect prompt values must be a bounded list.');
+        }
+
+        $seen = [];
+        $normalized = [];
+        foreach ($prompts as $prompt) {
+            if (!$prompt instanceof OpenIdPrompt || isset($seen[$prompt->value])) {
+                throw new ConfigurationException('OpenID Connect prompt values must be unique typed values.');
+            }
+            $seen[$prompt->value] = true;
+            $normalized[] = $prompt;
+        }
+        if (isset($seen[OpenIdPrompt::NONE->value]) && count($normalized) !== 1) {
+            throw new ConfigurationException('OpenID Connect prompt=none cannot be combined with another prompt value.');
         }
 
         return $normalized;

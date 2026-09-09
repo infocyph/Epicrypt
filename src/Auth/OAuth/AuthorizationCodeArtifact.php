@@ -35,6 +35,45 @@ final readonly class AuthorizationCodeArtifact
         }
     }
 
+    public function decrypt(#[\SensitiveParameter] string $token): AuthorizationCode
+    {
+        [$keyId, $header] = $this->protectedHeader($token);
+        $this->validateProtectedHeader($header);
+        $entry = $this->keys->resolveForRead(
+            $keyId,
+            KeyPurpose::OAUTH_AUTHORIZATION_CODE_PROTECTION,
+            JweKeyManagementAlgorithm::DIRECT->value,
+            $this->issuer,
+        );
+        if ($entry === null) {
+            throw new InvalidTokenException('Authorization-code protection key is unavailable.');
+        }
+
+        try {
+            $plaintext = new Jwe(
+                $entry->key,
+                JweKeyManagementAlgorithm::DIRECT,
+                JweContentEncryptionAlgorithm::A256GCM,
+                $entry->id,
+            )->decryptCompact($token);
+            $claims = Json::decodeToArray($plaintext);
+        } catch (InvalidTokenException $exception) {
+            throw $exception;
+        } catch (Throwable $exception) {
+            throw new InvalidTokenException('Authorization-code artifact payload is invalid.', 0, $exception);
+        }
+
+        $code = $this->codeFromClaims($claims);
+        $now = $this->clock->now()->getTimestamp();
+        if (!hash_equals($this->issuer, $code->issuer)
+            || $code->issuedAt > ($now + self::MAXIMUM_FUTURE_SKEW_SECONDS)
+            || $now >= $code->expiresAt) {
+            throw new InvalidTokenException('Authorization-code artifact is outside its valid issuer or time window.');
+        }
+
+        return $code;
+    }
+
     /**
      * @param array<array-key, mixed> $scopes
      * @param array<array-key, mixed> $audiences
@@ -88,43 +127,51 @@ final readonly class AuthorizationCodeArtifact
         return new AuthorizationCodeIssue($token, $code);
     }
 
-    public function decrypt(#[\SensitiveParameter] string $token): AuthorizationCode
+    /** @param array<string, mixed> $claims */
+    private static function nullableIntClaim(array $claims, string $name): ?int
     {
-        [$keyId, $header] = $this->protectedHeader($token);
-        $this->validateProtectedHeader($header);
-        $entry = $this->keys->resolveForRead(
-            $keyId,
-            KeyPurpose::OAUTH_AUTHORIZATION_CODE_PROTECTION,
-            JweKeyManagementAlgorithm::DIRECT->value,
-            $this->issuer,
-        );
-        if ($entry === null) {
-            throw new InvalidTokenException('Authorization-code protection key is unavailable.');
+        if (!array_key_exists($name, $claims)) {
+            return null;
         }
 
-        try {
-            $plaintext = new Jwe(
-                $entry->key,
-                JweKeyManagementAlgorithm::DIRECT,
-                JweContentEncryptionAlgorithm::A256GCM,
-                $entry->id,
-            )->decryptCompact($token);
-            $claims = Json::decodeToArray($plaintext);
-        } catch (InvalidTokenException $exception) {
-            throw $exception;
-        } catch (Throwable $exception) {
-            throw new InvalidTokenException('Authorization-code artifact payload is invalid.', 0, $exception);
+        return is_int($claims[$name])
+            ? $claims[$name]
+            : throw new InvalidTokenException(sprintf('Authorization-code %s claim must be an integer.', $name));
+    }
+
+    /** @param array<string, mixed> $claims */
+    private static function nullableStringClaim(array $claims, string $name): ?string
+    {
+        if (!array_key_exists($name, $claims)) {
+            return null;
         }
 
-        $code = $this->codeFromClaims($claims);
-        $now = $this->clock->now()->getTimestamp();
-        if (!hash_equals($this->issuer, $code->issuer)
-            || $code->issuedAt > ($now + self::MAXIMUM_FUTURE_SKEW_SECONDS)
-            || $now >= $code->expiresAt) {
-            throw new InvalidTokenException('Authorization-code artifact is outside its valid issuer or time window.');
+        return is_string($claims[$name])
+            ? $claims[$name]
+            : throw new InvalidTokenException(sprintf('Authorization-code %s claim must be a string.', $name));
+    }
+
+    /**
+     * @param array<string, mixed> $claims
+     * @return array<array-key, mixed>
+     */
+    private static function optionalListClaim(array $claims, string $name): array
+    {
+        if (!array_key_exists($name, $claims)) {
+            return [];
         }
 
-        return $code;
+        return is_array($claims[$name]) && array_is_list($claims[$name])
+            ? $claims[$name]
+            : throw new InvalidTokenException(sprintf('Authorization-code %s claim must be a list.', $name));
+    }
+
+    /** @param array<string, mixed> $claims */
+    private static function stringClaim(array $claims, string $name): string
+    {
+        return is_string($claims[$name] ?? null)
+            ? $claims[$name]
+            : throw new InvalidTokenException(sprintf('Authorization-code %s claim must be a string.', $name));
     }
 
     /** @param array<string, mixed> $claims */
@@ -168,6 +215,7 @@ final readonly class AuthorizationCodeArtifact
         }
 
         $scopes = $claims['scope'] === '' ? [] : explode(' ', $claims['scope']);
+
         try {
             return new AuthorizationCode(
                 issuer: self::stringClaim($claims, 'iss'),
@@ -223,52 +271,5 @@ final readonly class AuthorizationCodeArtifact
             || !AuthTokenClass::OAUTH_AUTHORIZATION_CODE->acceptsJoseType($header['typ'])) {
             throw new InvalidTokenException('Authorization-code protected header profile is invalid.');
         }
-    }
-
-    /** @param array<string, mixed> $claims */
-    private static function nullableIntClaim(array $claims, string $name): ?int
-    {
-        if (!array_key_exists($name, $claims)) {
-            return null;
-        }
-
-        return is_int($claims[$name])
-            ? $claims[$name]
-            : throw new InvalidTokenException(sprintf('Authorization-code %s claim must be an integer.', $name));
-    }
-
-    /** @param array<string, mixed> $claims */
-    private static function nullableStringClaim(array $claims, string $name): ?string
-    {
-        if (!array_key_exists($name, $claims)) {
-            return null;
-        }
-
-        return is_string($claims[$name])
-            ? $claims[$name]
-            : throw new InvalidTokenException(sprintf('Authorization-code %s claim must be a string.', $name));
-    }
-
-    /**
-     * @param array<string, mixed> $claims
-     * @return array<array-key, mixed>
-     */
-    private static function optionalListClaim(array $claims, string $name): array
-    {
-        if (!array_key_exists($name, $claims)) {
-            return [];
-        }
-
-        return is_array($claims[$name]) && array_is_list($claims[$name])
-            ? $claims[$name]
-            : throw new InvalidTokenException(sprintf('Authorization-code %s claim must be a list.', $name));
-    }
-
-    /** @param array<string, mixed> $claims */
-    private static function stringClaim(array $claims, string $name): string
-    {
-        return is_string($claims[$name] ?? null)
-            ? $claims[$name]
-            : throw new InvalidTokenException(sprintf('Authorization-code %s claim must be a string.', $name));
     }
 }

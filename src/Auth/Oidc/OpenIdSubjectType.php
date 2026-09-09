@@ -6,6 +6,7 @@ namespace Infocyph\Epicrypt\Auth\Oidc;
 
 enum OpenIdSubjectType: string
 {
-    case PUBLIC = 'public';
     case PAIRWISE = 'pairwise';
+
+    case PUBLIC = 'public';
 }

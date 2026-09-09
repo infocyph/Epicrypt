@@ -60,12 +60,6 @@ final readonly class OAuthClientKeySet
         $this->keys = $normalized;
     }
 
-    /** @return array{keys: non-empty-list<array<string, mixed>>} */
-    public function toArray(): array
-    {
-        return ['keys' => $this->keys];
-    }
-
     /** @return list<AsymmetricJwtAlgorithm> */
     public function algorithms(): array
     {
@@ -109,6 +103,12 @@ final readonly class OAuthClientKeySet
         }
 
         return self::importPublicKey($matches[0], $algorithm);
+    }
+
+    /** @return array{keys: non-empty-list<array<string, mixed>>} */
+    public function toArray(): array
+    {
+        return ['keys' => $this->keys];
     }
 
     /** @param array<string, mixed> $jwk */

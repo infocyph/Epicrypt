@@ -11,20 +11,20 @@ final readonly class OAuthClient
 {
     private const int MAX_REDIRECT_URIS = 32;
 
-    /** @var list<string> */
-    public array $redirectUris;
-
-    /** @var non-empty-list<OAuthGrantType> */
-    public array $grantTypes;
-
-    /** @var list<string> */
-    public array $scopes;
-
     /** @var non-empty-list<string> */
     public array $audiences;
 
     /** @var non-empty-list<OAuthClientAuthenticationMethod> */
     public array $authenticationMethods;
+
+    /** @var non-empty-list<OAuthGrantType> */
+    public array $grantTypes;
+
+    /** @var list<string> */
+    public array $redirectUris;
+
+    /** @var list<string> */
+    public array $scopes;
 
     /**
      * @param array<array-key, mixed> $redirectUris
@@ -59,21 +59,6 @@ final readonly class OAuthClient
         $this->assertAuthenticationProfile();
     }
 
-    public function allowsRedirectUri(string $redirectUri): bool
-    {
-        return in_array($redirectUri, $this->redirectUris, true);
-    }
-
-    public function allowsGrant(OAuthGrantType $grantType): bool
-    {
-        return in_array($grantType, $this->grantTypes, true);
-    }
-
-    public function allowsScope(string $scope): bool
-    {
-        return in_array($scope, $this->scopes, true);
-    }
-
     public function allowsAudience(string $audience): bool
     {
         return in_array($audience, $this->audiences, true);
@@ -84,53 +69,72 @@ final readonly class OAuthClient
         return in_array($method, $this->authenticationMethods, true);
     }
 
+    public function allowsGrant(OAuthGrantType $grantType): bool
+    {
+        return in_array($grantType, $this->grantTypes, true);
+    }
+
+    public function allowsRedirectUri(string $redirectUri): bool
+    {
+        return in_array($redirectUri, $this->redirectUris, true);
+    }
+
+    public function allowsScope(string $scope): bool
+    {
+        return in_array($scope, $this->scopes, true);
+    }
+
     public function verifySecret(#[\SensitiveParameter] string $secret): bool
     {
         return $this->secret?->verify($secret) ?? false;
     }
 
-    private function assertGrantProfile(): void
+    /**
+     * @param array<array-key, mixed> $methods
+     * @return non-empty-list<OAuthClientAuthenticationMethod>
+     */
+    private static function normalizeAuthenticationMethods(array $methods): array
     {
-        if ($this->allowsGrant(OAuthGrantType::AUTHORIZATION_CODE) && $this->redirectUris === []) {
-            throw new ConfigurationException('Authorization-code clients require at least one exact redirect URI.');
+        if ($methods === [] || !array_is_list($methods) || count($methods) > count(OAuthClientAuthenticationMethod::cases())) {
+            throw new ConfigurationException('OAuth client authentication methods must be a bounded non-empty list.');
         }
-        if ($this->allowsGrant(OAuthGrantType::REFRESH_TOKEN)
-            && !$this->allowsGrant(OAuthGrantType::AUTHORIZATION_CODE)) {
-            throw new ConfigurationException('Epicrypt 3 refresh-token clients must also allow authorization_code.');
+
+        $seen = [];
+        $normalized = [];
+        foreach ($methods as $method) {
+            if (!$method instanceof OAuthClientAuthenticationMethod || isset($seen[$method->value])) {
+                throw new ConfigurationException('OAuth client authentication methods must contain unique typed values.');
+            }
+            $seen[$method->value] = true;
+            $normalized[] = $method;
         }
-        if ($this->type === OAuthClientType::PUBLIC && $this->allowsGrant(OAuthGrantType::CLIENT_CREDENTIALS)) {
-            throw new ConfigurationException('Public OAuth clients cannot use the client_credentials grant.');
-        }
+
+        /** @var non-empty-list<OAuthClientAuthenticationMethod> $normalized */
+        return $normalized;
     }
 
-    private function assertAuthenticationProfile(): void
+    /**
+     * @param array<array-key, mixed> $grantTypes
+     * @return non-empty-list<OAuthGrantType>
+     */
+    private static function normalizeGrantTypes(array $grantTypes): array
     {
-        $usesNone = $this->allowsAuthenticationMethod(OAuthClientAuthenticationMethod::NONE);
-        $usesSecret = array_any(
-            $this->authenticationMethods,
-            static fn(OAuthClientAuthenticationMethod $method): bool => $method->usesClientSecret(),
-        );
-        $usesPrivateKeyJwt = $this->allowsAuthenticationMethod(OAuthClientAuthenticationMethod::PRIVATE_KEY_JWT);
+        if ($grantTypes === [] || !array_is_list($grantTypes) || count($grantTypes) > count(OAuthGrantType::cases())) {
+            throw new ConfigurationException('OAuth client grant types must be a bounded non-empty list.');
+        }
 
-        if ($this->type === OAuthClientType::PUBLIC) {
-            if ($this->authenticationMethods !== [OAuthClientAuthenticationMethod::NONE]
-                || $this->secret !== null
-                || $this->assertionKeys !== null) {
-                throw new ConfigurationException('Public OAuth clients must use only the none authentication method and carry no credentials.');
+        $seen = [];
+        $normalized = [];
+        foreach ($grantTypes as $grantType) {
+            if (!$grantType instanceof OAuthGrantType || isset($seen[$grantType->value])) {
+                throw new ConfigurationException('OAuth client grant types must contain unique OAuthGrantType values.');
             }
-
-            return;
+            $seen[$grantType->value] = true;
+            $normalized[] = $grantType;
         }
 
-        if ($usesNone) {
-            throw new ConfigurationException('Confidential OAuth clients cannot use the none authentication method.');
-        }
-        if ($usesSecret !== ($this->secret !== null)) {
-            throw new ConfigurationException('OAuth client-secret configuration must exactly match the enabled secret authentication methods.');
-        }
-        if ($usesPrivateKeyJwt !== ($this->assertionKeys !== null)) {
-            throw new ConfigurationException('OAuth private_key_jwt configuration must exactly match the registered assertion key set.');
-        }
+        /** @var non-empty-list<OAuthGrantType> $normalized */
+        return $normalized;
     }
 
     /**
@@ -178,51 +182,47 @@ final readonly class OAuthClient
             || (is_string($parts['host'] ?? null) && $parts['host'] !== '');
     }
 
-    /**
-     * @param array<array-key, mixed> $grantTypes
-     * @return non-empty-list<OAuthGrantType>
-     */
-    private static function normalizeGrantTypes(array $grantTypes): array
+    private function assertAuthenticationProfile(): void
     {
-        if ($grantTypes === [] || !array_is_list($grantTypes) || count($grantTypes) > count(OAuthGrantType::cases())) {
-            throw new ConfigurationException('OAuth client grant types must be a bounded non-empty list.');
-        }
+        $usesNone = $this->allowsAuthenticationMethod(OAuthClientAuthenticationMethod::NONE);
+        $usesSecret = array_any(
+            $this->authenticationMethods,
+            static fn(OAuthClientAuthenticationMethod $method): bool => $method->usesClientSecret(),
+        );
+        $usesPrivateKeyJwt = $this->allowsAuthenticationMethod(OAuthClientAuthenticationMethod::PRIVATE_KEY_JWT);
 
-        $seen = [];
-        $normalized = [];
-        foreach ($grantTypes as $grantType) {
-            if (!$grantType instanceof OAuthGrantType || isset($seen[$grantType->value])) {
-                throw new ConfigurationException('OAuth client grant types must contain unique OAuthGrantType values.');
+        if ($this->type === OAuthClientType::PUBLIC) {
+            if ($this->authenticationMethods !== [OAuthClientAuthenticationMethod::NONE]
+                || $this->secret !== null
+                || $this->assertionKeys !== null) {
+                throw new ConfigurationException('Public OAuth clients must use only the none authentication method and carry no credentials.');
             }
-            $seen[$grantType->value] = true;
-            $normalized[] = $grantType;
+
+            return;
         }
 
-        /** @var non-empty-list<OAuthGrantType> $normalized */
-        return $normalized;
+        if ($usesNone) {
+            throw new ConfigurationException('Confidential OAuth clients cannot use the none authentication method.');
+        }
+        if ($usesSecret !== ($this->secret !== null)) {
+            throw new ConfigurationException('OAuth client-secret configuration must exactly match the enabled secret authentication methods.');
+        }
+        if ($usesPrivateKeyJwt !== ($this->assertionKeys !== null)) {
+            throw new ConfigurationException('OAuth private_key_jwt configuration must exactly match the registered assertion key set.');
+        }
     }
 
-    /**
-     * @param array<array-key, mixed> $methods
-     * @return non-empty-list<OAuthClientAuthenticationMethod>
-     */
-    private static function normalizeAuthenticationMethods(array $methods): array
+    private function assertGrantProfile(): void
     {
-        if ($methods === [] || !array_is_list($methods) || count($methods) > count(OAuthClientAuthenticationMethod::cases())) {
-            throw new ConfigurationException('OAuth client authentication methods must be a bounded non-empty list.');
+        if ($this->allowsGrant(OAuthGrantType::AUTHORIZATION_CODE) && $this->redirectUris === []) {
+            throw new ConfigurationException('Authorization-code clients require at least one exact redirect URI.');
         }
-
-        $seen = [];
-        $normalized = [];
-        foreach ($methods as $method) {
-            if (!$method instanceof OAuthClientAuthenticationMethod || isset($seen[$method->value])) {
-                throw new ConfigurationException('OAuth client authentication methods must contain unique typed values.');
-            }
-            $seen[$method->value] = true;
-            $normalized[] = $method;
+        if ($this->allowsGrant(OAuthGrantType::REFRESH_TOKEN)
+            && !$this->allowsGrant(OAuthGrantType::AUTHORIZATION_CODE)) {
+            throw new ConfigurationException('Epicrypt 3 refresh-token clients must also allow authorization_code.');
         }
-
-        /** @var non-empty-list<OAuthClientAuthenticationMethod> $normalized */
-        return $normalized;
+        if ($this->type === OAuthClientType::PUBLIC && $this->allowsGrant(OAuthGrantType::CLIENT_CREDENTIALS)) {
+            throw new ConfigurationException('Public OAuth clients cannot use the client_credentials grant.');
+        }
     }
 }

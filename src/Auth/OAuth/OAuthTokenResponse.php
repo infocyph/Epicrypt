@@ -17,9 +17,6 @@ final readonly class OAuthTokenResponse
         'refresh_token' => true,
     ];
 
-    /** @var list<string> */
-    public array $scopes;
-
     /** @var array<string, string> */
     public array $additionalParameters;
 
@@ -32,13 +29,12 @@ final readonly class OAuthTokenResponse
         public string $accessToken,
         public OAuthAccessTokenType $tokenType,
         public int $expiresIn,
-        array $scopes,
+        public array $scopes,
         #[\SensitiveParameter]
         public ?string $refreshToken = null,
         #[\SensitiveParameter]
         array $additionalParameters = [],
     ) {
-        $this->scopes = $scopes;
         $this->additionalParameters = self::normalizeAdditionalParameters($additionalParameters);
     }
 

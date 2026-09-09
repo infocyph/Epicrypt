@@ -13,6 +13,11 @@ final readonly class OAuthAuthorizationCodeConsumeResult
         public ?OAuthAuthorizationRecord $authorization,
     ) {}
 
+    public static function failure(OAuthAuthorizationCodeConsumeStatus $status): self
+    {
+        return new self(false, $status, null, null);
+    }
+
     public static function success(
         AuthorizationCode $code,
         OAuthAuthorizationRecord $authorization,
@@ -23,10 +28,5 @@ final readonly class OAuthAuthorizationCodeConsumeResult
             $code,
             $authorization,
         );
-    }
-
-    public static function failure(OAuthAuthorizationCodeConsumeStatus $status): self
-    {
-        return new self(false, $status, null, null);
     }
 }

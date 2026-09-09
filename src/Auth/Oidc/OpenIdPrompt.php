@@ -6,8 +6,11 @@ namespace Infocyph\Epicrypt\Auth\Oidc;
 
 enum OpenIdPrompt: string
 {
-    case NONE = 'none';
-    case LOGIN = 'login';
     case CONSENT = 'consent';
+
+    case LOGIN = 'login';
+
+    case NONE = 'none';
+
     case SELECT_ACCOUNT = 'select_account';
 }

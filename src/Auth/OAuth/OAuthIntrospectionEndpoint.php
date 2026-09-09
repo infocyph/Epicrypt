@@ -73,6 +73,16 @@ final readonly class OAuthIntrospectionEndpoint
         return OAuthIntrospectionResponse::active($metadata);
     }
 
+    /** @return array{OAuthTokenTypeHint, OAuthTokenTypeHint} */
+    private function inspectionOrder(?OAuthTokenTypeHint $hint): array
+    {
+        return match ($hint) {
+            OAuthTokenTypeHint::ACCESS_TOKEN => [OAuthTokenTypeHint::ACCESS_TOKEN, OAuthTokenTypeHint::REFRESH_TOKEN],
+            OAuthTokenTypeHint::REFRESH_TOKEN => [OAuthTokenTypeHint::REFRESH_TOKEN, OAuthTokenTypeHint::ACCESS_TOKEN],
+            null => [OAuthTokenTypeHint::ACCESS_TOKEN, OAuthTokenTypeHint::REFRESH_TOKEN],
+        };
+    }
+
     private function inspectRefresh(#[\SensitiveParameter] string $token): OAuthIntrospectionResponse
     {
         $inspection = $this->refreshTokens->inspect($token);
@@ -98,15 +108,5 @@ final readonly class OAuthIntrospectionEndpoint
         }
 
         return OAuthIntrospectionResponse::active($metadata);
-    }
-
-    /** @return array{OAuthTokenTypeHint, OAuthTokenTypeHint} */
-    private function inspectionOrder(?OAuthTokenTypeHint $hint): array
-    {
-        return match ($hint) {
-            OAuthTokenTypeHint::ACCESS_TOKEN => [OAuthTokenTypeHint::ACCESS_TOKEN, OAuthTokenTypeHint::REFRESH_TOKEN],
-            OAuthTokenTypeHint::REFRESH_TOKEN => [OAuthTokenTypeHint::REFRESH_TOKEN, OAuthTokenTypeHint::ACCESS_TOKEN],
-            null => [OAuthTokenTypeHint::ACCESS_TOKEN, OAuthTokenTypeHint::REFRESH_TOKEN],
-        };
     }
 }

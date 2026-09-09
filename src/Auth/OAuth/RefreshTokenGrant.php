@@ -41,6 +41,35 @@ final readonly class RefreshTokenGrant
         }
     }
 
+    /**
+     * @param array<array-key, mixed> $scopes
+     * @return list<string>
+     */
+    public static function normalizeScopes(array $scopes): array
+    {
+        return AuthProtocolPolicy::normalizeScopes($scopes, 'Refresh-token scopes');
+    }
+
+    public static function validDpopKeyThumbprint(string $thumbprint): bool
+    {
+        return AuthProtocolPolicy::validSha256Base64Url($thumbprint);
+    }
+
+    public function sameAuthorization(self $other): bool
+    {
+        return $this->authorizationId === $other->authorizationId
+            && $this->subject === $other->subject
+            && $this->clientId === $other->clientId
+            && $this->audiences === $other->audiences
+            && $this->expiresAt === $other->expiresAt
+            && $this->dpopKeyThumbprint === $other->dpopKeyThumbprint;
+    }
+
+    public function scopesContain(self $other): bool
+    {
+        return array_all($other->scopes, fn($scope) => in_array($scope, $this->scopes, true));
+    }
+
     /** @param array<array-key, mixed> $scopes */
     public function withScopes(array $scopes): self
     {
@@ -60,40 +89,5 @@ final readonly class RefreshTokenGrant
             $this->expiresAt,
             $this->dpopKeyThumbprint,
         );
-    }
-
-    public function sameAuthorization(self $other): bool
-    {
-        return $this->authorizationId === $other->authorizationId
-            && $this->subject === $other->subject
-            && $this->clientId === $other->clientId
-            && $this->audiences === $other->audiences
-            && $this->expiresAt === $other->expiresAt
-            && $this->dpopKeyThumbprint === $other->dpopKeyThumbprint;
-    }
-
-    public function scopesContain(self $other): bool
-    {
-        foreach ($other->scopes as $scope) {
-            if (!in_array($scope, $this->scopes, true)) {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    /**
-     * @param array<array-key, mixed> $scopes
-     * @return list<string>
-     */
-    public static function normalizeScopes(array $scopes): array
-    {
-        return AuthProtocolPolicy::normalizeScopes($scopes, 'Refresh-token scopes');
-    }
-
-    public static function validDpopKeyThumbprint(string $thumbprint): bool
-    {
-        return AuthProtocolPolicy::validSha256Base64Url($thumbprint);
     }
 }

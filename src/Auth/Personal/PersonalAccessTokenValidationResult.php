@@ -16,12 +16,9 @@ final readonly class PersonalAccessTokenValidationResult
         public ?int $lastUsedAt = null,
     ) {}
 
-    public static function valid(
-        PersonalAccessTokenRecord $record,
-        PersonalAccessTokenAbilities $abilities,
-        ?int $lastUsedAt = null,
-    ): self {
-        return new self(PersonalAccessTokenValidationStatus::VALID, $record, $abilities, lastUsedAt: $lastUsedAt);
+    public static function inactive(): self
+    {
+        return new self(PersonalAccessTokenValidationStatus::INACTIVE);
     }
 
     public static function invalid(?JwtFailureReason $failureReason = null): self
@@ -29,14 +26,17 @@ final readonly class PersonalAccessTokenValidationResult
         return new self(PersonalAccessTokenValidationStatus::INVALID, failureReason: $failureReason);
     }
 
-    public static function inactive(): self
-    {
-        return new self(PersonalAccessTokenValidationStatus::INACTIVE);
-    }
-
     public static function stateMismatch(): self
     {
         return new self(PersonalAccessTokenValidationStatus::STATE_MISMATCH);
+    }
+
+    public static function valid(
+        PersonalAccessTokenRecord $record,
+        PersonalAccessTokenAbilities $abilities,
+        ?int $lastUsedAt = null,
+    ): self {
+        return new self(PersonalAccessTokenValidationStatus::VALID, $record, $abilities, lastUsedAt: $lastUsedAt);
     }
 
     public function accepted(): bool

@@ -13,15 +13,15 @@ final readonly class OAuthClientAuthenticationResult
         public ?OAuthClientAssertionStatus $assertionStatus,
     ) {}
 
-    public static function success(OAuthClient $client): self
-    {
-        return new self(true, $client, null, null);
-    }
-
     public static function failure(
         OAuthClientAuthenticationFailureReason $reason,
         ?OAuthClientAssertionStatus $assertionStatus = null,
     ): self {
         return new self(false, null, $reason, $assertionStatus);
+    }
+
+    public static function success(OAuthClient $client): self
+    {
+        return new self(true, $client, null, null);
     }
 }

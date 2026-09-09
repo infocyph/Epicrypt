@@ -11,14 +11,14 @@ final readonly class OpenIdInteractionResult
         public ?OpenIdInteractionErrorCode $error,
     ) {}
 
-    public static function require(OpenIdInteractionRequirement $requirement): self
-    {
-        return new self($requirement, null);
-    }
-
     public static function error(OpenIdInteractionErrorCode $error): self
     {
         return new self(null, $error);
+    }
+
+    public static function require(OpenIdInteractionRequirement $requirement): self
+    {
+        return new self($requirement, null);
     }
 
     public function successful(): bool

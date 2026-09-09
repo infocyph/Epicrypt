@@ -11,26 +11,6 @@ final readonly class OAuthClientAuthenticator
         private OAuthClientAssertionValidator $assertions,
     ) {}
 
-    public function authenticateSecret(
-        string $clientId,
-        OAuthClientAuthenticationMethod $method,
-        #[\SensitiveParameter]
-        string $secret,
-    ): OAuthClientAuthenticationResult {
-        $client = $this->enabledClient($clientId);
-        if (!$client instanceof OAuthClient) {
-            return OAuthClientAuthenticationResult::failure(OAuthClientAuthenticationFailureReason::INVALID_CLIENT);
-        }
-        if (!$method->usesClientSecret() || !$client->allowsAuthenticationMethod($method)) {
-            return OAuthClientAuthenticationResult::failure(OAuthClientAuthenticationFailureReason::METHOD_NOT_ALLOWED);
-        }
-        if (!$client->verifySecret($secret)) {
-            return OAuthClientAuthenticationResult::failure(OAuthClientAuthenticationFailureReason::INVALID_SECRET);
-        }
-
-        return OAuthClientAuthenticationResult::success($client);
-    }
-
     public function authenticatePrivateKeyJwt(
         string $clientId,
         #[\SensitiveParameter]
@@ -56,6 +36,26 @@ final readonly class OAuthClientAuthenticator
                 : OAuthClientAuthenticationFailureReason::INVALID_ASSERTION,
             $result->status,
         );
+    }
+
+    public function authenticateSecret(
+        string $clientId,
+        OAuthClientAuthenticationMethod $method,
+        #[\SensitiveParameter]
+        string $secret,
+    ): OAuthClientAuthenticationResult {
+        $client = $this->enabledClient($clientId);
+        if (!$client instanceof OAuthClient) {
+            return OAuthClientAuthenticationResult::failure(OAuthClientAuthenticationFailureReason::INVALID_CLIENT);
+        }
+        if (!$method->usesClientSecret() || !$client->allowsAuthenticationMethod($method)) {
+            return OAuthClientAuthenticationResult::failure(OAuthClientAuthenticationFailureReason::METHOD_NOT_ALLOWED);
+        }
+        if (!$client->verifySecret($secret)) {
+            return OAuthClientAuthenticationResult::failure(OAuthClientAuthenticationFailureReason::INVALID_SECRET);
+        }
+
+        return OAuthClientAuthenticationResult::success($client);
     }
 
     private function enabledClient(string $clientId): ?OAuthClient

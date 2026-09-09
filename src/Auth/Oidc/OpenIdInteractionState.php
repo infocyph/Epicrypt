@@ -31,6 +31,7 @@ final readonly class OpenIdInteractionState
                 || $this->authenticationMethods !== []) {
                 throw new ConfigurationException('Unauthenticated OpenID interaction state cannot contain authentication details.');
             }
+
             return;
         }
 

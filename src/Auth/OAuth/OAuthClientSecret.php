@@ -9,9 +9,9 @@ use Infocyph\Epicrypt\Password\PasswordHasher;
 
 final readonly class OAuthClientSecret
 {
-    private const int MAX_SECRET_BYTES = 1_024;
-
     private const int MAX_HASH_BYTES = 512;
+
+    private const int MAX_SECRET_BYTES = 1_024;
 
     private function __construct(#[\SensitiveParameter] private string $hash)
     {

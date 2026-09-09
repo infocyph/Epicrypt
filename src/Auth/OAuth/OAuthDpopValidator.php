@@ -16,22 +16,6 @@ final readonly class OAuthDpopValidator
         private DpopProof $proof = new DpopProof(),
     ) {}
 
-    public function validateTokenEndpoint(
-        #[\SensitiveParameter]
-        string $proof,
-        string $tokenEndpointUri,
-    ): OAuthDpopContext {
-        $verified = $this->proof->verifyResult(
-            $proof,
-            'POST',
-            $tokenEndpointUri,
-            $this->algorithm,
-            $this->replayStore,
-        );
-
-        return new OAuthDpopContext($verified['keyThumbprint'], $verified['publicJwk']);
-    }
-
     /** @param array<string, mixed> $accessTokenClaims */
     public function validateResourceRequest(
         #[\SensitiveParameter]
@@ -51,6 +35,22 @@ final readonly class OAuthDpopValidator
             accessToken: $accessToken,
         );
         $this->proof->validateAccessTokenBinding($accessTokenClaims, $verified['publicJwk']);
+
+        return new OAuthDpopContext($verified['keyThumbprint'], $verified['publicJwk']);
+    }
+
+    public function validateTokenEndpoint(
+        #[\SensitiveParameter]
+        string $proof,
+        string $tokenEndpointUri,
+    ): OAuthDpopContext {
+        $verified = $this->proof->verifyResult(
+            $proof,
+            'POST',
+            $tokenEndpointUri,
+            $this->algorithm,
+            $this->replayStore,
+        );
 
         return new OAuthDpopContext($verified['keyThumbprint'], $verified['publicJwk']);
     }

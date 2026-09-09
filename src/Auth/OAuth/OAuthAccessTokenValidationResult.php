@@ -17,17 +17,6 @@ final readonly class OAuthAccessTokenValidationResult
     ) {}
 
     /** @param array<string, mixed> $claims */
-    public static function success(array $claims, ?string $matchedKeyId): self
-    {
-        return new self(OAuthAccessTokenValidationStatus::VALID, $claims, null, $matchedKeyId);
-    }
-
-    public static function invalid(?JwtFailureReason $reason = null): self
-    {
-        return new self(OAuthAccessTokenValidationStatus::INVALID_TOKEN, [], $reason, null);
-    }
-
-    /** @param array<string, mixed> $claims */
     public static function inactive(
         OAuthAccessTokenValidationStatus $status,
         array $claims,
@@ -36,13 +25,24 @@ final readonly class OAuthAccessTokenValidationResult
         return new self($status, $claims, null, $matchedKeyId);
     }
 
-    public function valid(): bool
+    public static function invalid(?JwtFailureReason $reason = null): self
     {
-        return $this->status === OAuthAccessTokenValidationStatus::VALID;
+        return new self(OAuthAccessTokenValidationStatus::INVALID_TOKEN, [], $reason, null);
+    }
+
+    /** @param array<string, mixed> $claims */
+    public static function success(array $claims, ?string $matchedKeyId): self
+    {
+        return new self(OAuthAccessTokenValidationStatus::VALID, $claims, null, $matchedKeyId);
     }
 
     public function cryptographicallyValid(): bool
     {
         return $this->status !== OAuthAccessTokenValidationStatus::INVALID_TOKEN;
+    }
+
+    public function valid(): bool
+    {
+        return $this->status === OAuthAccessTokenValidationStatus::VALID;
     }
 }

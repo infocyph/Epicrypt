@@ -39,6 +39,7 @@ final readonly class OpenIdUserInfoProjector
             if (!AuthProtocolPolicy::validText($name, AuthProtocolPolicy::MAX_PARAMETER_NAME_BYTES)) {
                 throw new ConfigurationException('OpenID UserInfo claim name is invalid.');
             }
+
             try {
                 json_encode($value, JSON_THROW_ON_ERROR, AuthProtocolPolicy::MAX_JSON_DEPTH);
             } catch (Throwable $exception) {

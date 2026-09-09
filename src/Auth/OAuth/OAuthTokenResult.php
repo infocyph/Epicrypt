@@ -11,14 +11,14 @@ final readonly class OAuthTokenResult
         public ?OAuthProtocolError $error,
     ) {}
 
-    public static function success(OAuthTokenResponse $response): self
-    {
-        return new self($response, null);
-    }
-
     public static function failure(OAuthErrorCode $error): self
     {
         return new self(null, new OAuthProtocolError($error));
+    }
+
+    public static function success(OAuthTokenResponse $response): self
+    {
+        return new self($response, null);
     }
 
     public function successful(): bool

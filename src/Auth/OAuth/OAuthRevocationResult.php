@@ -11,13 +11,13 @@ final readonly class OAuthRevocationResult
         public ?OAuthErrorCode $error,
     ) {}
 
-    public static function success(): self
-    {
-        return new self(true, null);
-    }
-
     public static function failure(OAuthErrorCode $error): self
     {
         return new self(false, $error);
+    }
+
+    public static function success(): self
+    {
+        return new self(true, null);
     }
 }

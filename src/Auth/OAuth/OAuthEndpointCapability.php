@@ -7,9 +7,14 @@ namespace Infocyph\Epicrypt\Auth\OAuth;
 enum OAuthEndpointCapability: string
 {
     case AUTHORIZATION = 'authorization';
-    case TOKEN = 'token';
-    case REVOCATION = 'revocation';
+
     case INTROSPECTION = 'introspection';
-    case METADATA = 'metadata';
+
     case JWKS = 'jwks';
+
+    case METADATA = 'metadata';
+
+    case REVOCATION = 'revocation';
+
+    case TOKEN = 'token';
 }

@@ -11,13 +11,13 @@ final readonly class OAuthIntrospectionResult
         public ?OAuthErrorCode $error,
     ) {}
 
-    public static function success(OAuthIntrospectionResponse $response): self
-    {
-        return new self($response, null);
-    }
-
     public static function failure(OAuthErrorCode $error): self
     {
         return new self(null, $error);
+    }
+
+    public static function success(OAuthIntrospectionResponse $response): self
+    {
+        return new self($response, null);
     }
 }

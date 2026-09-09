@@ -58,39 +58,6 @@ final readonly class OAuthRevocationEndpoint
         return OAuthRevocationResult::success();
     }
 
-    private function revokeAccess(OAuthClient $client, #[\SensitiveParameter] string $token): bool
-    {
-        $inspection = $this->accessInspector->inspect($token);
-        if (!$inspection->cryptographicallyValid()) {
-            return false;
-        }
-        $tokenClient = $inspection->claims['client_id'] ?? null;
-        if (!is_string($tokenClient) || !hash_equals($client->clientId, $tokenClient)) {
-            return false;
-        }
-
-        return $this->accessInspector->revoke($token, $client->clientId);
-    }
-
-    private function revokeRefresh(OAuthClient $client, #[\SensitiveParameter] string $token): bool
-    {
-        $inspection = $this->refreshTokens->inspect($token);
-        $record = $inspection->record;
-        if (!$record instanceof RefreshTokenRecord
-            || !hash_equals($client->clientId, $record->grant->clientId)) {
-            return false;
-        }
-
-        // Revoke the whole authorization, not only this refresh family. This
-        // immediately invalidates every authorization-derived access JWT and all
-        // refresh families while remaining idempotent for already-inactive input.
-        $now = $this->clock->now()->getTimestamp();
-        $this->authorizations->revoke($record->grant->authorizationId, $now);
-        $this->refreshTokens->revokeAuthorization($record->grant->authorizationId);
-
-        return true;
-    }
-
     /** @return array{OAuthTokenTypeHint, OAuthTokenTypeHint} */
     private function inspectionOrder(?OAuthTokenTypeHint $hint): array
     {
@@ -130,5 +97,38 @@ final readonly class OAuthRevocationEndpoint
             && hash_equals($clientId, $authentication->client->clientId)
             ? $client
             : null;
+    }
+
+    private function revokeAccess(OAuthClient $client, #[\SensitiveParameter] string $token): bool
+    {
+        $inspection = $this->accessInspector->inspect($token);
+        if (!$inspection->cryptographicallyValid()) {
+            return false;
+        }
+        $tokenClient = $inspection->claims['client_id'] ?? null;
+        if (!is_string($tokenClient) || !hash_equals($client->clientId, $tokenClient)) {
+            return false;
+        }
+
+        return $this->accessInspector->revoke($token, $client->clientId);
+    }
+
+    private function revokeRefresh(OAuthClient $client, #[\SensitiveParameter] string $token): bool
+    {
+        $inspection = $this->refreshTokens->inspect($token);
+        $record = $inspection->record;
+        if (!$record instanceof RefreshTokenRecord
+            || !hash_equals($client->clientId, $record->grant->clientId)) {
+            return false;
+        }
+
+        // Revoke the whole authorization, not only this refresh family. This
+        // immediately invalidates every authorization-derived access JWT and all
+        // refresh families while remaining idempotent for already-inactive input.
+        $now = $this->clock->now()->getTimestamp();
+        $this->authorizations->revoke($record->grant->authorizationId, $now);
+        $this->refreshTokens->revokeAuthorization($record->grant->authorizationId);
+
+        return true;
     }
 }

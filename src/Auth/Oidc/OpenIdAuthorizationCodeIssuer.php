@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace Infocyph\Epicrypt\Auth\Oidc;
 
 use Infocyph\Epicrypt\Auth\OAuth\OAuthAuthorizationApproval;
-use Infocyph\Epicrypt\Auth\OAuth\OAuthAuthorizationCodeIssueResult;
 use Infocyph\Epicrypt\Auth\OAuth\OAuthAuthorizationCodeIssuer;
+use Infocyph\Epicrypt\Auth\OAuth\OAuthAuthorizationCodeIssueResult;
 use Infocyph\Epicrypt\Exception\ConfigurationException;
 use Infocyph\Epicrypt\Internal\Clock\SystemClock;
 use Psr\Clock\ClockInterface;

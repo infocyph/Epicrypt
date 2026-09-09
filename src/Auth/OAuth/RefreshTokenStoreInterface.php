@@ -27,11 +27,11 @@ interface RefreshTokenStoreInterface
         int $now,
     ): RefreshTokenInspectionStatus;
 
-    /** Revoke the family resolved from any current or retained historical token id. */
-    public function revokeFamily(string $tokenId, int $revokedAt): bool;
-
     /** Revoke every family belonging to an authorization and return affected family count. */
     public function revokeAuthorization(string $authorizationId, int $revokedAt): int;
+
+    /** Revoke the family resolved from any current or retained historical token id. */
+    public function revokeFamily(string $tokenId, int $revokedAt): bool;
 
     /**
      * Atomically validate, consume and replace one refresh token.

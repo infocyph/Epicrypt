@@ -22,6 +22,7 @@ final readonly class OAuthIntrospectionResponse
         if (count($metadata) > AuthProtocolPolicy::MAX_AUTH_CLAIMS) {
             throw new ConfigurationException('OAuth introspection metadata exceeds the supported claim count.');
         }
+
         try {
             json_encode($metadata, JSON_THROW_ON_ERROR, AuthProtocolPolicy::MAX_JSON_DEPTH);
         } catch (Throwable $exception) {
@@ -30,15 +31,15 @@ final readonly class OAuthIntrospectionResponse
         $this->metadata = $metadata;
     }
 
-    public static function inactive(): self
-    {
-        return new self(false, []);
-    }
-
     /** @param array<string, mixed> $metadata */
     public static function active(array $metadata): self
     {
         return new self(true, $metadata);
+    }
+
+    public static function inactive(): self
+    {
+        return new self(false, []);
     }
 
     /** @return array<string, mixed> */

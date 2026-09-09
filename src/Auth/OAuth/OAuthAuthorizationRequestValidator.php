@@ -81,52 +81,6 @@ final readonly class OAuthAuthorizationRequestValidator
     }
 
     /** @param array<array-key, mixed> $parameters */
-    private function validParameterEnvelope(array $parameters): bool
-    {
-        if (count($parameters) > AuthProtocolPolicy::MAX_PARAMETERS) {
-            return false;
-        }
-
-        $occurrences = 0;
-        foreach ($parameters as $name => $value) {
-            if (!is_string($name) || !AuthProtocolPolicy::validParameterName($name)) {
-                return false;
-            }
-            $values = $this->parameterValues($value);
-            if ($values === null || (is_array($value) && in_array($name, self::SINGLETON_PARAMETERS, true))) {
-                return false;
-            }
-            $occurrences += count($values);
-            if ($occurrences > AuthProtocolPolicy::MAX_PARAMETERS
-                || array_any($values, static fn(string $item): bool => !AuthProtocolPolicy::validParameterValue($item))) {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    /** @return list<string>|null */
-    private function parameterValues(mixed $value): ?array
-    {
-        if (is_string($value)) {
-            return [$value];
-        }
-        if (!is_array($value)
-            || $value === []
-            || !array_is_list($value)
-            || count($value) > AuthProtocolPolicy::MAX_PARAMETERS) {
-            return null;
-        }
-        if (array_any($value, static fn(mixed $item): bool => !is_string($item))) {
-            return null;
-        }
-
-        /** @var list<string> $value */
-        return $value;
-    }
-
-    /** @param array<array-key, mixed> $parameters */
     private function authorizationProfileError(array $parameters, OAuthClient $client): ?OAuthErrorCode
     {
         $responseType = $this->singleton($parameters, 'response_type');
@@ -150,66 +104,38 @@ final readonly class OAuthAuthorizationRequestValidator
             : OAuthErrorCode::INVALID_REQUEST;
     }
 
-    /** @param array<array-key, mixed> $parameters */
-    private function singleton(array $parameters, string $name): ?string
-    {
-        $value = $parameters[$name] ?? null;
-
-        return is_string($value) ? $value : null;
-    }
-
-    /** @param array<array-key, mixed> $parameters */
-    private function resolveRedirectUri(array $parameters, OAuthClient $client): ?string
-    {
-        $redirectUri = $this->singleton($parameters, 'redirect_uri');
-        if ($redirectUri !== null) {
-            return AuthProtocolPolicy::validText($redirectUri, AuthProtocolPolicy::MAX_REDIRECT_URI_BYTES)
-                && $client->allowsRedirectUri($redirectUri)
-                ? $redirectUri
-                : null;
-        }
-
-        return count($client->redirectUris) === 1 ? $client->redirectUris[0] : null;
-    }
-
-    /** @param array<array-key, mixed> $parameters */
-    private function state(array $parameters): string|false|null
-    {
-        if (!array_key_exists('state', $parameters)) {
-            return null;
-        }
-
-        $state = $this->singleton($parameters, 'state');
-
-        return $state !== null
-            && $state !== ''
-            && AuthProtocolPolicy::validParameterValue($state)
-            ? $state
-            : false;
-    }
-
-    /**
-     * @param array<array-key, mixed> $parameters
-     * @return list<string>|null
-     */
-    private function resolveScopes(array $parameters): ?array
-    {
-        $scope = $this->singleton($parameters, 'scope');
-        if ($scope === null || $scope === '') {
-            return [];
-        }
-
-        try {
-            return AuthProtocolPolicy::normalizeScopes(explode(' ', $scope), 'OAuth authorization scopes');
-        } catch (Throwable) {
-            return null;
-        }
-    }
-
     /** @param list<string> $scopes */
     private function containsUnregisteredScope(OAuthClient $client, array $scopes): bool
     {
         return array_any($scopes, static fn(string $scope): bool => !$client->allowsScope($scope));
+    }
+
+    /** @return list<string>|null */
+    private function parameterValues(mixed $value): ?array
+    {
+        if (is_string($value)) {
+            return [$value];
+        }
+        if (!is_array($value)
+            || $value === []
+            || !array_is_list($value)
+            || count($value) > AuthProtocolPolicy::MAX_PARAMETERS) {
+            return null;
+        }
+        if (array_any($value, static fn(mixed $item): bool => !is_string($item))) {
+            return null;
+        }
+
+        /** @var list<string> $value */
+        return $value;
+    }
+
+    private function reject(
+        OAuthErrorCode $code,
+        ?string $redirectUri = null,
+        ?string $state = null,
+    ): OAuthAuthorizationResult {
+        return OAuthAuthorizationResult::rejected(new OAuthProtocolError($code, $redirectUri, $state));
     }
 
     /**
@@ -236,11 +162,85 @@ final readonly class OAuthAuthorizationRequestValidator
             : $audiences;
     }
 
-    private function reject(
-        OAuthErrorCode $code,
-        ?string $redirectUri = null,
-        ?string $state = null,
-    ): OAuthAuthorizationResult {
-        return OAuthAuthorizationResult::rejected(new OAuthProtocolError($code, $redirectUri, $state));
+    /** @param array<array-key, mixed> $parameters */
+    private function resolveRedirectUri(array $parameters, OAuthClient $client): ?string
+    {
+        $redirectUri = $this->singleton($parameters, 'redirect_uri');
+        if ($redirectUri !== null) {
+            return AuthProtocolPolicy::validText($redirectUri, AuthProtocolPolicy::MAX_REDIRECT_URI_BYTES)
+                && $client->allowsRedirectUri($redirectUri)
+                ? $redirectUri
+                : null;
+        }
+
+        return count($client->redirectUris) === 1 ? $client->redirectUris[0] : null;
+    }
+
+    /**
+     * @param array<array-key, mixed> $parameters
+     * @return list<string>|null
+     */
+    private function resolveScopes(array $parameters): ?array
+    {
+        $scope = $this->singleton($parameters, 'scope');
+        if ($scope === null || $scope === '') {
+            return [];
+        }
+
+        try {
+            return AuthProtocolPolicy::normalizeScopes(explode(' ', $scope), 'OAuth authorization scopes');
+        } catch (Throwable) {
+            return null;
+        }
+    }
+
+    /** @param array<array-key, mixed> $parameters */
+    private function singleton(array $parameters, string $name): ?string
+    {
+        $value = $parameters[$name] ?? null;
+
+        return is_string($value) ? $value : null;
+    }
+
+    /** @param array<array-key, mixed> $parameters */
+    private function state(array $parameters): string|false|null
+    {
+        if (!array_key_exists('state', $parameters)) {
+            return null;
+        }
+
+        $state = $this->singleton($parameters, 'state');
+
+        return $state !== null
+            && $state !== ''
+            && AuthProtocolPolicy::validParameterValue($state)
+            ? $state
+            : false;
+    }
+
+    /** @param array<array-key, mixed> $parameters */
+    private function validParameterEnvelope(array $parameters): bool
+    {
+        if (count($parameters) > AuthProtocolPolicy::MAX_PARAMETERS) {
+            return false;
+        }
+
+        $occurrences = 0;
+        foreach ($parameters as $name => $value) {
+            if (!is_string($name) || !AuthProtocolPolicy::validParameterName($name)) {
+                return false;
+            }
+            $values = $this->parameterValues($value);
+            if ($values === null || (is_array($value) && in_array($name, self::SINGLETON_PARAMETERS, true))) {
+                return false;
+            }
+            $occurrences += count($values);
+            if ($occurrences > AuthProtocolPolicy::MAX_PARAMETERS
+                || array_any($values, static fn(string $item): bool => !AuthProtocolPolicy::validParameterValue($item))) {
+                return false;
+            }
+        }
+
+        return true;
     }
 }

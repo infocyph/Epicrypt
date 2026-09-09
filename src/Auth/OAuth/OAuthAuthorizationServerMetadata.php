@@ -11,10 +11,10 @@ use Infocyph\Epicrypt\Token\Jwt\Enum\AsymmetricJwtAlgorithm;
 final readonly class OAuthAuthorizationServerMetadata
 {
     /** @var list<AsymmetricJwtAlgorithm> */
-    public array $dpopSigningAlgorithms;
+    public array $clientAssertionSigningAlgorithms;
 
     /** @var list<AsymmetricJwtAlgorithm> */
-    public array $clientAssertionSigningAlgorithms;
+    public array $dpopSigningAlgorithms;
 
     /**
      * @param array<array-key, mixed> $dpopSigningAlgorithms
@@ -112,18 +112,16 @@ final readonly class OAuthAuthorizationServerMetadata
         return $metadata;
     }
 
-    private function assertEndpoint(OAuthEndpointCapability $capability, ?string $uri, string $label): void
+    /**
+     * @param list<AsymmetricJwtAlgorithm> $algorithms
+     * @return list<string>
+     */
+    private static function algorithmValues(array $algorithms): array
     {
-        if ($this->capabilities->supportsEndpoint($capability)) {
-            if ($uri === null || !self::validHttpsUri($uri)) {
-                throw new ConfigurationException(sprintf('OAuth %s must be an absolute HTTPS URI.', $label));
-            }
-
-            return;
-        }
-        if ($uri !== null) {
-            throw new ConfigurationException(sprintf('OAuth %s URI was supplied without the matching endpoint capability.', $label));
-        }
+        return array_map(
+            static fn(AsymmetricJwtAlgorithm $algorithm): string => $algorithm->value,
+            $algorithms,
+        );
     }
 
     private static function assertIssuer(string $issuer): void
@@ -131,18 +129,6 @@ final readonly class OAuthAuthorizationServerMetadata
         if (!self::validHttpsUri($issuer, allowQuery: false)) {
             throw new ConfigurationException('OAuth authorization-server issuer must be an absolute HTTPS URI without query or fragment.');
         }
-    }
-
-    private static function validHttpsUri(string $uri, bool $allowQuery = true): bool
-    {
-        $parts = parse_url($uri);
-
-        return is_array($parts)
-            && strtolower((string) ($parts['scheme'] ?? '')) === 'https'
-            && is_string($parts['host'] ?? null)
-            && $parts['host'] !== ''
-            && !isset($parts['user'], $parts['pass'], $parts['fragment'])
-            && ($allowQuery || !isset($parts['query']));
     }
 
     /**
@@ -167,15 +153,29 @@ final readonly class OAuthAuthorizationServerMetadata
         return $normalized;
     }
 
-    /**
-     * @param list<AsymmetricJwtAlgorithm> $algorithms
-     * @return list<string>
-     */
-    private static function algorithmValues(array $algorithms): array
+    private static function validHttpsUri(string $uri, bool $allowQuery = true): bool
     {
-        return array_map(
-            static fn(AsymmetricJwtAlgorithm $algorithm): string => $algorithm->value,
-            $algorithms,
-        );
+        $parts = parse_url($uri);
+
+        return is_array($parts)
+            && strtolower((string) ($parts['scheme'] ?? '')) === 'https'
+            && is_string($parts['host'] ?? null)
+            && $parts['host'] !== ''
+            && !isset($parts['user'], $parts['pass'], $parts['fragment'])
+            && ($allowQuery || !isset($parts['query']));
+    }
+
+    private function assertEndpoint(OAuthEndpointCapability $capability, ?string $uri, string $label): void
+    {
+        if ($this->capabilities->supportsEndpoint($capability)) {
+            if ($uri === null || !self::validHttpsUri($uri)) {
+                throw new ConfigurationException(sprintf('OAuth %s must be an absolute HTTPS URI.', $label));
+            }
+
+            return;
+        }
+        if ($uri !== null) {
+            throw new ConfigurationException(sprintf('OAuth %s URI was supplied without the matching endpoint capability.', $label));
+        }
     }
 }

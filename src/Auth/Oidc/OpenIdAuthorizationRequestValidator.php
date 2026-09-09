@@ -61,6 +61,44 @@ final readonly class OpenIdAuthorizationRequestValidator
         }
     }
 
+    /** @return list<string> */
+    private function acrValues(string|array|null $value): array
+    {
+        if ($value === null) {
+            return [];
+        }
+        if (!is_string($value) || $value === '') {
+            throw new \InvalidArgumentException('Invalid OpenID Connect acr_values.');
+        }
+        $values = explode(' ', $value);
+        if (in_array('', $values, true)) {
+            throw new \InvalidArgumentException('Invalid OpenID Connect acr_values spacing.');
+        }
+
+        return $values;
+    }
+
+    private function invalid(string $redirectUri, ?string $state): OpenIdAuthorizationResult
+    {
+        return OpenIdAuthorizationResult::rejected(new OAuthProtocolError(
+            OAuthErrorCode::INVALID_REQUEST,
+            $redirectUri,
+            $state,
+        ));
+    }
+
+    private function maximumAuthenticationAge(string|array|null $value): ?int
+    {
+        if ($value === null) {
+            return null;
+        }
+        if (!is_string($value) || preg_match('/\A(?:0|[1-9][0-9]{0,7})\z/D', $value) !== 1) {
+            throw new \InvalidArgumentException('Invalid OpenID Connect max_age.');
+        }
+
+        return (int) $value;
+    }
+
     /** @param array<string, string|list<string>> $parameters */
     private function optionalText(array $parameters, string $name, int $maximumBytes): ?string
     {
@@ -90,46 +128,8 @@ final readonly class OpenIdAuthorizationRequestValidator
         }
 
         return array_map(
-            static fn(string $token): OpenIdPrompt => OpenIdPrompt::from($token),
+            OpenIdPrompt::from(...),
             $tokens,
         );
-    }
-
-    private function maximumAuthenticationAge(string|array|null $value): ?int
-    {
-        if ($value === null) {
-            return null;
-        }
-        if (!is_string($value) || preg_match('/\A(?:0|[1-9][0-9]{0,7})\z/D', $value) !== 1) {
-            throw new \InvalidArgumentException('Invalid OpenID Connect max_age.');
-        }
-
-        return (int) $value;
-    }
-
-    /** @return list<string> */
-    private function acrValues(string|array|null $value): array
-    {
-        if ($value === null) {
-            return [];
-        }
-        if (!is_string($value) || $value === '') {
-            throw new \InvalidArgumentException('Invalid OpenID Connect acr_values.');
-        }
-        $values = explode(' ', $value);
-        if (in_array('', $values, true)) {
-            throw new \InvalidArgumentException('Invalid OpenID Connect acr_values spacing.');
-        }
-
-        return $values;
-    }
-
-    private function invalid(string $redirectUri, ?string $state): OpenIdAuthorizationResult
-    {
-        return OpenIdAuthorizationResult::rejected(new OAuthProtocolError(
-            OAuthErrorCode::INVALID_REQUEST,
-            $redirectUri,
-            $state,
-        ));
     }
 }

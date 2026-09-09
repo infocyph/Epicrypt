@@ -17,11 +17,14 @@ use Throwable;
 
 final readonly class OAuthClientAssertionValidator
 {
-    public const int DEFAULT_MAXIMUM_LIFETIME_SECONDS = 300;
     public const int DEFAULT_LEEWAY_SECONDS = 30;
+
     public const int DEFAULT_MAXIMUM_FUTURE_IAT_SECONDS = 30;
 
+    public const int DEFAULT_MAXIMUM_LIFETIME_SECONDS = 300;
+
     private const int MAX_JTI_BYTES = 128;
+
     private const string REPLAY_NAMESPACE_PREFIX = 'oauth.client-assertion:';
 
     public function __construct(
@@ -90,6 +93,31 @@ final readonly class OAuthClientAssertionValidator
         }
 
         return OAuthClientAssertionResult::success($claims);
+    }
+
+    private function audienceMatches(mixed $claim, string $expected): bool
+    {
+        if (is_string($claim)) {
+            return AuthProtocolPolicy::validText($claim, AuthProtocolPolicy::MAX_AUDIENCE_BYTES)
+                && hash_equals($expected, $claim);
+        }
+        if (!is_array($claim)
+            || $claim === []
+            || !array_is_list($claim)
+            || count($claim) > AuthProtocolPolicy::MAX_AUDIENCE_COUNT) {
+            return false;
+        }
+
+        $matched = false;
+        foreach ($claim as $audience) {
+            if (!is_string($audience)
+                || !AuthProtocolPolicy::validText($audience, AuthProtocolPolicy::MAX_AUDIENCE_BYTES)) {
+                return false;
+            }
+            $matched = $matched || hash_equals($expected, $audience);
+        }
+
+        return $matched;
     }
 
     /**
@@ -168,30 +196,5 @@ final readonly class OAuthClientAssertionValidator
         }
 
         return OAuthClientAssertionStatus::VALID;
-    }
-
-    private function audienceMatches(mixed $claim, string $expected): bool
-    {
-        if (is_string($claim)) {
-            return AuthProtocolPolicy::validText($claim, AuthProtocolPolicy::MAX_AUDIENCE_BYTES)
-                && hash_equals($expected, $claim);
-        }
-        if (!is_array($claim)
-            || $claim === []
-            || !array_is_list($claim)
-            || count($claim) > AuthProtocolPolicy::MAX_AUDIENCE_COUNT) {
-            return false;
-        }
-
-        $matched = false;
-        foreach ($claim as $audience) {
-            if (!is_string($audience)
-                || !AuthProtocolPolicy::validText($audience, AuthProtocolPolicy::MAX_AUDIENCE_BYTES)) {
-                return false;
-            }
-            $matched = $matched || hash_equals($expected, $audience);
-        }
-
-        return $matched;
     }
 }

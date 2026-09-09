@@ -20,6 +20,7 @@ use Psr\Clock\ClockInterface;
 final readonly class OpenIdIdTokenIssuer
 {
     public const int DEFAULT_LIFETIME_SECONDS = 300;
+
     public const int MAXIMUM_LIFETIME_SECONDS = 3_600;
 
     private OpenIdIdTokenValidator $validator;

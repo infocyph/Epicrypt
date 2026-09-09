@@ -9,11 +9,11 @@ use Infocyph\Epicrypt\Exception\ConfigurationException;
 
 final readonly class OAuthAuthorizationRequest
 {
-    /** @var list<string> */
-    public array $scopes;
-
     /** @var non-empty-list<string> */
     public array $audiences;
+
+    /** @var list<string> */
+    public array $scopes;
 
     /**
      * @param array<array-key, mixed> $scopes

@@ -20,6 +20,22 @@ final readonly class RefreshTokenManager
         private ClockInterface $clock = new SystemClock(),
     ) {}
 
+    public function inspect(#[\SensitiveParameter] string $token): RefreshTokenInspectionResult
+    {
+        try {
+            $claims = $this->artifact->decryptForStateResolution($token);
+        } catch (InvalidTokenException) {
+            return RefreshTokenInspectionResult::of(RefreshTokenInspectionStatus::INVALID);
+        }
+
+        $record = RefreshTokenRecord::fromClaims($claims);
+
+        return RefreshTokenInspectionResult::of(
+            $this->store->inspect($record, $this->clock->now()->getTimestamp()),
+            $record,
+        );
+    }
+
     public function issue(
         RefreshTokenGrant $grant,
         int $idleLifetimeSeconds = RefreshTokenArtifact::DEFAULT_IDLE_LIFETIME_SECONDS,
@@ -34,21 +50,6 @@ final readonly class RefreshTokenManager
         throw new ConfigurationException('Unable to persist a unique OAuth refresh token.');
     }
 
-    public function inspect(#[\SensitiveParameter] string $token): RefreshTokenInspectionResult
-    {
-        try {
-            $claims = $this->artifact->decryptForStateResolution($token);
-        } catch (InvalidTokenException) {
-            return RefreshTokenInspectionResult::of(RefreshTokenInspectionStatus::INVALID);
-        }
-
-        $record = RefreshTokenRecord::fromClaims($claims);
-        return RefreshTokenInspectionResult::of(
-            $this->store->inspect($record, $this->clock->now()->getTimestamp()),
-            $record,
-        );
-    }
-
     public function revoke(#[\SensitiveParameter] string $token): bool
     {
         try {
@@ -58,6 +59,17 @@ final readonly class RefreshTokenManager
         }
 
         return $this->store->revokeFamily($claims->tokenId, $this->clock->now()->getTimestamp());
+    }
+
+    public function revokeAuthorization(string $authorizationId): int
+    {
+        AuthProtocolPolicy::assertText(
+            $authorizationId,
+            AuthProtocolPolicy::MAX_IDENTIFIER_BYTES,
+            'Refresh-token authorization ID',
+        );
+
+        return $this->store->revokeAuthorization($authorizationId, $this->clock->now()->getTimestamp());
     }
 
     public function revokeForClient(#[\SensitiveParameter] string $token, string $clientId): bool
@@ -70,17 +82,6 @@ final readonly class RefreshTokenManager
         }
 
         return $this->store->revokeFamily($record->tokenId, $this->clock->now()->getTimestamp());
-    }
-
-    public function revokeAuthorization(string $authorizationId): int
-    {
-        AuthProtocolPolicy::assertText(
-            $authorizationId,
-            AuthProtocolPolicy::MAX_IDENTIFIER_BYTES,
-            'Refresh-token authorization ID',
-        );
-
-        return $this->store->revokeAuthorization($authorizationId, $this->clock->now()->getTimestamp());
     }
 
     /** @param null|array<array-key, mixed> $requestedScopes */

@@ -80,6 +80,29 @@ final readonly class PersonalAccessTokenManager
         throw new ConfigurationException('Unable to persist a unique personal access token.');
     }
 
+    /** @return list<PersonalAccessTokenRecord> */
+    public function list(string $subject, int $limit = 100): array
+    {
+        AuthProtocolPolicy::assertText($subject, AuthProtocolPolicy::MAX_IDENTIFIER_BYTES, 'Personal-token subject');
+
+        return $this->store->listForSubject($subject, $limit);
+    }
+
+    public function revoke(string $tokenId, string $subject): ?PersonalAccessTokenRecord
+    {
+        AuthProtocolPolicy::assertText($tokenId, 128, 'Personal-token ID');
+        AuthProtocolPolicy::assertText($subject, AuthProtocolPolicy::MAX_IDENTIFIER_BYTES, 'Personal-token subject');
+
+        return $this->store->revoke($tokenId, $subject, $this->clock->now()->getTimestamp());
+    }
+
+    public function revokeAll(string $subject): int
+    {
+        AuthProtocolPolicy::assertText($subject, AuthProtocolPolicy::MAX_IDENTIFIER_BYTES, 'Personal-token subject');
+
+        return $this->store->revokeAll($subject, $this->clock->now()->getTimestamp());
+    }
+
     public function verify(#[\SensitiveParameter] string $token): PersonalAccessTokenValidationResult
     {
         $verified = AsymmetricJwt::verifier(
@@ -115,41 +138,6 @@ final readonly class PersonalAccessTokenManager
         $lastUsedAt = $this->recordUsage($record, $now);
 
         return PersonalAccessTokenValidationResult::valid($record, $abilities, $lastUsedAt);
-    }
-
-    /** @return list<PersonalAccessTokenRecord> */
-    public function list(string $subject, int $limit = 100): array
-    {
-        AuthProtocolPolicy::assertText($subject, AuthProtocolPolicy::MAX_IDENTIFIER_BYTES, 'Personal-token subject');
-
-        return $this->store->listForSubject($subject, $limit);
-    }
-
-    public function revoke(string $tokenId, string $subject): ?PersonalAccessTokenRecord
-    {
-        AuthProtocolPolicy::assertText($tokenId, 128, 'Personal-token ID');
-        AuthProtocolPolicy::assertText($subject, AuthProtocolPolicy::MAX_IDENTIFIER_BYTES, 'Personal-token subject');
-
-        return $this->store->revoke($tokenId, $subject, $this->clock->now()->getTimestamp());
-    }
-
-    public function revokeAll(string $subject): int
-    {
-        AuthProtocolPolicy::assertText($subject, AuthProtocolPolicy::MAX_IDENTIFIER_BYTES, 'Personal-token subject');
-
-        return $this->store->revokeAll($subject, $this->clock->now()->getTimestamp());
-    }
-
-    private function sign(JwtClaims $claims): string
-    {
-        return AsymmetricJwt::issuer(
-            privateKey: $this->keys->privateKey(),
-            type: AuthTokenClass::PERSONAL_ACCESS_TOKEN->joseType(),
-            keyId: $this->keys->activeKeyId,
-            algorithm: $this->keys->algorithm,
-            passphrase: $this->keys->privateKeyPassphrase(),
-            clock: $this->clock,
-        )->issue($claims);
     }
 
     /**
@@ -207,5 +195,17 @@ final readonly class PersonalAccessTokenManager
         }
 
         return $this->usageStore->touch($record->tokenId, $record->subject, $usedAt, $interval);
+    }
+
+    private function sign(JwtClaims $claims): string
+    {
+        return AsymmetricJwt::issuer(
+            privateKey: $this->keys->privateKey(),
+            type: AuthTokenClass::PERSONAL_ACCESS_TOKEN->joseType(),
+            keyId: $this->keys->activeKeyId,
+            algorithm: $this->keys->algorithm,
+            passphrase: $this->keys->privateKeyPassphrase(),
+            clock: $this->clock,
+        )->issue($claims);
     }
 }

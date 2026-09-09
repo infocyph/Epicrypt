@@ -12,14 +12,14 @@ use Infocyph\Epicrypt\Security\KeyPurpose;
 
 final readonly class OpenIdProviderMetadata
 {
-    /** @var non-empty-list<OpenIdSubjectType> */
-    public array $subjectTypes;
+    /** @var list<string> */
+    public array $claimsSupported;
 
     /** @var list<string> */
     public array $scopesSupported;
 
-    /** @var list<string> */
-    public array $claimsSupported;
+    /** @var non-empty-list<OpenIdSubjectType> */
+    public array $subjectTypes;
 
     /**
      * @param array<array-key, mixed> $subjectTypes
@@ -74,6 +74,27 @@ final readonly class OpenIdProviderMetadata
         ];
     }
 
+    /** @param array<array-key, mixed> $claims @return list<string> */
+    private static function normalizeClaims(array $claims): array
+    {
+        if (!array_is_list($claims) || count($claims) > AuthProtocolPolicy::MAX_AUTH_CLAIMS) {
+            throw new ConfigurationException('OpenID discovery claims must be a bounded list.');
+        }
+        $seen = [];
+        $normalized = [];
+        foreach ($claims as $claim) {
+            if (!is_string($claim)
+                || !AuthProtocolPolicy::validText($claim, AuthProtocolPolicy::MAX_PARAMETER_NAME_BYTES)
+                || isset($seen[$claim])) {
+                throw new ConfigurationException('OpenID discovery claims must contain unique bounded names.');
+            }
+            $seen[$claim] = true;
+            $normalized[] = $claim;
+        }
+
+        return $normalized;
+    }
+
     /**
      * @param array<array-key, mixed> $types
      * @return non-empty-list<OpenIdSubjectType>
@@ -94,27 +115,6 @@ final readonly class OpenIdProviderMetadata
         }
 
         /** @var non-empty-list<OpenIdSubjectType> $normalized */
-        return $normalized;
-    }
-
-    /** @param array<array-key, mixed> $claims @return list<string> */
-    private static function normalizeClaims(array $claims): array
-    {
-        if (!array_is_list($claims) || count($claims) > AuthProtocolPolicy::MAX_AUTH_CLAIMS) {
-            throw new ConfigurationException('OpenID discovery claims must be a bounded list.');
-        }
-        $seen = [];
-        $normalized = [];
-        foreach ($claims as $claim) {
-            if (!is_string($claim)
-                || !AuthProtocolPolicy::validText($claim, AuthProtocolPolicy::MAX_PARAMETER_NAME_BYTES)
-                || isset($seen[$claim])) {
-                throw new ConfigurationException('OpenID discovery claims must contain unique bounded names.');
-            }
-            $seen[$claim] = true;
-            $normalized[] = $claim;
-        }
-
         return $normalized;
     }
 

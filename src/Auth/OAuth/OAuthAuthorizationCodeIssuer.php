@@ -59,34 +59,13 @@ final readonly class OAuthAuthorizationCodeIssuer
             }
         } catch (Throwable $exception) {
             $this->authorizations->revoke($authorization->authorizationId, $now);
+
             throw $exception;
         }
 
         $this->authorizations->revoke($authorization->authorizationId, $now);
+
         throw new ConfigurationException('Unable to persist a unique OAuth authorization code.');
-    }
-
-    private function createAuthorization(
-        OAuthAuthorizationRequest $request,
-        OAuthAuthorizationApproval $approval,
-        int $now,
-    ): OAuthAuthorizationRecord {
-        for ($attempt = 0; $attempt < self::STORAGE_ATTEMPTS; $attempt++) {
-            $record = new OAuthAuthorizationRecord(
-                authorizationId: Base64Url::encode(random_bytes(24)),
-                subject: $approval->subject,
-                clientId: $request->clientId,
-                scopes: $approval->scopes,
-                audiences: $request->audiences,
-                authorizedAt: $now,
-                expiresAt: $now + $approval->authorizationLifetimeSeconds,
-            );
-            if ($this->authorizations->create($record)) {
-                return $record;
-            }
-        }
-
-        throw new ConfigurationException('Unable to persist a unique OAuth authorization.');
     }
 
     private function assertApproval(
@@ -113,5 +92,28 @@ final readonly class OAuthAuthorizationCodeIssuer
             || $codeLifetimeSeconds > $approval->authorizationLifetimeSeconds) {
             throw new ConfigurationException('OAuth authorization-code lifetime exceeds the approved authorization lifetime or hard limit.');
         }
+    }
+
+    private function createAuthorization(
+        OAuthAuthorizationRequest $request,
+        OAuthAuthorizationApproval $approval,
+        int $now,
+    ): OAuthAuthorizationRecord {
+        for ($attempt = 0; $attempt < self::STORAGE_ATTEMPTS; $attempt++) {
+            $record = new OAuthAuthorizationRecord(
+                authorizationId: Base64Url::encode(random_bytes(24)),
+                subject: $approval->subject,
+                clientId: $request->clientId,
+                scopes: $approval->scopes,
+                audiences: $request->audiences,
+                authorizedAt: $now,
+                expiresAt: $now + $approval->authorizationLifetimeSeconds,
+            );
+            if ($this->authorizations->create($record)) {
+                return $record;
+            }
+        }
+
+        throw new ConfigurationException('Unable to persist a unique OAuth authorization.');
     }
 }

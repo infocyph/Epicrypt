@@ -20,6 +20,7 @@ use Throwable;
 final readonly class OAuthAccessTokenService
 {
     public const int DEFAULT_LIFETIME_SECONDS = 900;
+
     public const int MAXIMUM_LIFETIME_SECONDS = 3600;
 
     private const int STORAGE_ATTEMPTS = 3;
@@ -37,6 +38,11 @@ final readonly class OAuthAccessTokenService
         if ($this->lifetimeSeconds < 1 || $this->lifetimeSeconds > self::MAXIMUM_LIFETIME_SECONDS) {
             throw new ConfigurationException('OAuth access-token lifetime must be between 1 and 3600 seconds.');
         }
+    }
+
+    public function immediateRevocationEnabled(): bool
+    {
+        return $this->statusStore !== null;
     }
 
     /**
@@ -123,6 +129,42 @@ final readonly class OAuthAccessTokenService
         throw new ConfigurationException('Unable to persist a unique OAuth access-token status record.');
     }
 
+    public function issuer(): string
+    {
+        return $this->keys->issuer;
+    }
+
+    public function revoke(
+        #[\SensitiveParameter]
+        string $token,
+        string $audience,
+        string $clientId,
+    ): bool {
+        if ($this->statusStore === null) {
+            return false;
+        }
+        $result = $this->validate($token, $audience);
+        if (!$result->cryptographicallyValid()) {
+            return false;
+        }
+        $tokenClient = $result->claims['client_id'] ?? null;
+        $tokenId = $result->claims['jti'] ?? null;
+        if (!is_string($tokenClient) || !hash_equals($clientId, $tokenClient) || !is_string($tokenId)) {
+            return false;
+        }
+
+        return $this->statusStore->revoke(
+            $this->keys->issuer,
+            $tokenId,
+            $this->clock->now()->getTimestamp(),
+        ) instanceof OAuthAccessTokenStatusRecord;
+    }
+
+    public function signingKeys(): AsymmetricSigningKeySet
+    {
+        return $this->keys;
+    }
+
     public function validate(#[\SensitiveParameter] string $token, string $audience): OAuthAccessTokenValidationResult
     {
         AuthProtocolPolicy::assertText($audience, AuthProtocolPolicy::MAX_AUDIENCE_BYTES, 'OAuth resource audience');
@@ -191,45 +233,35 @@ final readonly class OAuthAccessTokenService
         return OAuthAccessTokenValidationResult::success($jwt->claims, $jwt->matchedKeyId);
     }
 
-    public function immediateRevocationEnabled(): bool
-    {
-        return $this->statusStore !== null;
-    }
-
-    public function revoke(
-        #[\SensitiveParameter]
-        string $token,
-        string $audience,
+    /** @param list<string> $audiences @param list<string> $scopes */
+    private function authorizationAllows(
+        OAuthAuthorizationRecord $authorization,
+        string $subject,
         string $clientId,
+        array $audiences,
+        array $scopes,
     ): bool {
-        if ($this->statusStore === null) {
+        if (!hash_equals($authorization->subject, $subject) || !hash_equals($authorization->clientId, $clientId)) {
             return false;
         }
-        $result = $this->validate($token, $audience);
-        if (!$result->cryptographicallyValid()) {
-            return false;
-        }
-        $tokenClient = $result->claims['client_id'] ?? null;
-        $tokenId = $result->claims['jti'] ?? null;
-        if (!is_string($tokenClient) || !hash_equals($clientId, $tokenClient) || !is_string($tokenId)) {
-            return false;
+        foreach ($audiences as $audience) {
+            if (!in_array($audience, $authorization->audiences, true)) {
+                return false;
+            }
         }
 
-        return $this->statusStore->revoke(
-            $this->keys->issuer,
-            $tokenId,
-            $this->clock->now()->getTimestamp(),
-        ) instanceof OAuthAccessTokenStatusRecord;
+        return array_all($scopes, fn($scope) => in_array($scope, $authorization->scopes, true));
     }
 
-    public function issuer(): string
+    /** @param array{token_id:string,subject:string,client_id:string,expires_at:int,authorization_id:?string} $state */
+    private function statusMatches(OAuthAccessTokenStatusRecord $record, array $state): bool
     {
-        return $this->keys->issuer;
-    }
-
-    public function signingKeys(): AsymmetricSigningKeySet
-    {
-        return $this->keys;
+        return hash_equals($record->issuer, $this->keys->issuer)
+            && hash_equals($record->tokenId, $state['token_id'])
+            && hash_equals($record->subject, $state['subject'])
+            && hash_equals($record->clientId, $state['client_id'])
+            && $record->expiresAt === $state['expires_at']
+            && $record->authorizationId === $state['authorization_id'];
     }
 
     /**
@@ -292,41 +324,5 @@ final readonly class OAuthAccessTokenService
             'authorization_id' => $authorizationId,
             'dpop_jkt' => $dpopJkt,
         ];
-    }
-
-    /** @param list<string> $audiences @param list<string> $scopes */
-    private function authorizationAllows(
-        OAuthAuthorizationRecord $authorization,
-        string $subject,
-        string $clientId,
-        array $audiences,
-        array $scopes,
-    ): bool {
-        if (!hash_equals($authorization->subject, $subject) || !hash_equals($authorization->clientId, $clientId)) {
-            return false;
-        }
-        foreach ($audiences as $audience) {
-            if (!in_array($audience, $authorization->audiences, true)) {
-                return false;
-            }
-        }
-        foreach ($scopes as $scope) {
-            if (!in_array($scope, $authorization->scopes, true)) {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    /** @param array{token_id:string,subject:string,client_id:string,expires_at:int,authorization_id:?string} $state */
-    private function statusMatches(OAuthAccessTokenStatusRecord $record, array $state): bool
-    {
-        return hash_equals($record->issuer, $this->keys->issuer)
-            && hash_equals($record->tokenId, $state['token_id'])
-            && hash_equals($record->subject, $state['subject'])
-            && hash_equals($record->clientId, $state['client_id'])
-            && $record->expiresAt === $state['expires_at']
-            && $record->authorizationId === $state['authorization_id'];
     }
 }

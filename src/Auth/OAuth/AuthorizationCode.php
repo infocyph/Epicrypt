@@ -13,15 +13,16 @@ use Psr\Clock\ClockInterface;
 final readonly class AuthorizationCode
 {
     public const int DEFAULT_LIFETIME_SECONDS = 300;
+
     public const int MAXIMUM_LIFETIME_SECONDS = 600;
 
     private const string TOKEN_USE = 'authorization_code';
 
     /** @var list<string> */
-    public array $authenticationMethods;
+    public array $audiences;
 
     /** @var list<string> */
-    public array $audiences;
+    public array $authenticationMethods;
 
     /** @var list<string> */
     public array $scopes;
@@ -133,6 +134,11 @@ final readonly class AuthorizationCode
         );
     }
 
+    public static function validTokenUse(mixed $value): bool
+    {
+        return is_string($value) && hash_equals(self::TOKEN_USE, $value);
+    }
+
     public function matchesClient(string $clientId): bool
     {
         return AuthProtocolPolicy::validText($clientId, AuthProtocolPolicy::MAX_IDENTIFIER_BYTES)
@@ -173,11 +179,6 @@ final readonly class AuthorizationCode
             ...($this->authenticationContext === null ? [] : ['acr' => $this->authenticationContext]),
             ...($this->authenticationMethods === [] ? [] : ['amr' => $this->authenticationMethods]),
         ];
-    }
-
-    public static function validTokenUse(mixed $value): bool
-    {
-        return is_string($value) && hash_equals(self::TOKEN_USE, $value);
     }
 
     private static function redirectUriHash(string $redirectUri): string

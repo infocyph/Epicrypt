@@ -10,13 +10,14 @@ use Infocyph\Epicrypt\Exception\ConfigurationException;
 final readonly class OAuthAuthorizationApproval
 {
     public const int DEFAULT_AUTHORIZATION_LIFETIME_SECONDS = 2_592_000;
+
     public const int MAXIMUM_AUTHORIZATION_LIFETIME_SECONDS = 31_536_000;
 
     /** @var list<string> */
-    public array $scopes;
+    public array $authenticationMethods;
 
     /** @var list<string> */
-    public array $authenticationMethods;
+    public array $scopes;
 
     /**
      * @param array<array-key, mixed> $scopes

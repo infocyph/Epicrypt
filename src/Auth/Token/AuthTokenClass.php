@@ -8,17 +8,17 @@ use Infocyph\Epicrypt\Security\KeyPurpose;
 
 enum AuthTokenClass: string
 {
+    case DPOP_PROOF = 'oauth.dpop-proof';
+
     case OAUTH_ACCESS_TOKEN = 'oauth.access-token';
 
     case OAUTH_AUTHORIZATION_CODE = 'oauth.authorization-code';
 
+    case OAUTH_CLIENT_ASSERTION = 'oauth.client-assertion';
+
     case OAUTH_REFRESH_TOKEN = 'oauth.refresh-token';
 
     case OIDC_ID_TOKEN = 'oidc.id-token';
-
-    case DPOP_PROOF = 'oauth.dpop-proof';
-
-    case OAUTH_CLIENT_ASSERTION = 'oauth.client-assertion';
 
     case PERSONAL_ACCESS_TOKEN = 'api.personal-token';
 

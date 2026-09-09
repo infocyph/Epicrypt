@@ -13,14 +13,14 @@ final readonly class OAuthClientAssertionResult
         public array $claims,
     ) {}
 
+    public static function failure(OAuthClientAssertionStatus $status): self
+    {
+        return new self(false, $status, []);
+    }
+
     /** @param array<string, mixed> $claims */
     public static function success(array $claims): self
     {
         return new self(true, OAuthClientAssertionStatus::VALID, $claims);
-    }
-
-    public static function failure(OAuthClientAssertionStatus $status): self
-    {
-        return new self(false, $status, []);
     }
 }

@@ -65,6 +65,7 @@ final readonly class OAuthAccessTokenInspector
         }
 
         $first = $audience[0] ?? null;
+
         return is_string($first) && $first !== '' ? $first : null;
     }
 }

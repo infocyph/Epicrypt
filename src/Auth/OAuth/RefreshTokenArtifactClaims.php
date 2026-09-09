@@ -36,6 +36,11 @@ final readonly class RefreshTokenArtifactClaims
         }
     }
 
+    public static function validTokenUse(mixed $value): bool
+    {
+        return is_string($value) && hash_equals(self::TOKEN_USE, $value);
+    }
+
     /** @return array<string, mixed> */
     public function toArray(): array
     {
@@ -54,10 +59,5 @@ final readonly class RefreshTokenArtifactClaims
             'token_use' => self::TOKEN_USE,
             ...($this->grant->dpopKeyThumbprint === null ? [] : ['dpop_jkt' => $this->grant->dpopKeyThumbprint]),
         ];
-    }
-
-    public static function validTokenUse(mixed $value): bool
-    {
-        return is_string($value) && hash_equals(self::TOKEN_USE, $value);
     }
 }

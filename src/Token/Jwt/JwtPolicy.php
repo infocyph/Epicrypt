@@ -10,10 +10,10 @@ use Infocyph\Epicrypt\Security\KeyPurpose;
 
 final readonly class JwtPolicy
 {
+    public KeyPurpose $keyPurpose;
+
     /** @var array<string, true> */
     private array $requiredClaimSet;
-
-    public KeyPurpose $keyPurpose;
 
     /** @param list<string> $requiredClaims */
     public function __construct(
@@ -105,6 +105,11 @@ final readonly class JwtPolicy
         );
     }
 
+    public static function passwordReset(string $issuer, string $audience): self
+    {
+        return new self($issuer, $audience, 'password-reset+jwt', replayMode: JwtReplayMode::SINGLE_USE);
+    }
+
     public static function personalAccessToken(
         string $issuer,
         string $audience,
@@ -119,11 +124,6 @@ final readonly class JwtPolicy
             requiredClaims: ['iss', 'sub', 'aud', 'exp', 'iat', 'jti'],
             tokenClass: AuthTokenClass::PERSONAL_ACCESS_TOKEN,
         );
-    }
-
-    public static function passwordReset(string $issuer, string $audience): self
-    {
-        return new self($issuer, $audience, 'password-reset+jwt', replayMode: JwtReplayMode::SINGLE_USE);
     }
 
     public static function singleUseAction(string $issuer, string $audience): self
@@ -168,23 +168,17 @@ final readonly class JwtPolicy
         return $set;
     }
 
-    /** @param array<string, true> $requiredClaims */
-    private static function validateProfile(
-        JwtProfile $profile,
-        string $type,
-        array $requiredClaims,
-        ?AuthTokenClass $tokenClass,
-    ): void {
-        if ($tokenClass !== null && !$tokenClass->acceptsJoseType($type)) {
-            throw new ConfigurationException('JWT type does not match the selected authentication token class.');
+    /**
+     * @param array<string, true> $requiredClaims
+     * @param list<string> $claims
+     */
+    private static function requireProfileClaims(array $requiredClaims, array $claims, string $profile): void
+    {
+        foreach ($claims as $claim) {
+            if (!isset($requiredClaims[$claim])) {
+                throw new ConfigurationException(sprintf('%s policies must require %s.', $profile, $claim));
+            }
         }
-
-        match ($profile) {
-            JwtProfile::OAUTH_ACCESS_TOKEN => self::validateOAuthAccessTokenProfile($type, $requiredClaims, $tokenClass),
-            JwtProfile::OPENID_ID_TOKEN => self::validateOpenIdProfile($type, $requiredClaims, $tokenClass),
-            JwtProfile::PERSONAL_ACCESS_TOKEN => self::validatePersonalAccessTokenProfile($type, $requiredClaims, $tokenClass),
-            JwtProfile::EPICRYPT, JwtProfile::GENERIC => self::validateUnclassifiedProfile($tokenClass),
-        };
     }
 
     /** @param array<string, true> $requiredClaims */
@@ -226,23 +220,29 @@ final readonly class JwtPolicy
         self::requireProfileClaims($requiredClaims, ['sub', 'iat', 'jti'], 'Personal access-token');
     }
 
+    /** @param array<string, true> $requiredClaims */
+    private static function validateProfile(
+        JwtProfile $profile,
+        string $type,
+        array $requiredClaims,
+        ?AuthTokenClass $tokenClass,
+    ): void {
+        if ($tokenClass !== null && !$tokenClass->acceptsJoseType($type)) {
+            throw new ConfigurationException('JWT type does not match the selected authentication token class.');
+        }
+
+        match ($profile) {
+            JwtProfile::OAUTH_ACCESS_TOKEN => self::validateOAuthAccessTokenProfile($type, $requiredClaims, $tokenClass),
+            JwtProfile::OPENID_ID_TOKEN => self::validateOpenIdProfile($type, $requiredClaims, $tokenClass),
+            JwtProfile::PERSONAL_ACCESS_TOKEN => self::validatePersonalAccessTokenProfile($type, $requiredClaims, $tokenClass),
+            JwtProfile::EPICRYPT, JwtProfile::GENERIC => self::validateUnclassifiedProfile($tokenClass),
+        };
+    }
+
     private static function validateUnclassifiedProfile(?AuthTokenClass $tokenClass): void
     {
         if ($tokenClass !== null) {
             throw new ConfigurationException('Authentication token classes require a matching JWT profile.');
-        }
-    }
-
-    /**
-     * @param array<string, true> $requiredClaims
-     * @param list<string> $claims
-     */
-    private static function requireProfileClaims(array $requiredClaims, array $claims, string $profile): void
-    {
-        foreach ($claims as $claim) {
-            if (!isset($requiredClaims[$claim])) {
-                throw new ConfigurationException(sprintf('%s policies must require %s.', $profile, $claim));
-            }
         }
     }
 

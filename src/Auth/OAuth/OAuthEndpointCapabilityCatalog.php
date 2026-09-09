@@ -8,14 +8,14 @@ use Infocyph\Epicrypt\Exception\ConfigurationException;
 
 final readonly class OAuthEndpointCapabilityCatalog
 {
+    /** @var list<OAuthClientAuthenticationMethod> */
+    public array $clientAuthenticationMethods;
+
     /** @var list<OAuthEndpointCapability> */
     public array $endpoints;
 
     /** @var list<OAuthGrantType> */
     public array $grantTypes;
-
-    /** @var list<OAuthClientAuthenticationMethod> */
-    public array $clientAuthenticationMethods;
 
     /**
      * @param array<array-key, mixed> $endpoints
@@ -33,19 +33,10 @@ final readonly class OAuthEndpointCapabilityCatalog
         );
     }
 
-    public function supportsEndpoint(OAuthEndpointCapability $capability): bool
+    /** @return list<string> */
+    public function codeChallengeMethods(): array
     {
-        return in_array($capability, $this->endpoints, true);
-    }
-
-    public function supportsGrant(OAuthGrantType $grantType): bool
-    {
-        return in_array($grantType, $this->grantTypes, true);
-    }
-
-    public function supportsClientAuthentication(OAuthClientAuthenticationMethod $method): bool
-    {
-        return in_array($method, $this->clientAuthenticationMethods, true);
+        return $this->supportsEndpoint(OAuthEndpointCapability::AUTHORIZATION) ? ['S256'] : [];
     }
 
     /** @return list<string> */
@@ -54,10 +45,19 @@ final readonly class OAuthEndpointCapabilityCatalog
         return $this->supportsEndpoint(OAuthEndpointCapability::AUTHORIZATION) ? ['code'] : [];
     }
 
-    /** @return list<string> */
-    public function codeChallengeMethods(): array
+    public function supportsClientAuthentication(OAuthClientAuthenticationMethod $method): bool
     {
-        return $this->supportsEndpoint(OAuthEndpointCapability::AUTHORIZATION) ? ['S256'] : [];
+        return in_array($method, $this->clientAuthenticationMethods, true);
+    }
+
+    public function supportsEndpoint(OAuthEndpointCapability $capability): bool
+    {
+        return in_array($capability, $this->endpoints, true);
+    }
+
+    public function supportsGrant(OAuthGrantType $grantType): bool
+    {
+        return in_array($grantType, $this->grantTypes, true);
     }
 
     /**

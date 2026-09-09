@@ -27,6 +27,7 @@ use Throwable;
 final readonly class RefreshTokenArtifact
 {
     public const int DEFAULT_IDLE_LIFETIME_SECONDS = 2_592_000;
+
     public const int MAXIMUM_IDLE_LIFETIME_SECONDS = 31_536_000;
 
     private const int MAXIMUM_FUTURE_SKEW_SECONDS = 30;
@@ -39,40 +40,6 @@ final readonly class RefreshTokenArtifact
         if ($this->issuer === '' || strlen($this->issuer) > 2048 || preg_match('/[\x00-\x1F\x7F]/', $this->issuer) === 1) {
             throw new ConfigurationException('Refresh-token artifact issuer is invalid.');
         }
-    }
-
-    public function issue(
-        RefreshTokenGrant $grant,
-        ?string $familyId = null,
-        int $idleLifetimeSeconds = self::DEFAULT_IDLE_LIFETIME_SECONDS,
-    ): RefreshTokenArtifactIssue {
-        self::assertIdleLifetime($idleLifetimeSeconds);
-        $now = $this->clock->now()->getTimestamp();
-        if ($grant->expiresAt <= $now || ($grant->expiresAt - $now) > RefreshTokenArtifactClaims::MAXIMUM_ABSOLUTE_LIFETIME_SECONDS) {
-            throw new ConfigurationException('Refresh-token authorization expiration is outside the supported lifetime.');
-        }
-        $familyId ??= Base64Url::encode(random_bytes(32));
-        $claims = new RefreshTokenArtifactClaims(
-            issuer: $this->issuer,
-            tokenId: Base64Url::encode(random_bytes(24)),
-            familyId: $familyId,
-            grant: $grant,
-            issuedAt: $now,
-            idleExpiresAt: min($grant->expiresAt, $now + $idleLifetimeSeconds),
-        );
-        $entry = $this->keys->activeForWrite(
-            KeyPurpose::OAUTH_REFRESH_TOKEN_PROTECTION,
-            JweKeyManagementAlgorithm::DIRECT->value,
-            $this->issuer,
-        );
-        $token = new Jwe(
-            $entry->key,
-            JweKeyManagementAlgorithm::DIRECT,
-            JweContentEncryptionAlgorithm::A256GCM,
-            $entry->id,
-        )->encryptCompact(Json::encode($claims->toArray()), ['typ' => AuthTokenClass::OAUTH_REFRESH_TOKEN->joseType()]);
-
-        return new RefreshTokenArtifactIssue($token, $claims);
     }
 
     public function decrypt(#[\SensitiveParameter] string $token): RefreshTokenArtifactClaims
@@ -128,6 +95,63 @@ final readonly class RefreshTokenArtifact
         }
 
         return $claims;
+    }
+
+    public function issue(
+        RefreshTokenGrant $grant,
+        ?string $familyId = null,
+        int $idleLifetimeSeconds = self::DEFAULT_IDLE_LIFETIME_SECONDS,
+    ): RefreshTokenArtifactIssue {
+        self::assertIdleLifetime($idleLifetimeSeconds);
+        $now = $this->clock->now()->getTimestamp();
+        if ($grant->expiresAt <= $now || ($grant->expiresAt - $now) > RefreshTokenArtifactClaims::MAXIMUM_ABSOLUTE_LIFETIME_SECONDS) {
+            throw new ConfigurationException('Refresh-token authorization expiration is outside the supported lifetime.');
+        }
+        $familyId ??= Base64Url::encode(random_bytes(32));
+        $claims = new RefreshTokenArtifactClaims(
+            issuer: $this->issuer,
+            tokenId: Base64Url::encode(random_bytes(24)),
+            familyId: $familyId,
+            grant: $grant,
+            issuedAt: $now,
+            idleExpiresAt: min($grant->expiresAt, $now + $idleLifetimeSeconds),
+        );
+        $entry = $this->keys->activeForWrite(
+            KeyPurpose::OAUTH_REFRESH_TOKEN_PROTECTION,
+            JweKeyManagementAlgorithm::DIRECT->value,
+            $this->issuer,
+        );
+        $token = new Jwe(
+            $entry->key,
+            JweKeyManagementAlgorithm::DIRECT,
+            JweContentEncryptionAlgorithm::A256GCM,
+            $entry->id,
+        )->encryptCompact(Json::encode($claims->toArray()), ['typ' => AuthTokenClass::OAUTH_REFRESH_TOKEN->joseType()]);
+
+        return new RefreshTokenArtifactIssue($token, $claims);
+    }
+
+    private static function assertIdleLifetime(int $idleLifetimeSeconds): void
+    {
+        if ($idleLifetimeSeconds < 1 || $idleLifetimeSeconds > self::MAXIMUM_IDLE_LIFETIME_SECONDS) {
+            throw new ConfigurationException('Refresh-token idle lifetime must be between 1 second and 1 year.');
+        }
+    }
+
+    /** @param array<string, mixed> $claims */
+    private static function nullableStringClaim(array $claims, string $name): ?string
+    {
+        if (!array_key_exists($name, $claims)) {
+            return null;
+        }
+
+        return is_string($claims[$name]) ? $claims[$name] : throw new InvalidTokenException(sprintf('Refresh-token %s claim must be a string.', $name));
+    }
+
+    /** @param array<string, mixed> $claims */
+    private static function stringClaim(array $claims, string $name): string
+    {
+        return is_string($claims[$name] ?? null) ? $claims[$name] : throw new InvalidTokenException(sprintf('Refresh-token %s claim must be a string.', $name));
     }
 
     /** @param array<string, mixed> $claims */
@@ -186,6 +210,7 @@ final readonly class RefreshTokenArtifact
         if (count($parts) !== 5 || $parts[0] === '') {
             throw new InvalidTokenException('Refresh-token artifact must use compact JWE serialization.');
         }
+
         try {
             $header = Json::decodeToArray(Base64Url::decode($parts[0]));
         } catch (Throwable $exception) {
@@ -209,28 +234,5 @@ final readonly class RefreshTokenArtifact
             || !AuthTokenClass::OAUTH_REFRESH_TOKEN->acceptsJoseType($header['typ'])) {
             throw new InvalidTokenException('Refresh-token protected header profile is invalid.');
         }
-    }
-
-    private static function assertIdleLifetime(int $idleLifetimeSeconds): void
-    {
-        if ($idleLifetimeSeconds < 1 || $idleLifetimeSeconds > self::MAXIMUM_IDLE_LIFETIME_SECONDS) {
-            throw new ConfigurationException('Refresh-token idle lifetime must be between 1 second and 1 year.');
-        }
-    }
-
-    /** @param array<string, mixed> $claims */
-    private static function nullableStringClaim(array $claims, string $name): ?string
-    {
-        if (!array_key_exists($name, $claims)) {
-            return null;
-        }
-
-        return is_string($claims[$name]) ? $claims[$name] : throw new InvalidTokenException(sprintf('Refresh-token %s claim must be a string.', $name));
-    }
-
-    /** @param array<string, mixed> $claims */
-    private static function stringClaim(array $claims, string $name): string
-    {
-        return is_string($claims[$name] ?? null) ? $claims[$name] : throw new InvalidTokenException(sprintf('Refresh-token %s claim must be a string.', $name));
     }
 }

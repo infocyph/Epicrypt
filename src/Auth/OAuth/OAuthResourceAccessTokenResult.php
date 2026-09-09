@@ -26,13 +26,13 @@ final readonly class OAuthResourceAccessTokenResult
         return new self(OAuthResourceAccessTokenStatus::VALID, $accessToken, $dpop);
     }
 
-    public function valid(): bool
-    {
-        return $this->status === OAuthResourceAccessTokenStatus::VALID;
-    }
-
     public function tokenType(): string
     {
         return $this->dpop === null ? 'Bearer' : 'DPoP';
+    }
+
+    public function valid(): bool
+    {
+        return $this->status === OAuthResourceAccessTokenStatus::VALID;
     }
 }

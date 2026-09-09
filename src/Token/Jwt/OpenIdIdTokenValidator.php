@@ -14,10 +14,14 @@ use Psr\Clock\ClockInterface;
 final readonly class OpenIdIdTokenValidator
 {
     private const int MAX_AUDIENCE_BYTES = 2048;
+
     private const int MAX_AUDIENCES = 32;
-    private const int MAX_IDENTIFIER_BYTES = 256;
-    private const int MAX_AUTHENTICATION_METHODS = 16;
+
     private const int MAX_AUTHENTICATION_METHOD_BYTES = 64;
+
+    private const int MAX_AUTHENTICATION_METHODS = 16;
+
+    private const int MAX_IDENTIFIER_BYTES = 256;
 
     public function __construct(private ClockInterface $clock = new SystemClock()) {}
 
@@ -69,6 +73,13 @@ final readonly class OpenIdIdTokenValidator
         }
 
         return $normalized;
+    }
+
+    private function halfHash(#[\SensitiveParameter] string $value, AsymmetricJwtAlgorithm $algorithm): string
+    {
+        $digest = hash($algorithm->hashAlgorithm(), $value, true);
+
+        return Base64Url::encode(substr($digest, 0, intdiv(strlen($digest), 2)));
     }
 
     private function isIdentifier(string $value, int $maximumBytes): bool
@@ -190,12 +201,5 @@ final readonly class OpenIdIdTokenValidator
         if (!is_string($actual) || !hash_equals($expected, $actual)) {
             throw new InvalidClaimException(sprintf('OIDC ID token %s does not match.', $claim));
         }
-    }
-
-    private function halfHash(#[\SensitiveParameter] string $value, AsymmetricJwtAlgorithm $algorithm): string
-    {
-        $digest = hash($algorithm->hashAlgorithm(), $value, true);
-
-        return Base64Url::encode(substr($digest, 0, intdiv(strlen($digest), 2)));
     }
 }

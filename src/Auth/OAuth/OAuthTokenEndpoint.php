@@ -214,6 +214,26 @@ final readonly class OAuthTokenEndpoint
         return OAuthTokenResult::success($this->response($access, $rotation->grant->scopes, $rotation->token, $dpop));
     }
 
+    private static function validEndpointUri(string $uri): bool
+    {
+        $parts = parse_url($uri);
+
+        return is_array($parts)
+            && ($parts['scheme'] ?? null) === 'https'
+            && is_string($parts['host'] ?? null)
+            && $parts['host'] !== ''
+            && !isset($parts['user'])
+            && !isset($parts['pass'])
+            && !isset($parts['fragment']);
+    }
+
+    private function failClosedAuthorization(string $authorizationId): void
+    {
+        $now = $this->clock->now()->getTimestamp();
+        $this->authorizations->revoke($authorizationId, $now);
+        $this->refreshTokens->revokeAuthorization($authorizationId);
+    }
+
     private function issueRefreshToken(
         OAuthClient $client,
         OAuthAuthorizationCodeConsumeResult $consumed,
@@ -260,13 +280,6 @@ final readonly class OAuthTokenEndpoint
         ) ? OAuthErrorCode::INVALID_SCOPE : $scopes;
     }
 
-    private function failClosedAuthorization(string $authorizationId): void
-    {
-        $now = $this->clock->now()->getTimestamp();
-        $this->authorizations->revoke($authorizationId, $now);
-        $this->refreshTokens->revokeAuthorization($authorizationId);
-    }
-
     private function resolveClient(
         string $clientId,
         ?OAuthClientAuthenticationResult $authentication,
@@ -293,23 +306,22 @@ final readonly class OAuthTokenEndpoint
         return $client;
     }
 
-    private function validAuthenticationForClient(
-        OAuthClient $client,
-        ?OAuthClientAuthenticationResult $authentication,
-    ): bool {
-        if ($client->type === OAuthClientType::CONFIDENTIAL) {
-            return $authentication !== null
-                && $authentication->authenticated
-                && $authentication->client instanceof OAuthClient
-                && hash_equals($client->clientId, $authentication->client->clientId);
+    private function resolveDpop(#[\SensitiveParameter] ?string $proof): OAuthDpopContext|OAuthErrorCode|null
+    {
+        if ($proof === null) {
+            return null;
         }
-        if ($authentication === null) {
-            return true;
+        if ($this->dpop === null || $this->tokenEndpointUri === null) {
+            return OAuthErrorCode::INVALID_DPOP_PROOF;
         }
 
-        return $authentication->authenticated
-            && $authentication->client instanceof OAuthClient
-            && hash_equals($client->clientId, $authentication->client->clientId);
+        try {
+            return $this->dpop->validateTokenEndpoint($proof, $this->tokenEndpointUri);
+        } catch (InvalidTokenException) {
+            return OAuthErrorCode::INVALID_DPOP_PROOF;
+        } catch (Throwable) {
+            return OAuthErrorCode::SERVER_ERROR;
+        }
     }
 
     /**
@@ -332,6 +344,7 @@ final readonly class OAuthTokenEndpoint
         } catch (Throwable) {
             return OAuthErrorCode::SERVER_ERROR;
         }
+
         try {
             $audiences = AuthProtocolPolicy::normalizeAudiences($resolved, 'OAuth token audiences');
         } catch (Throwable) {
@@ -342,23 +355,6 @@ final readonly class OAuthTokenEndpoint
         }
 
         return ['scopes' => $scopes, 'audiences' => $audiences];
-    }
-
-    private function resolveDpop(#[\SensitiveParameter] ?string $proof): OAuthDpopContext|OAuthErrorCode|null
-    {
-        if ($proof === null) {
-            return null;
-        }
-        if ($this->dpop === null || $this->tokenEndpointUri === null) {
-            return OAuthErrorCode::INVALID_DPOP_PROOF;
-        }
-        try {
-            return $this->dpop->validateTokenEndpoint($proof, $this->tokenEndpointUri);
-        } catch (InvalidTokenException) {
-            return OAuthErrorCode::INVALID_DPOP_PROOF;
-        } catch (Throwable) {
-            return OAuthErrorCode::SERVER_ERROR;
-        }
     }
 
     /**
@@ -384,16 +380,22 @@ final readonly class OAuthTokenEndpoint
         );
     }
 
-    private static function validEndpointUri(string $uri): bool
-    {
-        $parts = parse_url($uri);
+    private function validAuthenticationForClient(
+        OAuthClient $client,
+        ?OAuthClientAuthenticationResult $authentication,
+    ): bool {
+        if ($client->type === OAuthClientType::CONFIDENTIAL) {
+            return $authentication !== null
+                && $authentication->authenticated
+                && $authentication->client instanceof OAuthClient
+                && hash_equals($client->clientId, $authentication->client->clientId);
+        }
+        if ($authentication === null) {
+            return true;
+        }
 
-        return is_array($parts)
-            && ($parts['scheme'] ?? null) === 'https'
-            && is_string($parts['host'] ?? null)
-            && $parts['host'] !== ''
-            && !isset($parts['user'])
-            && !isset($parts['pass'])
-            && !isset($parts['fragment']);
+        return $authentication->authenticated
+            && $authentication->client instanceof OAuthClient
+            && hash_equals($client->clientId, $authentication->client->clientId);
     }
 }

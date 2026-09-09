@@ -7,14 +7,6 @@ namespace Infocyph\Epicrypt\Auth\OAuth;
 interface AuthorizationCodeStoreInterface
 {
     /**
-     * Persist a newly issued authorization-code record.
-     *
-     * Return false only when codeId already exists. Raw JWE authorization codes
-     * are never persisted by this contract.
-     */
-    public function create(#[\SensitiveParameter] AuthorizationCodeRecord $record): bool;
-
-    /**
      * Atomically consume one authenticated authorization-code record.
      *
      * The implementation must locate by record.codeId and compare the exact
@@ -33,4 +25,12 @@ interface AuthorizationCodeStoreInterface
         AuthorizationCodeRecord $record,
         int $now,
     ): AuthorizationCodeConsumeStatus;
+
+    /**
+     * Persist a newly issued authorization-code record.
+     *
+     * Return false only when codeId already exists. Raw JWE authorization codes
+     * are never persisted by this contract.
+     */
+    public function create(#[\SensitiveParameter] AuthorizationCodeRecord $record): bool;
 }
