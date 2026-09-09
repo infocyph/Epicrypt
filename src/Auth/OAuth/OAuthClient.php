@@ -42,6 +42,7 @@ final readonly class OAuthClient
         array $scopes,
         array $audiences,
         array $authenticationMethods,
+        #[\SensitiveParameter]
         public ?OAuthClientSecret $secret = null,
         public ?OAuthClientKeySet $assertionKeys = null,
     ) {
@@ -49,7 +50,9 @@ final readonly class OAuthClient
         $this->redirectUris = self::normalizeRedirectUris($redirectUris);
         $this->grantTypes = self::normalizeGrantTypes($grantTypes);
         $this->scopes = AuthProtocolPolicy::normalizeScopes($scopes, 'OAuth client scopes');
-        $this->audiences = AuthProtocolPolicy::normalizeAudiences($audiences, 'OAuth client audiences');
+        /** @var non-empty-list<string> $normalizedAudiences */
+        $normalizedAudiences = AuthProtocolPolicy::normalizeAudiences($audiences, 'OAuth client audiences');
+        $this->audiences = $normalizedAudiences;
         $this->authenticationMethods = self::normalizeAuthenticationMethods($authenticationMethods);
 
         $this->assertGrantProfile();
@@ -164,7 +167,9 @@ final readonly class OAuthClient
         if (!is_array($parts)
             || !is_string($parts['scheme'] ?? null)
             || $parts['scheme'] === ''
-            || isset($parts['fragment'], $parts['user'], $parts['pass'])) {
+            || isset($parts['fragment'])
+            || isset($parts['user'])
+            || isset($parts['pass'])) {
             return false;
         }
         $scheme = strtolower($parts['scheme']);
