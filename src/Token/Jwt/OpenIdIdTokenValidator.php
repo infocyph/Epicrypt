@@ -13,9 +13,9 @@ use Psr\Clock\ClockInterface;
 
 final readonly class OpenIdIdTokenValidator
 {
-    private const int MAX_AUDIENCES = 32;
-
     private const int MAX_AUDIENCE_BYTES = 2048;
+
+    private const int MAX_AUDIENCES = 32;
 
     private const int MAX_IDENTIFIER_BYTES = 256;
 
