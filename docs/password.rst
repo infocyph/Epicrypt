@@ -1,10 +1,13 @@
 Password security
 =================
 
-``PasswordHasher`` defaults to Argon2id. Argon2i remains available for
-compatible deployments; bcrypt is explicit-only and rejects passwords longer
-than 72 bytes. Never encrypt passwords or use a fast general-purpose digest as
-a password hash.
+``PasswordHasher`` writes Argon2id by default and treats it as the modern
+password-hashing profile for Epicrypt 3. Argon2i is verification-only legacy
+material: an existing Argon2i hash can still be verified by PHP and
+``verifyAndRehash()`` migrates it to the configured Argon2id policy after a
+successful login. Bcrypt remains an explicit compatibility write profile and
+rejects passwords longer than 72 bytes. Never encrypt passwords or use a fast
+general-purpose digest as a password hash.
 
 Complete path: register, authenticate, and upgrade credentials
 --------------------------------------------------------------
@@ -67,7 +70,8 @@ Register, log in, and upgrade a stored hash
 -------------------------------------------
 
 On a successful login, ``verifyAndRehash()`` can migrate an older supported
-hash to the current Argon2id policy without forcing a password reset.
+hash, including Argon2i or bcrypt, to the current Argon2id policy without
+forcing a password reset.
 
 .. code-block:: php
 
@@ -152,11 +156,13 @@ as fallbacks. Use ``wrapWithBinaryKey()``/``unwrapWithBinaryKey()`` and the
 ``*BinaryKey*`` rotation methods only when the caller truly owns raw 32-byte
 keys; ordinary methods use Base64URL key material.
 
-Explicit algorithm selection
-----------------------------
+Explicit compatibility selection
+--------------------------------
 
-Argon2id is the recommended default. Select Argon2i or bcrypt only for a
-specific compatibility requirement and retain the default cost validation.
+Argon2id is the sole modern write profile. Select bcrypt only when an existing
+system requires new bcrypt hashes; otherwise use the default Argon2id hasher.
+Existing Argon2i hashes require no separate Epicrypt algorithm option because
+``password_verify()`` identifies the algorithm from the stored hash.
 
 .. code-block:: php
 
@@ -174,7 +180,7 @@ specific compatibility requirement and retain the default cost validation.
    ));
 
 Use the default Argon2id hasher as the target of ``verifyAndRehash()`` to move
-accounts away from a compatible legacy hash after a successful login.
+accounts away from any compatible legacy hash after a successful login.
 
 Password policy character classes are deliberately ASCII semantics. With
 ``includeAmbiguous: false``, the exact excluded set is ``0O1IlL``; generation
