@@ -14,6 +14,19 @@ interface RefreshTokenStoreInterface
      */
     public function create(#[\SensitiveParameter] RefreshTokenRecord $record): bool;
 
+    /**
+     * Read authoritative refresh state without consuming or rotating it.
+     *
+     * Implementations must compare the supplied authenticated record to persisted
+     * state exactly. Consumed/revoked/expired state is returned without mutation;
+     * reuse-family revocation remains a rotate() responsibility.
+     */
+    public function inspect(
+        #[\SensitiveParameter]
+        RefreshTokenRecord $record,
+        int $now,
+    ): RefreshTokenInspectionStatus;
+
     /** Revoke the family resolved from any current or retained historical token id. */
     public function revokeFamily(string $tokenId, int $revokedAt): bool;
 
