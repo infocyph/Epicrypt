@@ -30,7 +30,7 @@ enum AsymmetricJwtAlgorithm: string
 
     public static function fromHeader(string $algorithm): self
     {
-        $resolved = self::tryFrom(strtoupper($algorithm));
+        $resolved = self::tryFrom($algorithm);
         if ($resolved === null) {
             throw new UnsupportedAlgorithmException('Unsupported asymmetric JWT algorithm: ' . $algorithm);
         }
@@ -64,9 +64,30 @@ enum AsymmetricJwtAlgorithm: string
         };
     }
 
+    public function isEc(): bool
+    {
+        return match ($this) {
+            self::ES256, self::ES384, self::ES512 => true,
+            default => false,
+        };
+    }
+
     public function isEdDsa(): bool
     {
         return $this === self::EDDSA;
+    }
+
+    public function isRsa(): bool
+    {
+        return match ($this) {
+            self::PS256,
+            self::PS384,
+            self::PS512,
+            self::RS256,
+            self::RS384,
+            self::RS512 => true,
+            default => false,
+        };
     }
 
     public function isRsaPss(): bool
