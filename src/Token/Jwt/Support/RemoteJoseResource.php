@@ -55,7 +55,7 @@ final readonly class RemoteJoseResource
         }
 
         $maximumMembers = $jwks
-            ? 1 + ($this->maximumKeys * JosePolicy::MAX_JWK_MEMBERS)
+            ? 1 + ($this->maximumKeys * (JosePolicy::MAX_JWK_MEMBERS + 1))
             : JosePolicy::MAX_DOCUMENT_MEMBERS;
 
         return [
