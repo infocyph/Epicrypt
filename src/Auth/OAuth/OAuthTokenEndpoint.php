@@ -154,12 +154,24 @@ final readonly class OAuthTokenEndpoint
 
         $inspection = $this->refreshTokens->inspect($refreshToken);
         $grant = $inspection->grant();
-        if (!$inspection->active() || !$grant instanceof RefreshTokenGrant || !hash_equals($grant->clientId, $clientId)) {
+        if (!$grant instanceof RefreshTokenGrant || !hash_equals($grant->clientId, $clientId)) {
             return OAuthTokenResult::failure(OAuthErrorCode::INVALID_GRANT);
         }
         $actualDpop = $dpop?->keyThumbprint;
         if ($grant->dpopKeyThumbprint !== $actualDpop) {
             return OAuthTokenResult::failure(OAuthErrorCode::INVALID_DPOP_PROOF);
+        }
+        if ($inspection->status === RefreshTokenInspectionStatus::CONSUMED) {
+            // Binding is verified before this call so a cross-client/sender guess
+            // cannot revoke another family. The authoritative rotate primitive is
+            // still invoked for a genuine consumed-token reuse so it can atomically
+            // revoke the family according to the store contract.
+            $this->refreshTokens->rotate($refreshToken, $clientId, $actualDpop);
+
+            return OAuthTokenResult::failure(OAuthErrorCode::INVALID_GRANT);
+        }
+        if (!$inspection->active()) {
+            return OAuthTokenResult::failure(OAuthErrorCode::INVALID_GRANT);
         }
 
         $authorization = $this->authorizations->find($grant->authorizationId);
