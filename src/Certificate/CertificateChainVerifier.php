@@ -35,7 +35,7 @@ final class CertificateChainVerifier
         }
 
         $this->assertCertificate($certificatePem, 'leaf certificate');
-        $seen = [hash('sha256', (new PemNormalizer())->normalize($certificatePem)) => true];
+        $seen = [];
         $trustBundle = $this->bundle($trustedCaCertificatesPem, 'trust anchor', $seen);
         $intermediateBundle = $this->bundle($intermediateCertificatesPem, 'intermediate certificate', $seen);
         $trustPath = $this->writeBundle($trustBundle, 'epicrypt-ca-');
