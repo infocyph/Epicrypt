@@ -34,6 +34,13 @@ final class JosePolicy
 
     public const int MAX_KEY_ID_BYTES = 128;
 
+    public static function assertConfiguredMemberCount(array $value, int $maximumMembers, string $label): void
+    {
+        if (self::memberCount($value, $maximumMembers) > $maximumMembers) {
+            throw new ConfigurationException(sprintf('%s contains too many members.', $label));
+        }
+    }
+
     public static function assertGeneratedSize(string $value, int $maximumBytes, string $label): void
     {
         if ($value === '' || strlen($value) > $maximumBytes) {
@@ -55,25 +62,8 @@ final class JosePolicy
     /** @param array<mixed> $value */
     public static function assertMemberCount(array $value, int $maximumMembers, string $label): void
     {
-        $members = 0;
-        $pending = [$value];
-
-        while ($pending !== []) {
-            $current = array_pop($pending);
-            if (!is_array($current)) {
-                continue;
-            }
-
-            $members += count($current);
-            if ($members > $maximumMembers) {
-                throw new InvalidTokenException(sprintf('%s contains too many members.', $label));
-            }
-
-            foreach ($current as $member) {
-                if (is_array($member)) {
-                    $pending[] = $member;
-                }
-            }
+        if (self::memberCount($value, $maximumMembers) > $maximumMembers) {
+            throw new InvalidTokenException(sprintf('%s contains too many members.', $label));
         }
     }
 
@@ -98,5 +88,32 @@ final class JosePolicy
         if ($count < 1 || $count > self::MAX_PARTICIPANTS) {
             throw new ConfigurationException(sprintf('%s requires between 1 and %d participants.', $label, self::MAX_PARTICIPANTS));
         }
+    }
+
+    /** @param array<mixed> $value */
+    private static function memberCount(array $value, int $stopAfter): int
+    {
+        $members = 0;
+        $pending = [$value];
+
+        while ($pending !== []) {
+            $current = array_pop($pending);
+            if (!is_array($current)) {
+                continue;
+            }
+
+            $members += count($current);
+            if ($members > $stopAfter) {
+                return $members;
+            }
+
+            foreach ($current as $member) {
+                if (is_array($member)) {
+                    $pending[] = $member;
+                }
+            }
+        }
+
+        return $members;
     }
 }
