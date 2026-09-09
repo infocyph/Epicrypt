@@ -114,7 +114,7 @@ jobs:
           - shard: validation-policy
             classes: 'Infocyph\Epicrypt\Password\PasswordHasher,Infocyph\Epicrypt\Token\Jwt\JwtValidator,Infocyph\Epicrypt\Security\AsymmetricSigningKeySet,Infocyph\Epicrypt\Security\KeyRing'
           - shard: jwt-policy
-            classes: 'Infocyph\Epicrypt\Token\Jwt\AsymmetricJwt,Infocyph\Epicrypt\Token\Jwt\DpopProof,Infocyph\Epicrypt\Token\Jwt\JwtPolicy,Infocyph\Epicrypt\Token\Jwt\SymmetricJwt'
+            classes: 'Infocyph\Epicrypt\Token\Jwt\AsymmetricJwt,Infocyph\Epicrypt\Token\Jwt\DpopProof,Infocyph\Epicrypt\Token\Jwt\JwtPolicy,Infocyph\Epicrypt\Token\Jwt\OpenIdIdTokenValidator,Infocyph\Epicrypt\Token\Jwt\SymmetricJwt'
           - shard: refresh-token
             classes: 'Infocyph\Epicrypt\Token\Opaque\OpaqueToken,Infocyph\Epicrypt\Token\Opaque\RefreshTokenGrant,Infocyph\Epicrypt\Token\Opaque\RefreshTokenManager,Infocyph\Epicrypt\Token\Opaque\RefreshTokenRecord'
           - shard: signed-helpers
