@@ -33,7 +33,9 @@ final readonly class OAuthAuthorizationRecord
         AuthProtocolPolicy::assertText($this->subject, AuthProtocolPolicy::MAX_IDENTIFIER_BYTES, 'OAuth authorization subject');
         AuthProtocolPolicy::assertText($this->clientId, AuthProtocolPolicy::MAX_IDENTIFIER_BYTES, 'OAuth authorization client ID');
         $this->scopes = AuthProtocolPolicy::normalizeScopes($scopes, 'OAuth authorization scopes');
-        $this->audiences = AuthProtocolPolicy::normalizeAudiences($audiences, 'OAuth authorization audiences');
+        /** @var non-empty-list<string> $normalizedAudiences */
+        $normalizedAudiences = AuthProtocolPolicy::normalizeAudiences($audiences, 'OAuth authorization audiences');
+        $this->audiences = $normalizedAudiences;
         if ($this->authorizedAt < 1 || $this->expiresAt <= $this->authorizedAt) {
             throw new ConfigurationException('OAuth authorization lifetime is invalid.');
         }
@@ -92,12 +94,9 @@ final readonly class OAuthAuthorizationRecord
      */
     private static function containsScopes(array $allowed, array $requested): bool
     {
-        foreach ($requested as $scope) {
-            if (!in_array($scope, $allowed, true)) {
-                return false;
-            }
-        }
-
-        return true;
+        return array_all(
+            $requested,
+            static fn(string $scope): bool => in_array($scope, $allowed, true),
+        );
     }
 }
