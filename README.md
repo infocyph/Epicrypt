@@ -120,10 +120,11 @@ $rehash = $hasher->verifyAndRehash('MyStrongPassword!2026', $hash);
 
 declare(strict_types=1);
 
-use Infocyph\Epicrypt\Security\CsrfTokenManager;
+use Infocyph\Epicrypt\Generate\KeyMaterial\Enum\KeyMaterialEncoding;
 use Infocyph\Epicrypt\Generate\KeyMaterial\KeyMaterialGenerator;
+use Infocyph\Epicrypt\Security\CsrfTokenManager;
 
-$csrfSecret = new KeyMaterialGenerator()->forMasterSecret(asBase64Url: false);
+$csrfSecret = new KeyMaterialGenerator()->forMasterSecret(KeyMaterialEncoding::RAW);
 $csrf = new CsrfTokenManager($csrfSecret);
 $token = $csrf->issueToken('session-1');
 
@@ -137,10 +138,11 @@ $ok = $csrf->verifyToken('session-1', $token);
 
 declare(strict_types=1);
 
-use Infocyph\Epicrypt\Security\SignedUrl;
+use Infocyph\Epicrypt\Generate\KeyMaterial\Enum\KeyMaterialEncoding;
 use Infocyph\Epicrypt\Generate\KeyMaterial\KeyMaterialGenerator;
+use Infocyph\Epicrypt\Security\SignedUrl;
 
-$urlSecret = new KeyMaterialGenerator()->forMasterSecret(asBase64Url: false);
+$urlSecret = new KeyMaterialGenerator()->forMasterSecret(KeyMaterialEncoding::RAW);
 $signed = new SignedUrl($urlSecret);
 $url = $signed->generate('https://example.com/download', ['file' => 'report.pdf'], time() + 300);
 
