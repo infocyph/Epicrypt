@@ -27,9 +27,9 @@ final class CertificateBench
 
     private KeyExchange $exchange;
 
-    private Pkcs12 $pkcs12;
-
     private string $pfx;
+
+    private Pkcs12 $pkcs12;
 
     public function setUp(): void
     {
