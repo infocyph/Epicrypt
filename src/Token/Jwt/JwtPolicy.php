@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Infocyph\Epicrypt\Token\Jwt;
 
+use Infocyph\Epicrypt\Auth\Token\AuthTokenClass;
 use Infocyph\Epicrypt\Exception\ConfigurationException;
 
 final readonly class JwtPolicy
@@ -24,6 +25,7 @@ final readonly class JwtPolicy
         public JwtReplayMode $replayMode = JwtReplayMode::NONE,
         public JwtProfile $profile = JwtProfile::EPICRYPT,
         public array $requiredClaims = ['iss', 'sub', 'aud', 'exp', 'nbf', 'iat', 'jti'],
+        public ?AuthTokenClass $tokenClass = null,
     ) {
         if (!self::validPolicyValue($this->expectedIssuer, 2048)
             || !self::validPolicyValue($this->expectedAudience, 2048)
@@ -37,7 +39,7 @@ final readonly class JwtPolicy
             throw new ConfigurationException('JWT required claims must be a non-empty list.');
         }
         $requiredClaimSet = self::requiredClaimSet($this->requiredClaims);
-        self::validateProfile($this->profile, $this->expectedType, $requiredClaimSet);
+        self::validateProfile($this->profile, $this->expectedType, $requiredClaimSet, $this->tokenClass);
         if ($this->replayMode !== JwtReplayMode::NONE && !isset($requiredClaimSet['jti'])) {
             throw new ConfigurationException('Replay-protected JWT policies must require iss, exp, and jti.');
         }
@@ -77,9 +79,10 @@ final readonly class JwtPolicy
         return new self(
             $issuer,
             $audience,
-            'at+jwt',
+            AuthTokenClass::OAUTH_ACCESS_TOKEN->joseType(),
             profile: JwtProfile::OAUTH_ACCESS_TOKEN,
             requiredClaims: ['iss', 'sub', 'aud', 'exp', 'iat', 'jti', 'client_id'],
+            tokenClass: AuthTokenClass::OAUTH_ACCESS_TOKEN,
         );
     }
 
@@ -88,9 +91,10 @@ final readonly class JwtPolicy
         return new self(
             $issuer,
             $clientId,
-            'JWT',
+            AuthTokenClass::OIDC_ID_TOKEN->joseType(),
             profile: JwtProfile::OPENID_ID_TOKEN,
             requiredClaims: ['iss', 'aud', 'exp', 'iat'],
+            tokenClass: AuthTokenClass::OIDC_ID_TOKEN,
         );
     }
 
@@ -106,11 +110,9 @@ final readonly class JwtPolicy
 
     public function acceptsType(string $type): bool
     {
-        if ($this->profile === JwtProfile::OAUTH_ACCESS_TOKEN) {
-            return in_array(strtolower($type), ['at+jwt', 'application/at+jwt'], true);
-        }
-
-        return hash_equals($this->expectedType, $type);
+        return $this->tokenClass !== null
+            ? $this->tokenClass->acceptsJoseType($type)
+            : hash_equals($this->expectedType, $type);
     }
 
     public function requires(string $claim): bool
@@ -144,18 +146,48 @@ final readonly class JwtPolicy
     }
 
     /** @param array<string, true> $requiredClaims */
-    private static function validateProfile(JwtProfile $profile, string $type, array $requiredClaims): void
-    {
-        if ($profile !== JwtProfile::OAUTH_ACCESS_TOKEN) {
+    private static function validateProfile(
+        JwtProfile $profile,
+        string $type,
+        array $requiredClaims,
+        ?AuthTokenClass $tokenClass,
+    ): void {
+        if ($tokenClass !== null && !$tokenClass->acceptsJoseType($type)) {
+            throw new ConfigurationException('JWT type does not match the selected authentication token class.');
+        }
+
+        if ($profile === JwtProfile::OAUTH_ACCESS_TOKEN) {
+            if ($tokenClass !== AuthTokenClass::OAUTH_ACCESS_TOKEN) {
+                throw new ConfigurationException('OAuth access-token policies require the OAuth access-token class.');
+            }
+            if ($type !== AuthTokenClass::OAUTH_ACCESS_TOKEN->joseType()) {
+                throw new ConfigurationException('OAuth access-token policies require typ=at+jwt.');
+            }
+            foreach (['sub', 'iat', 'jti', 'client_id'] as $claim) {
+                if (!isset($requiredClaims[$claim])) {
+                    throw new ConfigurationException(sprintf('OAuth access-token policies must require %s.', $claim));
+                }
+            }
+
             return;
         }
-        if ($type !== 'at+jwt') {
-            throw new ConfigurationException('OAuth access-token policies require typ=at+jwt.');
-        }
-        foreach (['sub', 'iat', 'jti', 'client_id'] as $claim) {
-            if (!isset($requiredClaims[$claim])) {
-                throw new ConfigurationException(sprintf('OAuth access-token policies must require %s.', $claim));
+
+        if ($profile === JwtProfile::OPENID_ID_TOKEN) {
+            if ($tokenClass !== AuthTokenClass::OIDC_ID_TOKEN) {
+                throw new ConfigurationException('OpenID ID-token policies require the OIDC ID-token class.');
             }
+            if ($type !== AuthTokenClass::OIDC_ID_TOKEN->joseType()) {
+                throw new ConfigurationException('OpenID ID-token policies require typ=JWT.');
+            }
+            if (!isset($requiredClaims['iat'])) {
+                throw new ConfigurationException('OpenID ID-token policies must require iat.');
+            }
+
+            return;
+        }
+
+        if ($tokenClass !== null) {
+            throw new ConfigurationException('Authentication token classes require a matching JWT profile.');
         }
     }
 
