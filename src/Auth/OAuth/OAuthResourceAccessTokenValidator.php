@@ -27,7 +27,8 @@ final readonly class OAuthResourceAccessTokenValidator
             return OAuthResourceAccessTokenResult::failure(OAuthResourceAccessTokenStatus::INVALID_TOKEN, $validation);
         }
 
-        $jkt = $validation->claims['cnf']['jkt'] ?? null;
+        $confirmation = $validation->claims['cnf'] ?? null;
+        $jkt = is_array($confirmation) ? ($confirmation['jkt'] ?? null) : null;
         if (!is_string($jkt)) {
             return OAuthResourceAccessTokenResult::success($validation);
         }
