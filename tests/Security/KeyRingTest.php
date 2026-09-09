@@ -35,6 +35,35 @@ it('enforces status, time, purpose, algorithm, and issuer for every resolution',
         ->and($ring->resolveForVerification('active', KeyPurpose::DATA_PROTECTION, 'HS512', 'issuer'))->toBeNull();
 });
 
+it('exposes public-safe metadata without key material', function () {
+    $ring = new KeyRing([
+        new KeyRingEntry(
+            'active',
+            'super-secret-key-material',
+            KeyStatus::ACTIVE,
+            KeyPurpose::JWT_SIGNING,
+            'PS256',
+            100,
+            200,
+            'issuer',
+        ),
+    ]);
+
+    $metadata = $ring->metadataFor('active');
+
+    expect($metadata)->not->toBeNull()
+        ->and($metadata?->id)->toBe('active')
+        ->and($metadata?->status)->toBe(KeyStatus::ACTIVE)
+        ->and($metadata?->purpose)->toBe(KeyPurpose::JWT_SIGNING)
+        ->and($metadata?->algorithm)->toBe('PS256')
+        ->and($metadata?->notBefore)->toBe(100)
+        ->and($metadata?->notAfter)->toBe(200)
+        ->and($metadata?->issuer)->toBe('issuer')
+        ->and(property_exists($metadata, 'key'))->toBeFalse()
+        ->and($ring->metadataFor('missing'))->toBeNull()
+        ->and($ring->metadata())->toHaveCount(1);
+});
+
 it('rejects ambiguous active write keys and duplicate ids', function () {
     $entry = new KeyRingEntry('same', 'key', KeyStatus::ACTIVE, KeyPurpose::DATA_PROTECTION, 'alg');
     expect(fn() => new KeyRing([$entry, $entry]))->toThrow(ConfigurationException::class);
