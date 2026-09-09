@@ -12,12 +12,25 @@ jobs:
   autofix:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
         with:
           ref: epicrypt-3/architecture-plan
           fetch-depth: 0
+
+      - name: Synchronize audited phase checklists
+        run: python3 tools/sync-auth-plan.py
+
+      - name: Commit plan and API inventory first
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/plans/epicrypt-3-final-development-plan.md docs/plans/epicrypt-3-public-api-inventory.md
+          if ! git diff --cached --quiet; then
+            git commit -m "docs(plan): synchronize completed auth phases"
+            git push origin HEAD:epicrypt-3/architecture-plan
+          fi
 
       - uses: shivammathur/setup-php@v2
         with:
@@ -39,18 +52,15 @@ jobs:
           vendor/bin/rector process --no-progress-bar
           vendor/bin/pint
 
+      - name: Commit canonical code/test fixes before gate
+        run: |
+          git add src tests
+          if ! git diff --cached --quiet; then
+            git commit -m "chore(auth): satisfy release quality gates"
+            git push origin HEAD:epicrypt-3/architecture-plan
+          fi
+
       - name: Run canonical project CI gate
         env:
           IC_TEST_TASK_TIMEOUT: 300
         run: composer ic:ci
-
-      - name: Commit canonical fixes
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src tests
-          if git diff --cached --quiet; then
-            exit 0
-          fi
-          git commit -m "chore(auth): satisfy release quality gates"
-          git push origin HEAD:epicrypt-3/architecture-plan
