@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Infocyph\Epicrypt\Auth\OAuth;
 
-final readonly class OAuthSingleAudienceResolver implements OAuthAuthorizationAudienceResolverInterface
+final readonly class OAuthSingleAudienceResolver implements OAuthScopeAudienceResolverInterface
 {
     public function resolve(OAuthClient $client, array $scopes): array
     {
