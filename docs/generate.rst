@@ -2,8 +2,10 @@ Secure generation and key derivation
 ====================================
 
 All generators use cryptographically secure operating-system randomness.
-``KeyMaterialGenerator`` returns Base64URL by default so keys can be stored in a
-secret manager without corrupting binary bytes.
+``KeyMaterialGenerator`` measures requested lengths in raw entropy bytes and
+then applies an explicit ``KeyMaterialEncoding``. Base64URL is the default for
+safe secret-manager storage; RAW is for binary crypto APIs; HEX is useful for
+environment/configuration values that require hexadecimal text.
 
 Complete path: derive and use purpose-isolated application keys
 ----------------------------------------------------------------
@@ -65,6 +67,7 @@ Generate purpose-sized material
 
    declare(strict_types=1);
 
+   use Infocyph\Epicrypt\Generate\KeyMaterial\Enum\KeyMaterialEncoding;
    use Infocyph\Epicrypt\Generate\KeyMaterial\KeyMaterialGenerator;
    use Infocyph\Epicrypt\Generate\KeyMaterial\TokenMaterialGenerator;
    use Infocyph\Epicrypt\Generate\NonceGenerator;
@@ -74,11 +77,19 @@ Generate purpose-sized material
    $keys = new KeyMaterialGenerator();
    $databaseFieldKey = $keys->forAead();
    $fileStreamKey = $keys->forSecretStream();
+   $binaryKey = $keys->forMasterSecret(KeyMaterialEncoding::RAW);
+   $environmentTokenSecret = $keys->forTokenSecret(KeyMaterialEncoding::HEX);
    $refreshToken = new TokenMaterialGenerator()->generate();
    $passwordSalt = new SaltGenerator()->generate();
    $protocolNonce = new NonceGenerator()->generate();
    $rawChallenge = new RandomBytesGenerator()->bytes(32);
    $traceId = new RandomBytesGenerator()->string(32, prefix: 'trace_');
+
+``forMasterSecret()`` and ``forTokenSecret()`` both provide 32 raw bytes of
+entropy before encoding. Therefore their HEX form is exactly 64 lowercase hex
+characters and their Base64URL form decodes to exactly 32 bytes. Encoding does
+not increase entropy. Keep the generated value in a deployment secret manager
+or restricted environment file; do not log it.
 
 Use ``RandomBytesGenerator::bytes()`` only when the protocol specifies an exact
 raw-byte length. Nonces and salts are not interchangeable with secret keys.
