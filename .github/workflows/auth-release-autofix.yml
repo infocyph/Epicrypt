@@ -30,7 +30,9 @@ jobs:
         run: composer update --no-interaction --prefer-dist --no-progress --prefer-stable
 
       - name: Apply reviewed auth release fixes
-        run: python3 tools/auth-release-patch.py
+        run: |
+          python3 tools/auth-release-patch.py
+          perl -0pi -e 's/public function touch\(\n        string \$tokenId,/public function touch(\n        #[\\SensitiveParameter]\n        string \$tokenId,/' src/Auth/Personal/PersonalAccessTokenUsageStoreInterface.php
 
       - name: Apply canonical Rector and Pint fixes
         run: |
@@ -38,6 +40,8 @@ jobs:
           vendor/bin/pint
 
       - name: Run canonical project CI gate
+        env:
+          IC_TEST_TASK_TIMEOUT: 300
         run: composer ic:ci
 
       - name: Commit canonical fixes
