@@ -5,13 +5,13 @@ declare(strict_types=1);
 use Infocyph\Epicrypt\Exception\Password\InvalidPasswordException;
 use Infocyph\Epicrypt\Exception\Password\PasswordHashException;
 use Infocyph\Epicrypt\Exception\Password\SecretProtectionException;
+use Infocyph\Epicrypt\Generate\KeyMaterial\KeyMaterialGenerator;
 use Infocyph\Epicrypt\Password\Enum\PasswordHashAlgorithm;
 use Infocyph\Epicrypt\Password\Generator\PasswordGenerator;
 use Infocyph\Epicrypt\Password\Generator\PasswordPolicy;
 use Infocyph\Epicrypt\Password\PasswordHasher;
 use Infocyph\Epicrypt\Password\PasswordHashOptions;
 use Infocyph\Epicrypt\Password\PasswordPolicyValidator;
-use Infocyph\Epicrypt\Password\Secret\MasterSecretGenerator;
 use Infocyph\Epicrypt\Password\Secret\SecureSecretSerializer;
 use Infocyph\Epicrypt\Password\Secret\WrappedSecretManager;
 use Infocyph\Epicrypt\Security\KeyPurpose;
@@ -70,8 +70,9 @@ it('uses the exact shared ASCII ambiguous-character policy', function () {
 it('serializes and wraps recoverable secrets with explicit key formats and exact KeyRing resolution', function () {
     $serializer = new SecureSecretSerializer();
     $manager = new WrappedSecretManager();
-    $old = new MasterSecretGenerator()->generate();
-    $new = new MasterSecretGenerator()->generate();
+    $generator = new KeyMaterialGenerator();
+    $old = $generator->forMasterSecret();
+    $new = $generator->forMasterSecret();
     $serialized = $serializer->serialize(['provider' => 'payments', 'api_key' => 'secret']);
     $wrapped = $manager->wrap($serialized, $old, 'wrap-old');
     $ring = new KeyRing([
