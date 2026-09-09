@@ -138,7 +138,6 @@ jobs:
           composer why infocyph/pathwise
           php -r '
           require "vendor/autoload.php";
-          $versions = Composer\InstalledVersions::getPrettyVersion(...);
           foreach (["infocyph/epicrypt", "infocyph/otp", "infocyph/pathwise"] as $package) {
               printf("%s=%s\n", $package, Composer\InstalledVersions::getPrettyVersion($package) ?? "unknown");
           }
