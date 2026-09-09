@@ -7,6 +7,14 @@ where Sodium reports hardware support. Both use the common authenticated
 ``ep2`` framing model. The version, domain, algorithm identifier, key ID,
 purpose, creation time, and caller AAD are authenticated.
 
+Protected in-memory values are intentionally bounded before expensive parsing
+or cryptographic work. ``StringProtector`` accepts at most 16 MiB of plaintext;
+the encoded compact ``ep2`` payload is capped at 24 MiB and its encoded metadata
+header at 32 KiB. ``EnvelopeProtector`` accepts at most 8 MiB of plaintext so its
+nested protected representation stays inside the same bounded-value model. Use
+``FileProtector`` stream APIs for larger content instead of increasing these
+ceilings.
+
 ``FileProtector`` exclusively uses authenticated XChaCha20-Poly1305
 SecretStream, the appropriate bounded-memory primitive for files. Its default
 chunk size is 64 KiB.
