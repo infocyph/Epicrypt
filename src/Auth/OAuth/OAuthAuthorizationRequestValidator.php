@@ -54,7 +54,11 @@ final readonly class OAuthAuthorizationRequestValidator
             return $this->reject(OAuthErrorCode::INVALID_REQUEST);
         }
 
-        $state = $this->safeState($parameters);
+        $state = $this->state($parameters);
+        if ($state === false) {
+            return $this->reject(OAuthErrorCode::INVALID_REQUEST, $redirectUri);
+        }
+
         $responseType = $this->singleton($parameters, 'response_type');
         if ($responseType === null || $responseType === '') {
             return $this->reject(OAuthErrorCode::INVALID_REQUEST, $redirectUri, $state);
@@ -165,15 +169,22 @@ final readonly class OAuthAuthorizationRequestValidator
         return count($client->redirectUris) === 1 ? $client->redirectUris[0] : null;
     }
 
-    /** @param array<string, string|list<string>> $parameters */
-    private function safeState(array $parameters): ?string
+    /**
+     * @param array<string, string|list<string>> $parameters
+     * @return string|false|null
+     */
+    private function state(array $parameters): string|false|null
     {
-        $state = $this->singleton($parameters, 'state');
-        if ($state === null || $state === '') {
+        if (!array_key_exists('state', $parameters)) {
             return null;
         }
 
-        return AuthProtocolPolicy::validParameterValue($state) ? $state : null;
+        $state = $this->singleton($parameters, 'state');
+        if ($state === null || $state === '' || !AuthProtocolPolicy::validParameterValue($state)) {
+            return false;
+        }
+
+        return $state;
     }
 
     /**

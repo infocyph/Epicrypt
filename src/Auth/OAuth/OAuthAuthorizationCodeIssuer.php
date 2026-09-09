@@ -1,0 +1,106 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Infocyph\Epicrypt\Auth\OAuth;
+
+use Infocyph\Epicrypt\Exception\ConfigurationException;
+use Infocyph\Epicrypt\Internal\Base64Url;
+use Infocyph\Epicrypt\Internal\Clock\SystemClock;
+use Psr\Clock\ClockInterface;
+use Throwable;
+
+final readonly class OAuthAuthorizationCodeIssuer
+{
+    private const int STORAGE_ATTEMPTS = 3;
+
+    public function __construct(
+        private OAuthAuthorizationStoreInterface $authorizations,
+        private AuthorizationCodeStoreInterface $codes,
+        private AuthorizationCodeArtifact $artifact,
+        private ClockInterface $clock = new SystemClock(),
+    ) {}
+
+    public function issue(
+        OAuthAuthorizationRequest $request,
+        OAuthAuthorizationApproval $approval,
+        int $codeLifetimeSeconds = AuthorizationCode::DEFAULT_LIFETIME_SECONDS,
+    ): AuthorizationCodeIssue {
+        $this->assertApproval($request, $approval, $codeLifetimeSeconds);
+        $now = $this->clock->now()->getTimestamp();
+
+        $authorization = $this->createAuthorization($request, $approval, $now);
+
+        try {
+            for ($attempt = 0; $attempt < self::STORAGE_ATTEMPTS; $attempt++) {
+                $issue = $this->artifact->issue(
+                    authorizationId: $authorization->authorizationId,
+                    subject: $authorization->subject,
+                    clientId: $authorization->clientId,
+                    redirectUri: $request->redirectUri,
+                    pkceChallenge: $request->codeChallenge,
+                    scopes: $authorization->scopes,
+                    audiences: $authorization->audiences,
+                    lifetimeSeconds: $codeLifetimeSeconds,
+                    authenticationTime: $approval->authenticationTime,
+                    authenticationContext: $approval->authenticationContext,
+                    authenticationMethods: $approval->authenticationMethods,
+                );
+                if ($this->codes->create(AuthorizationCodeRecord::fromCode($issue->code))) {
+                    return $issue;
+                }
+            }
+        } catch (Throwable $exception) {
+            $this->authorizations->revoke($authorization->authorizationId, $now);
+            throw $exception;
+        }
+
+        $this->authorizations->revoke($authorization->authorizationId, $now);
+        throw new ConfigurationException('Unable to persist a unique OAuth authorization code.');
+    }
+
+    private function createAuthorization(
+        OAuthAuthorizationRequest $request,
+        OAuthAuthorizationApproval $approval,
+        int $now,
+    ): OAuthAuthorizationRecord {
+        for ($attempt = 0; $attempt < self::STORAGE_ATTEMPTS; $attempt++) {
+            $record = new OAuthAuthorizationRecord(
+                authorizationId: Base64Url::encode(random_bytes(24)),
+                subject: $approval->subject,
+                clientId: $request->clientId,
+                scopes: $approval->scopes,
+                audiences: $request->audiences,
+                authorizedAt: $now,
+                expiresAt: $now + $approval->authorizationLifetimeSeconds,
+            );
+            if ($this->authorizations->create($record)) {
+                return $record;
+            }
+        }
+
+        throw new ConfigurationException('Unable to persist a unique OAuth authorization.');
+    }
+
+    private function assertApproval(
+        OAuthAuthorizationRequest $request,
+        OAuthAuthorizationApproval $approval,
+        int $codeLifetimeSeconds,
+    ): void {
+        foreach ($approval->scopes as $scope) {
+            if (!in_array($scope, $request->scopes, true)) {
+                throw new ConfigurationException('OAuth authorization approval scopes may only narrow the validated request.');
+            }
+        }
+
+        $now = $this->clock->now()->getTimestamp();
+        if ($approval->authenticationTime > $now) {
+            throw new ConfigurationException('OAuth authorization authentication time cannot be in the future.');
+        }
+        if ($codeLifetimeSeconds < 1
+            || $codeLifetimeSeconds > AuthorizationCode::MAXIMUM_LIFETIME_SECONDS
+            || $codeLifetimeSeconds > $approval->authorizationLifetimeSeconds) {
+            throw new ConfigurationException('OAuth authorization-code lifetime exceeds the approved authorization lifetime or hard limit.');
+        }
+    }
+}

@@ -32,4 +32,13 @@ final readonly class OAuthAuthorizationResult
 
         return $this->request;
     }
+
+    public function interaction(): OAuthAuthorizationInteraction
+    {
+        if (!$this->request instanceof OAuthAuthorizationRequest || !$this->client instanceof OAuthClient) {
+            throw new LogicException('OAuth authorization result does not contain an accepted interaction.');
+        }
+
+        return OAuthAuthorizationInteraction::authenticationRequired($this->request, $this->client);
+    }
 }
