@@ -17,7 +17,7 @@ it('derives deterministic and domain-separated application subkeys', function ()
     $otherContext = $deriver->derivePurposeKeyBinary($master, 'auth-token', 'other-app');
     $salted = $deriver->derivePurposeKeyBinary($master, 'auth-token', 'foundation', salt: str_repeat('s', 16));
 
-    expect($tokenKey)->toHaveLength(32)
+    expect(strlen($tokenKey))->toBe(32)
         ->and($tokenKey)->toBe($sameTokenKey)
         ->and($sessionKey)->not->toBe($tokenKey)
         ->and($recoveryKey)->not->toBe($tokenKey)
@@ -38,8 +38,10 @@ it('provides Base64URL purpose-key derivation over the same binary contract', fu
         48,
         Base64Url::encode($salt),
     );
+    $decoded = Base64Url::decode($encoded);
 
-    expect(Base64Url::decode($encoded))->toBe($binary)->toHaveLength(48);
+    expect($decoded)->toBe($binary)
+        ->and(strlen($decoded))->toBe(48);
 });
 
 it('rejects weak masters, ambiguous labels, and unsafe output sizes', function () {
