@@ -118,7 +118,7 @@ jobs:
           - shard: refresh-token
             classes: 'Infocyph\Epicrypt\Token\Opaque\OpaqueToken,Infocyph\Epicrypt\Token\Opaque\RefreshTokenGrant,Infocyph\Epicrypt\Token\Opaque\RefreshTokenManager,Infocyph\Epicrypt\Token\Opaque\RefreshTokenRecord'
           - shard: signed-helpers
-            classes: 'Infocyph\Epicrypt\Internal\SecurityPolicy,Infocyph\Epicrypt\Internal\SignedPayloadCodec,Infocyph\Epicrypt\Security\SignedUrl,Infocyph\Epicrypt\Security\Support\AbstractPurposeToken'
+            classes: 'Infocyph\Epicrypt\Generate\KeyMaterial\KeyDeriver,Infocyph\Epicrypt\Internal\SecurityPolicy,Infocyph\Epicrypt\Internal\SignedPayloadCodec,Infocyph\Epicrypt\Security\SignedUrl,Infocyph\Epicrypt\Security\Support\AbstractPurposeToken,Infocyph\Epicrypt\Token\Payload\PurposeToken'
           - shard: primitive-verification
             classes: 'Infocyph\Epicrypt\Crypto\Mac,Infocyph\Epicrypt\Crypto\SecretStream,Infocyph\Epicrypt\Crypto\Signature,Infocyph\Epicrypt\Internal\EcdsaSignatureConverter'
           - shard: remote-jose
