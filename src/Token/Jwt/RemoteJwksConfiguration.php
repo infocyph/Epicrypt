@@ -44,13 +44,12 @@ final readonly class RemoteJwksConfiguration
     public function validateJwksUrl(string $url): void
     {
         $this->validateUrl($url);
-        $issuerHost = parse_url($this->issuer, PHP_URL_HOST);
-        $jwksHost = parse_url($url, PHP_URL_HOST);
-        if (!is_string($issuerHost) || !is_string($jwksHost)) {
+        $issuerHost = $this->normalizedHost($this->issuer);
+        $jwksHost = $this->normalizedHost($url);
+        if ($issuerHost === null || $jwksHost === null) {
             throw new ConfigurationException('Remote JWKS host validation failed.');
         }
-        $jwksHost = strtolower($jwksHost);
-        if (!hash_equals(strtolower($issuerHost), $jwksHost) && !in_array($jwksHost, $this->allowedJwksHosts, true)) {
+        if (!hash_equals($issuerHost, $jwksHost) && !in_array($jwksHost, $this->allowedJwksHosts, true)) {
             throw new ConfigurationException('Remote JWKS host must match the issuer or be explicitly allowed.');
         }
     }
@@ -59,12 +58,15 @@ final readonly class RemoteJwksConfiguration
     {
         $parts = parse_url($url);
         $scheme = is_array($parts) ? ($parts['scheme'] ?? null) : null;
-        $host = is_array($parts) ? ($parts['host'] ?? null) : null;
-        if (!is_string($scheme) || !is_string($host) || $host === ''
+        $host = $this->normalizedHost($url);
+        $validHost = is_string($host)
+            && (filter_var($host, FILTER_VALIDATE_IP) !== false
+                || filter_var($host, FILTER_VALIDATE_DOMAIN, FILTER_FLAG_HOSTNAME) !== false);
+        if (!is_string($scheme) || !$validHost
             || (!$this->allowHttp && strtolower($scheme) !== 'https')
             || ($this->allowHttp && !in_array(strtolower($scheme), ['https', 'http'], true))
-            || isset($parts['user']) || isset($parts['pass']) || isset($parts['fragment'])
-            || strtolower($host) === 'localhost' || $this->isPrivateIp($host)) {
+            || (is_array($parts) && (isset($parts['user']) || isset($parts['pass']) || isset($parts['fragment'])))
+            || $host === 'localhost' || $this->isPrivateIp($host)) {
             throw new ConfigurationException('Remote JOSE URL is not an allowed absolute HTTPS URL.');
         }
     }
@@ -76,5 +78,12 @@ final readonly class RemoteJwksConfiguration
         }
 
         return filter_var($host, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) === false;
+    }
+
+    private function normalizedHost(string $url): ?string
+    {
+        $host = parse_url($url, PHP_URL_HOST);
+
+        return is_string($host) && $host !== '' ? strtolower(trim($host, '[]')) : null;
     }
 }
