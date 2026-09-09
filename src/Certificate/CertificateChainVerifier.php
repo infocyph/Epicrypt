@@ -13,9 +13,9 @@ final class CertificateChainVerifier
 {
     private const int MAX_CERTIFICATE_BYTES = 1_048_576;
 
-    private const int MAX_TRUST_ANCHORS = 32;
-
     private const int MAX_INTERMEDIATES = 16;
+
+    private const int MAX_TRUST_ANCHORS = 32;
 
     /**
      * @param list<string> $trustedCaCertificatesPem
@@ -61,27 +61,6 @@ final class CertificateChainVerifier
         }
     }
 
-    /**
-     * @param list<string> $certificates
-     * @param array<string, true> $seen
-     */
-    private function bundle(array $certificates, string $label, array &$seen): string
-    {
-        $bundle = '';
-        foreach ($certificates as $certificate) {
-            $this->assertCertificate($certificate, $label);
-            $normalized = (new PemNormalizer())->normalize($certificate);
-            $fingerprint = hash('sha256', $normalized);
-            if (isset($seen[$fingerprint])) {
-                throw new ConfigurationException(sprintf('Certificate chain contains a duplicate %s.', $label));
-            }
-            $seen[$fingerprint] = true;
-            $bundle .= $normalized;
-        }
-
-        return $bundle;
-    }
-
     private function assertCertificate(string $certificatePem, string $label): void
     {
         if ($certificatePem === '' || strlen($certificatePem) > self::MAX_CERTIFICATE_BYTES) {
@@ -93,6 +72,27 @@ final class CertificateChainVerifier
         } catch (Throwable $exception) {
             throw new ConfigurationException(sprintf('Certificate chain contains an invalid %s.', $label), 0, $exception);
         }
+    }
+
+    /**
+     * @param list<string> $certificates
+     * @param array<string, true> $seen
+     */
+    private function bundle(array $certificates, string $label, array &$seen): string
+    {
+        $bundle = '';
+        foreach ($certificates as $certificate) {
+            $this->assertCertificate($certificate, $label);
+            $normalized = new PemNormalizer()->normalize($certificate);
+            $fingerprint = hash('sha256', $normalized);
+            if (isset($seen[$fingerprint])) {
+                throw new ConfigurationException(sprintf('Certificate chain contains a duplicate %s.', $label));
+            }
+            $seen[$fingerprint] = true;
+            $bundle .= $normalized;
+        }
+
+        return $bundle;
     }
 
     private function removeTempFile(string $path): void
@@ -109,7 +109,8 @@ final class CertificateChainVerifier
             throw new ConfigurationException('Unable to allocate certificate chain staging file.');
         }
         if (!chmod($path, 0600) || file_put_contents($path, $bundle, LOCK_EX) === false) {
-            @unlink($path);
+            $this->removeTempFile($path);
+
             throw new ConfigurationException('Unable to write certificate chain staging file.');
         }
 
