@@ -3,19 +3,21 @@
 declare(strict_types=1);
 
 use Infocyph\Epicrypt\Certificate\CertificateKeyMatcher;
+use Infocyph\Epicrypt\Certificate\CertificateOptions;
+use Infocyph\Epicrypt\Certificate\Enum\KeyUsage;
 use Infocyph\Epicrypt\Certificate\Enum\OpenSslRsaBits;
 use Infocyph\Epicrypt\Certificate\KeyPairGenerator;
 use Infocyph\Epicrypt\Certificate\OpenSSL\CertificateBuilder;
 use Infocyph\Epicrypt\Certificate\Pkcs12;
 use Infocyph\Epicrypt\Exception\ConfigurationException;
 
-function pfxFixture(string $commonName = 'pfx.example.test'): array
+function pfxFixture(string $commonName = 'pfx.example.test', ?CertificateOptions $options = null): array
 {
     $pair = KeyPairGenerator::rsa(OpenSslRsaBits::BITS_2048)->generate();
     $certificate = new CertificateBuilder()->selfSign(
         ['commonName' => $commonName],
         $pair['private'],
-        days: 30,
+        options: $options ?? new CertificateOptions(days: 30),
     );
 
     return [$pair, $certificate];
@@ -23,13 +25,21 @@ function pfxFixture(string $commonName = 'pfx.example.test'): array
 
 it('round trips phpseclib PFX and remains readable by OpenSSL', function () {
     [$pair, $certificate] = pfxFixture();
+    [, $caCertificate] = pfxFixture(
+        'pfx-ca.example.test',
+        new CertificateOptions(
+            days: 30,
+            keyUsage: [KeyUsage::KEY_CERT_SIGN, KeyUsage::CRL_SIGN],
+            isCa: true,
+        ),
+    );
     $pkcs12 = new Pkcs12();
     $bundle = $pkcs12->export(
         $certificate,
         $pair['private'],
         'pfx-password',
         friendlyName: 'epicrypt-pfx',
-        caCertificatesPem: [$certificate],
+        caCertificatesPem: [$caCertificate],
     );
     $imported = $pkcs12->import($bundle, 'pfx-password');
 
