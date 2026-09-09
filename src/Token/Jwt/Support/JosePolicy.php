@@ -41,6 +41,7 @@ final class JosePolicy
         }
     }
 
+    /** @param array<mixed> $value */
     public static function assertConfiguredMemberCount(array $value, int $maximumMembers, string $label): void
     {
         if (self::memberCount($value, $maximumMembers) > $maximumMembers) {
@@ -109,10 +110,6 @@ final class JosePolicy
 
         while ($pending !== []) {
             $current = array_pop($pending);
-            if (!is_array($current)) {
-                continue;
-            }
-
             $members += count($current);
             if ($members > $stopAfter) {
                 return $members;
