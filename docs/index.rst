@@ -4,6 +4,9 @@ Epicrypt 3.0
 Epicrypt provides authenticated data protection, token security, password
 security, integrity primitives, and certificate tooling for PHP 8.4 and later.
 
+Upgrading from Epicrypt 2.x? Start with :doc:`migration-3.0` for dependency,
+API, persisted-format and deployment changes.
+
 Complete-path examples
 ----------------------
 
@@ -33,6 +36,7 @@ integration example.
    :maxdepth: 2
 
    getting-started
+   migration-3.0
    architecture
    security-recommendations
    certificate
