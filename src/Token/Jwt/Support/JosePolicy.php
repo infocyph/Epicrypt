@@ -48,6 +48,17 @@ final class JosePolicy
         }
     }
 
+    public static function assertMaximumConfiguredSize(
+        #[\SensitiveParameter]
+        string $value,
+        int $maximumBytes,
+        string $label,
+    ): void {
+        if (strlen($value) > $maximumBytes) {
+            throw new ConfigurationException(sprintf('%s must not exceed %d bytes.', $label, $maximumBytes));
+        }
+    }
+
     public static function assertInputSize(
         #[\SensitiveParameter]
         string $value,
