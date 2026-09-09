@@ -7,6 +7,7 @@ namespace Infocyph\Epicrypt\Token\Jwt;
 use Infocyph\Epicrypt\Exception\Token\KeyResolutionException;
 use Infocyph\Epicrypt\Internal\Clock\SystemClock;
 use Infocyph\Epicrypt\Token\Jwt\Enum\AsymmetricJwtAlgorithm;
+use Infocyph\Epicrypt\Token\Jwt\Support\NativeRemoteJoseHostResolver;
 use Infocyph\Epicrypt\Token\Jwt\Support\RemoteJoseResource;
 use Psr\Clock\ClockInterface;
 use Psr\Http\Client\ClientInterface;
@@ -25,8 +26,14 @@ final readonly class RemoteJwks
         private RemoteJwksConfiguration $configuration,
         private ?CacheInterface $cache = null,
         private ClockInterface $clock = new SystemClock(),
+        ?RemoteJoseHostResolverInterface $hostResolver = null,
     ) {
-        $this->resource = new RemoteJoseResource($client, $requestFactory, $configuration->maximumResponseBytes);
+        $this->resource = new RemoteJoseResource(
+            $client,
+            $requestFactory,
+            $configuration->maximumResponseBytes,
+            $hostResolver ?? new NativeRemoteJoseHostResolver(),
+        );
         $this->cacheKey = 'epicrypt:jwks:' . hash('sha256', $configuration->issuer . "\0" . ($configuration->jwksUri ?? 'discovery'));
     }
 
