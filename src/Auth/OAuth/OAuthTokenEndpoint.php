@@ -368,6 +368,7 @@ final readonly class OAuthTokenEndpoint
     private function response(
         OAuthAccessTokenIssue $access,
         array $scopes,
+        #[\SensitiveParameter]
         ?string $refreshToken,
         ?OAuthDpopContext $dpop,
         #[\SensitiveParameter]
