@@ -186,9 +186,9 @@ final class Pkcs12
         return array_values(array_unique($result));
     }
 
-    private function publicIdentity(PublicKey $key): string
+    private function publicIdentity(PublicKey $publicKey): string
     {
-        return $key->toString('PKCS8');
+        return $publicKey->toString('PKCS8');
     }
 
     /** @param array<array-key, mixed> $privateKeys */
