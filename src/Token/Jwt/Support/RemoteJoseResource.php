@@ -84,7 +84,7 @@ final readonly class RemoteJoseResource
             throw new KeyResolutionException('Remote JOSE host did not resolve to an allowed address.');
         }
         foreach ($addresses as $address) {
-            if (!is_string($address) || !$this->isPublicAddress($address)) {
+            if (!$this->isPublicAddress($address)) {
                 throw new KeyResolutionException('Remote JOSE host resolved to a disallowed address.');
             }
         }
