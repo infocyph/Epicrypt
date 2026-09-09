@@ -15,13 +15,13 @@ use Throwable;
 
 final class Pkcs12
 {
-    private const int MAX_CONTAINER_BYTES = 16_777_216;
-
     private const int MAX_CERTIFICATES = 64;
 
-    private const int MAX_PEM_BYTES = 1_048_576;
+    private const int MAX_CONTAINER_BYTES = 16_777_216;
 
     private const int MAX_PASSWORD_BYTES = 1024;
+
+    private const int MAX_PEM_BYTES = 1_048_576;
 
     /** @param list<string> $caCertificatesPem */
     public function export(
@@ -51,9 +51,6 @@ final class Pkcs12
         try {
             $certificate = X509::load($certificatePem);
             $privateKey = PublicKeyLoader::loadPrivateKey($privateKeyPem, $privateKeyPassphrase);
-            if (!$privateKey instanceof PrivateKey) {
-                throw new ConfigurationException('PKCS#12 requires a supported private key.');
-            }
             $certificatePublicKey = $certificate->getPublicKey();
             if (!hash_equals($this->publicIdentity($certificatePublicKey), $this->publicIdentity($privateKey->getPublicKey()))) {
                 throw new ConfigurationException('PKCS#12 certificate and private key do not match.');
@@ -124,7 +121,7 @@ final class Pkcs12
             throw new ConfigurationException('PKCS#12 private key has no matching certificate.');
         }
 
-        $privateKeyPem = $privateKey->toString('PKCS8');
+        $privateKeyPem = $privateKey->withPassword()->toString('PKCS8');
         $this->assertPemSize($certificate, 'certificate');
         $this->assertPemSize($privateKeyPem, 'private key');
         foreach ($caCertificates as $caCertificate) {
@@ -153,13 +150,17 @@ final class Pkcs12
         }
     }
 
-    /** @param array<array-key, mixed> $certificates @return list<X509> */
+    /**
+     * @param array<array-key, mixed> $certificates
+     * @return list<X509>
+     */
     private function certificates(array $certificates): array
     {
         if ($certificates === [] || count($certificates) > self::MAX_CERTIFICATES) {
             throw new ConfigurationException('PKCS#12 certificate set is empty or exceeds the configured bound.');
         }
 
+        /** @var list<X509> $result */
         $result = [];
         foreach ($certificates as $certificate) {
             if (!$certificate instanceof X509) {
@@ -171,9 +172,13 @@ final class Pkcs12
         return $result;
     }
 
-    /** @param array<array-key, mixed> $names @return list<string> */
+    /**
+     * @param array<array-key, mixed> $names
+     * @return list<string>
+     */
     private function friendlyNames(array $names): array
     {
+        /** @var list<string> $result */
         $result = [];
         foreach ($names as $name) {
             if (is_string($name)) {
@@ -194,11 +199,12 @@ final class Pkcs12
     /** @param array<array-key, mixed> $privateKeys */
     private function singlePrivateKey(#[\SensitiveParameter] array $privateKeys): PrivateKey
     {
-        if (count($privateKeys) !== 1 || !$privateKeys[0] instanceof PrivateKey) {
+        $privateKey = $privateKeys[0] ?? null;
+        if (count($privateKeys) !== 1 || !$privateKey instanceof PrivateKey) {
             throw new ConfigurationException('PKCS#12 must contain exactly one supported private key.');
         }
 
-        return $privateKeys[0];
+        return $privateKey;
     }
 
     private function validFriendlyName(string $name): bool
