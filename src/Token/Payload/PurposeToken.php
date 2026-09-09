@@ -11,7 +11,7 @@ use Infocyph\Epicrypt\Exception\Token\NotYetValidTokenException;
 use Infocyph\Epicrypt\Exception\Token\TokenException;
 use Infocyph\Epicrypt\Exception\Token\UnsupportedTokenFormatException;
 use Infocyph\Epicrypt\Exception\Token\WrongTokenContextException;
-use Infocyph\Epicrypt\Generate\KeyMaterial\TokenMaterialGenerator;
+use Infocyph\Epicrypt\Generate\RandomBytesGenerator;
 use Infocyph\Epicrypt\Internal\Clock\SystemClock;
 use Infocyph\Epicrypt\Internal\SecurityPolicy;
 use Infocyph\Epicrypt\Internal\SignedPayloadCodec;
@@ -38,7 +38,7 @@ final readonly class PurposeToken
         private int $ttlSeconds = 3600,
         private ClockInterface $clock = new SystemClock(),
         #[\SensitiveParameter]
-        private TokenMaterialGenerator $tokenIdGenerator = new TokenMaterialGenerator(),
+        private RandomBytesGenerator $tokenIdGenerator = new RandomBytesGenerator(),
     ) {
         SecurityPolicy::assertIdentifier($this->purpose, 'Purpose token purpose');
         if ($this->context !== null) {
@@ -72,7 +72,7 @@ final readonly class PurposeToken
 
         $payload = $claims + [
             'purpose' => $this->purpose,
-            'tid' => $this->tokenIdGenerator->generate(),
+            'tid' => $this->tokenIdGenerator->string(48),
         ];
         if ($subjectId !== null) {
             $payload['sub'] = $subjectId;
