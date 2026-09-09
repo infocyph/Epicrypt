@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Infocyph\Epicrypt\Benchmarks;
 
 use Infocyph\Epicrypt\Generate\KeyMaterial\KeyMaterialGenerator;
-use Infocyph\Epicrypt\Generate\KeyMaterial\TokenMaterialGenerator;
 use Infocyph\Epicrypt\Generate\NonceGenerator;
 use Infocyph\Epicrypt\Generate\RandomBytesGenerator;
 use Infocyph\Epicrypt\Generate\SaltGenerator;
@@ -24,8 +23,6 @@ final class GenerateBench
 
     private SaltGenerator $salt;
 
-    private TokenMaterialGenerator $tokenMaterial;
-
     public function __construct()
     {
         $services = [
@@ -33,14 +30,12 @@ final class GenerateBench
             'nonce' => new NonceGenerator(),
             'salt' => new SaltGenerator(),
             'keyMaterial' => new KeyMaterialGenerator(),
-            'tokenMaterial' => new TokenMaterialGenerator(),
         ];
 
         $this->random = $services['random'];
         $this->nonce = $services['nonce'];
         $this->salt = $services['salt'];
         $this->keyMaterial = $services['keyMaterial'];
-        $this->tokenMaterial = $services['tokenMaterial'];
     }
 
     public function benchKeyMaterialGenerate(): void
@@ -66,10 +61,5 @@ final class GenerateBench
     public function benchSaltGenerate(): void
     {
         $this->salt->generate();
-    }
-
-    public function benchTokenMaterialGenerate(): void
-    {
-        $this->tokenMaterial->generate(48);
     }
 }
