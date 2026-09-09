@@ -38,18 +38,6 @@ final class CertificateBench
         $this->bob = KeyPairGenerator::sodium()->generate(asBase64Url: true);
     }
 
-    public function setUpPki(): void
-    {
-        $pair = KeyPairGenerator::rsa(OpenSslRsaBits::BITS_2048)->generate();
-        $this->certificate = new CertificateBuilder()->selfSign(
-            ['commonName' => 'benchmark.example.test'],
-            $pair['private'],
-            days: 30,
-        );
-        $this->pkcs12 = new Pkcs12();
-        $this->pfx = $this->pkcs12->export($this->certificate, $pair['private'], 'benchmark-password');
-    }
-
     #[Bench\BeforeMethods('setUp')]
     public function benchHkdfKeyExchange(): void
     {
@@ -77,5 +65,17 @@ final class CertificateBench
     public function benchPhpseclibPfxImport(): void
     {
         $this->pkcs12->import($this->pfx, 'benchmark-password');
+    }
+
+    public function setUpPki(): void
+    {
+        $pair = KeyPairGenerator::rsa(OpenSslRsaBits::BITS_2048)->generate();
+        $this->certificate = new CertificateBuilder()->selfSign(
+            ['commonName' => 'benchmark.example.test'],
+            $pair['private'],
+            days: 30,
+        );
+        $this->pkcs12 = new Pkcs12();
+        $this->pfx = $this->pkcs12->export($this->certificate, $pair['private'], 'benchmark-password');
     }
 }
