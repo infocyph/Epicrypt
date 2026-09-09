@@ -82,12 +82,8 @@ final readonly class AuthorizationCode
             $authenticationMethods,
             'Authorization-code authentication methods',
         );
-        if (($this->nonce !== null
-                || $this->authenticationTime !== null
-                || $this->authenticationContext !== null
-                || $this->authenticationMethods !== [])
-            && !in_array('openid', $this->scopes, true)) {
-            throw new ConfigurationException('Authorization-code OIDC transaction state requires the openid scope.');
+        if ($this->nonce !== null && !in_array('openid', $this->scopes, true)) {
+            throw new ConfigurationException('Authorization-code OIDC nonce requires the openid scope.');
         }
     }
 
