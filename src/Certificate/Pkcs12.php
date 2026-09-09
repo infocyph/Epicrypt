@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Infocyph\Epicrypt\Certificate;
 
 use Infocyph\Epicrypt\Exception\ConfigurationException;
+use phpseclib4\Crypt\Common\PrivateKey;
+use phpseclib4\Crypt\Common\PublicKey;
 use phpseclib4\Crypt\PublicKeyLoader;
 use phpseclib4\File\PFX;
 use phpseclib4\File\X509;
@@ -49,13 +51,17 @@ final class Pkcs12
         try {
             $certificate = X509::load($certificatePem);
             $privateKey = PublicKeyLoader::loadPrivateKey($privateKeyPem, $privateKeyPassphrase);
-            if (!hash_equals((string) $certificate->getPublicKey(), (string) $privateKey->getPublicKey())) {
+            if (!$privateKey instanceof PrivateKey) {
+                throw new ConfigurationException('PKCS#12 requires a supported private key.');
+            }
+            $certificatePublicKey = $certificate->getPublicKey();
+            if (!hash_equals($this->publicIdentity($certificatePublicKey), $this->publicIdentity($privateKey->getPublicKey()))) {
                 throw new ConfigurationException('PKCS#12 certificate and private key do not match.');
             }
 
             $pfx = new PFX();
             $pfx->setPassword($password);
-            $localKeyId = hash('sha256', (string) $certificate->getPublicKey(), true);
+            $localKeyId = hash('sha256', $this->publicIdentity($certificatePublicKey), true);
             $pfx->add($certificate, friendlyName: $friendlyName, localKeyID: $localKeyId);
             $pfx->add($privateKey, friendlyName: $friendlyName, localKeyID: $localKeyId);
             foreach ($caCertificatesPem as $caCertificatePem) {
@@ -94,27 +100,25 @@ final class Pkcs12
 
         try {
             $pfx = PFX::load($pkcs12, $password);
-            $certificates = $pfx->getCertificates();
-            $privateKeys = $pfx->getPrivateKeys();
+            $certificates = $this->certificates($pfx->getCertificates());
+            $privateKey = $this->singlePrivateKey($pfx->getPrivateKeys());
+        } catch (ConfigurationException $exception) {
+            throw $exception;
         } catch (Throwable $exception) {
             throw new ConfigurationException('PKCS#12 import failed.', 0, $exception);
         }
 
-        if ($certificates === [] || count($certificates) > self::MAX_CERTIFICATES || count($privateKeys) !== 1) {
-            throw new ConfigurationException('PKCS#12 must contain one private key and a bounded certificate set.');
-        }
-
-        $privateKey = $privateKeys[0];
-        $publicKey = (string) $privateKey->getPublicKey();
+        $publicIdentity = $this->publicIdentity($privateKey->getPublicKey());
         $certificate = null;
         $caCertificates = [];
         foreach ($certificates as $candidate) {
-            if ($certificate === null && hash_equals($publicKey, (string) $candidate->getPublicKey())) {
-                $certificate = (string) $candidate;
+            $candidatePem = (string) $candidate;
+            if ($certificate === null && hash_equals($publicIdentity, $this->publicIdentity($candidate->getPublicKey()))) {
+                $certificate = $candidatePem;
 
                 continue;
             }
-            $caCertificates[] = (string) $candidate;
+            $caCertificates[] = $candidatePem;
         }
         if ($certificate === null) {
             throw new ConfigurationException('PKCS#12 private key has no matching certificate.');
@@ -135,7 +139,8 @@ final class Pkcs12
         ];
     }
 
-    private function assertPassword(string $password): void
+    #[\SensitiveParameter]
+    private function assertPassword(#[\SensitiveParameter] string $password): void
     {
         if (strlen($password) > self::MAX_PASSWORD_BYTES) {
             throw new ConfigurationException('PKCS#12 password exceeds the configured size bound.');
@@ -149,7 +154,25 @@ final class Pkcs12
         }
     }
 
-    /** @param array<mixed> $names @return list<string> */
+    /** @param array<array-key, mixed> $certificates @return list<X509> */
+    private function certificates(array $certificates): array
+    {
+        if ($certificates === [] || count($certificates) > self::MAX_CERTIFICATES) {
+            throw new ConfigurationException('PKCS#12 certificate set is empty or exceeds the configured bound.');
+        }
+
+        $result = [];
+        foreach ($certificates as $certificate) {
+            if (!$certificate instanceof X509) {
+                throw new ConfigurationException('PKCS#12 contains an unsupported certificate entry.');
+            }
+            $result[] = $certificate;
+        }
+
+        return $result;
+    }
+
+    /** @param array<array-key, mixed> $names @return list<string> */
     private function friendlyNames(array $names): array
     {
         $result = [];
@@ -162,6 +185,21 @@ final class Pkcs12
         }
 
         return array_values(array_unique($result));
+    }
+
+    private function publicIdentity(PublicKey $key): string
+    {
+        return $key->toString('PKCS8');
+    }
+
+    /** @param array<array-key, mixed> $privateKeys */
+    private function singlePrivateKey(#[\SensitiveParameter] array $privateKeys): PrivateKey
+    {
+        if (count($privateKeys) !== 1 || !$privateKeys[0] instanceof PrivateKey) {
+            throw new ConfigurationException('PKCS#12 must contain exactly one supported private key.');
+        }
+
+        return $privateKeys[0];
     }
 
     private function validFriendlyName(string $name): bool
