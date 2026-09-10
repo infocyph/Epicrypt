@@ -43,10 +43,6 @@
             "Infocyph\\Epicrypt\\Tests\\": "tests/"
         }
     },
-    "scripts": {
-        "benchmark:ci": "@composer ic:bench:quick",
-        "benchmark:auth": "@php benchmarks/authentication.php"
-    },
     "config": {
         "allow-plugins": {
             "ergebnis/composer-normalize": true,
@@ -57,5 +53,9 @@
         "classmap-authoritative": true,
         "optimize-autoloader": true,
         "sort-packages": true
+    },
+    "scripts": {
+        "benchmark:auth": "@php benchmarks/authentication.php",
+        "benchmark:ci": "@composer ic:bench:quick"
     }
 }
