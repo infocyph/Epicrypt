@@ -25,6 +25,7 @@ use Infocyph\Epicrypt\Security\KeyStatus;
 use Infocyph\Epicrypt\Token\Jwt\Enum\AsymmetricJwtAlgorithm;
 use Infocyph\Epicrypt\Token\Jwt\JwtClaims;
 use Infocyph\Epicrypt\Token\Jwt\OpenIdIdTokenValidator;
+use Infocyph\Epicrypt\Token\Jwt\Support\JwtToken;
 use Psr\Clock\ClockInterface;
 
 function oidcProviderClock(int $timestamp = 1_700_000_100): ClockInterface
@@ -143,6 +144,16 @@ it('adds id_token only to authorization-code responses carrying openid', functio
     expect($parameters)->toHaveKey('id_token')
         ->and($parameters['id_token'])->toBeString();
 
+    [, , , , $idTokenClaims] = JwtToken::parse($parameters['id_token']);
+    new OpenIdIdTokenValidator($clock)->validate(
+        claims: $idTokenClaims,
+        signingAlgorithm: AsymmetricJwtAlgorithm::EDDSA,
+        clientId: 'oidc-client',
+        nonce: 'browser-nonce',
+        accessToken: 'access-token-value',
+        authorizationCode: 'authorization-code-value',
+    );
+
     $oauthOnly = AuthorizationCode::issue(
         issuer: 'https://issuer.example.test',
         authorizationId: 'authorization-2',
@@ -163,6 +174,10 @@ it('projects bounded UserInfo claims while keeping sub provider-owned', function
     $claims = new class implements OpenIdClaimsProviderInterface {
         public function claims(string $principalId, string $clientId, array $scopes): array
         {
+            if ($principalId !== 'principal-1' || $clientId !== 'oidc-client') {
+                return [];
+            }
+
             return in_array('profile', $scopes, true) ? ['name' => 'Example User'] : [];
         }
     };
@@ -176,7 +191,9 @@ it('projects bounded UserInfo claims while keeping sub provider-owned', function
     $badClaims = new class implements OpenIdClaimsProviderInterface {
         public function claims(string $principalId, string $clientId, array $scopes): array
         {
-            return ['sub' => 'override'];
+            return $principalId === 'principal-1' && $clientId === 'oidc-client' && $scopes === ['openid']
+                ? ['sub' => 'override']
+                : [];
         }
     };
     expect(fn () => new OpenIdUserInfoProjector(oidcProviderSubjects(), $badClaims)
