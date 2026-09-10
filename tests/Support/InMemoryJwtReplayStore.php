@@ -23,6 +23,6 @@ final class InMemoryJwtReplayStore implements JwtReplayStoreInterface
 
     public function isRevoked(string $namespace, string $tokenId, int $expiresAt): bool
     {
-        return isset($this->consumed[$namespace][$tokenId]);
+        return ($this->consumed[$namespace][$tokenId] ?? null) === $expiresAt;
     }
 }
