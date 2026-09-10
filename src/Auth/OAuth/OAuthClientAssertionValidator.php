@@ -160,11 +160,8 @@ final readonly class OAuthClientAssertionValidator
     }
 
     /** @param array<string, mixed> $claims */
-    private function validateClaims(
-        array $claims,
-        string $clientId,
-        string $audience,
-    ): OAuthClientAssertionStatus {
+    private function validateClaims(array $claims, string $clientId, string $audience): OAuthClientAssertionStatus
+    {
         if (count($claims) > AuthProtocolPolicy::MAX_AUTH_CLAIMS || !$this->hasRequiredClaims($claims)) {
             return OAuthClientAssertionStatus::INVALID_CLAIMS;
         }
