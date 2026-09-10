@@ -127,7 +127,7 @@ it('accepts an explicit registered audience resolution for a multi-resource clie
     $resolver = new class implements OAuthAuthorizationAudienceResolverInterface {
         public function resolve(OAuthClient $client, array $scopes): array
         {
-            return ['billing-api'];
+            return $client->allowsScope('read') && $scopes === ['read'] ? ['billing-api'] : [];
         }
     };
     $validator = new OAuthAuthorizationRequestValidator(new InMemoryOAuthClientStore([$client]), $resolver);
@@ -141,7 +141,7 @@ it('rejects an audience resolver that expands beyond client registration', funct
     $resolver = new class implements OAuthAuthorizationAudienceResolverInterface {
         public function resolve(OAuthClient $client, array $scopes): array
         {
-            return ['attacker-api'];
+            return $client->allowsScope('read') && $scopes === ['read'] ? ['attacker-api'] : [];
         }
     };
     $result = authorizationValidator($resolver)->validate(validAuthorizationParameters());
