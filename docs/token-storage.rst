@@ -162,7 +162,7 @@ cryptographic/revocation decision unless the host intentionally chooses that
 policy.
 
 JWT, DPoP and client-assertion replay
-------------------------------------
+-------------------------------------
 
 ``JwtReplayStoreInterface`` is deliberately shared by one-time JWT policies,
 DPoP proofs and OAuth client assertions.
