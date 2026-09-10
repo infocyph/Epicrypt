@@ -8,14 +8,26 @@ use Infocyph\Epicrypt\Auth\Internal\AuthProtocolPolicy;
 use Infocyph\Epicrypt\Auth\Personal\PersonalAccessTokenRecord;
 use Infocyph\Epicrypt\Auth\Personal\PersonalAccessTokenStoreInterface;
 use Infocyph\Epicrypt\Exception\ConfigurationException;
+use InvalidArgumentException;
 
 final class InMemoryPersonalAccessTokenStore implements PersonalAccessTokenStoreInterface
 {
     /** @var array<string, PersonalAccessTokenRecord> */
     private array $records = [];
 
+    public function __construct(private int $createConflictsRemaining = 0)
+    {
+        if ($this->createConflictsRemaining < 0) {
+            throw new InvalidArgumentException('Personal-token conflict count cannot be negative.');
+        }
+    }
+
     public function create(PersonalAccessTokenRecord $record): bool
     {
+        if ($this->createConflictsRemaining > 0) {
+            $this->createConflictsRemaining--;
+            return false;
+        }
         if (isset($this->records[$record->tokenId])) {
             return false;
         }
