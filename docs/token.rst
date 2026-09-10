@@ -150,19 +150,22 @@ to the token header's algorithm.
        algorithm: AsymmetricJwtAlgorithm::RS384,
    );
 
-Issue and rotate an opaque refresh token
-----------------------------------------
+Issue and rotate a protected OAuth refresh token
+------------------------------------------------
 
-``RefreshTokenManager`` owns secure generation, client and optional DPoP
-binding, absolute and inactivity expiration, family rotation, reuse response,
-and revocation orchestration. The application supplies a durable
-``RefreshTokenStoreInterface`` implementation because the consume-and-replace
-operation must be one database transaction across every application worker.
+Epicrypt 3 refresh credentials are authenticated JWE artifacts plus authoritative
+server-side lifecycle state. ``RefreshTokenArtifact`` protects the credential
+with an issuer-bound ``KeyRing`` entry whose purpose is
+``OAUTH_REFRESH_TOKEN_PROTECTION``. ``RefreshTokenManager`` authenticates the
+artifact, resolves its token/family identifiers, and delegates atomic lifecycle
+state to the application's durable ``RefreshTokenStoreInterface``.
 
-The store must place a unique constraint on ``digest``, retain consumed token
-records until the grant expires, and lock the current record or use an
-equivalent compare-and-swap operation. On reuse it must revoke the complete
-family in the same transaction. It must never persist the raw token.
+The store persists only authoritative metadata such as token ID, family ID,
+authorization ID, issue/idle-expiry state, consumption and revocation state. It
+must never persist the complete presented JWE. Rotation must consume the current
+record and create its replacement atomically across every application worker;
+ancestor reuse revokes the whole family. Scope may stay equal or narrow, never
+expand, and client/DPoP sender mismatches do not consume a legitimate token.
 
 .. code-block:: php
 
@@ -170,14 +173,20 @@ family in the same transaction. It must never persist the raw token.
 
    declare(strict_types=1);
 
-   use Infocyph\Epicrypt\Token\Opaque\RefreshTokenGrant;
-   use Infocyph\Epicrypt\Token\Opaque\RefreshTokenManager;
-   use Infocyph\Epicrypt\Token\Opaque\RefreshTokenRotationStatus;
+   use Infocyph\Epicrypt\Auth\OAuth\RefreshTokenArtifact;
+   use Infocyph\Epicrypt\Auth\OAuth\RefreshTokenGrant;
+   use Infocyph\Epicrypt\Auth\OAuth\RefreshTokenManager;
+   use Infocyph\Epicrypt\Auth\OAuth\RefreshTokenRotationStatus;
 
-   // $refreshTokenStore is the application's transactional database adapter.
-   $refreshTokens = new RefreshTokenManager($refreshTokenStore);
+   // $refreshTokenProtectionKeys is an issuer-bound KeyRing with a 32-byte
+   // active OAUTH_REFRESH_TOKEN_PROTECTION / "dir" key.
+   // $refreshTokenStore is the application's transactional durable adapter.
+   $refreshTokens = new RefreshTokenManager(
+       $refreshTokenStore,
+       new RefreshTokenArtifact($refreshTokenProtectionKeys, 'https://auth.example.com'),
+   );
    $grant = new RefreshTokenGrant(
-       id: $authorizationGrantId,
+       authorizationId: $authorizationId,
        subject: 'user-42',
        clientId: 'browser-client',
        audiences: ['orders-api'],
@@ -187,7 +196,7 @@ family in the same transaction. It must never persist the raw token.
    );
    $refreshToken = $refreshTokens->issue($grant);
 
-   // Return $refreshToken once over TLS; never log it or put it in a URL.
+   // Return the JWE once over TLS; never log it or put it in a URL.
    $rotation = $refreshTokens->rotate(
        $presentedRefreshToken,
        $authenticatedClientId,
@@ -196,28 +205,28 @@ family in the same transaction. It must never persist the raw token.
    );
    if (!$rotation->rotated) {
        if ($rotation->status === RefreshTokenRotationStatus::REUSED) {
-           $securityEvents->refreshTokenReuse($authorizationGrantId);
+           $securityEvents->refreshTokenReuse($authorizationId);
        }
 
-       // Map every failure status to OAuth invalid_grant at the HTTP boundary.
+       // Map lifecycle rejection to OAuth invalid_grant at the HTTP boundary.
        throw new RuntimeException('Refresh token rejected.');
    }
 
    $replacementRefreshToken = $rotation->token;
-   $authorizedGrant = $rotation->grant; // Mint only equal or narrower access.
+   $authorizedGrant = $rotation->grant; // Equal or narrower authorization only.
 
 On logout, call ``revoke($presentedRefreshToken)``. On password change,
-account disablement, or another grant-wide security event, call
-``revokeGrant($authorizationGrantId)``. ``CLIENT_MISMATCH`` and
+account disablement, consent withdrawal, or another authorization-wide security
+event, call ``revokeAuthorization($authorizationId)``. ``CLIENT_MISMATCH`` and
 ``SENDER_MISMATCH`` do not consume the legitimate token. ``REUSED`` means the
-store has already revoked the complete family.
+store has already revoked the complete token family.
 
 ``OpaqueToken`` remains available for isolated high-entropy opaque identifiers.
-It enforces 43 to 128 Base64URL characters. Do not use digest comparison alone
-as an OAuth refresh-token lifecycle.
+It enforces 43 to 128 Base64URL characters, but it is not the Epicrypt 3 OAuth
+refresh lifecycle.
 
-See :doc:`token-storage` for the complete public-type inventory, a relational
-schema, transaction sequence, status handling, and deployment checklist.
+See :doc:`token-storage` for the complete public-type inventory, relational
+state model, transaction sequence, status handling, and deployment checklist.
 
 Implement JWT replay and denylist storage
 -----------------------------------------
