@@ -1,5 +1,5 @@
 Epicrypt 3 PKI hardening
-=======================
+========================
 
 Epicrypt 3 deliberately uses two certificate backends for different jobs rather
 than hiding either behind a lowest-common-denominator abstraction.
