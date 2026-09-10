@@ -34,6 +34,31 @@ it('exports algorithm-bound eligible JWKS keys and verifies imported keys', func
         ->toBeTrue();
 });
 
+it('canonicalizes shortened OpenSSL EC coordinates to the JOSE curve width', function () {
+    $publicKey = <<<'PEM'
+-----BEGIN PUBLIC KEY-----
+MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEAIdDyzcInokZyDBqjBpBctKCo2bp
+L4Bl760o/+mUptRaQ6DaSVxuGeo5OXMda8UYziueQnxCXDFnK0K5ZFcrbA==
+-----END PUBLIC KEY-----
+PEM;
+    $resource = openssl_pkey_get_public($publicKey);
+    expect($resource)->not->toBeFalse();
+    $details = openssl_pkey_get_details($resource);
+    expect($details)->toBeArray()
+        ->and(strlen($details['ec']['x']))->toBe(31)
+        ->and(strlen($details['ec']['y']))->toBe(32);
+
+    $jwks = new Jwks();
+    $jwk = $jwks->exportPublicKeyToJwk($publicKey, 'short-x', AsymmetricJwtAlgorithm::ES256);
+    $x = sodium_base642bin((string) $jwk['x'], SODIUM_BASE64_VARIANT_URLSAFE_NO_PADDING);
+    $y = sodium_base642bin((string) $jwk['y'], SODIUM_BASE64_VARIANT_URLSAFE_NO_PADDING);
+
+    expect($x)->toHaveLength(32)
+        ->and($x[0])->toBe("\x00")
+        ->and($y)->toHaveLength(32)
+        ->and($jwks->importPublicKeyFromJwk($jwk, AsymmetricJwtAlgorithm::ES256))->toContain('BEGIN PUBLIC KEY');
+});
+
 it('supports OKP, oct, thumbprints and mixed algorithm sets', function () {
     $jwks = new Jwks();
     $ed = KeyPairGenerator::sodiumSign()->generate();
