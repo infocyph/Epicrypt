@@ -16,6 +16,7 @@ jobs:
       integration_services: '[]'
       service_topologies: '{}'
       php_extensions: "hash, json, openssl, sodium"
+      benchmark_composer_script: "benchmark:ci"
     permissions:
       security-events: write
       actions: read
