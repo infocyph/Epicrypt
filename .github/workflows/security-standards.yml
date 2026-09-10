@@ -53,6 +53,38 @@ jobs:
           node tests/Interop/jose.mjs "${{ runner.temp }}/epicrypt-jose.json" "${{ runner.temp }}/independent-jose.json"
           php tests/Interop/epicrypt.php consume "${{ runner.temp }}/epicrypt-jose.json" "${{ runner.temp }}/independent-jose.json"
 
+  auth-interoperability:
+    name: "Independent OAuth OIDC interoperability"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.4"
+          extensions: "hash, json, openssl, sodium"
+          coverage: none
+          tools: composer:v2
+        env:
+          fail-fast: true
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: npm
+      - name: Install PHP dependencies
+        run: composer install --no-interaction --no-progress --prefer-dist
+      - name: Install and audit the independent JOSE implementation
+        run: |
+          npm ci --ignore-scripts
+          npm audit --audit-level=high
+      - name: Verify bidirectional OAuth and OIDC profiles
+        run: |
+          php tests/Interop/auth-epicrypt.php produce "${{ runner.temp }}/epicrypt-auth.json"
+          node tests/Interop/auth-jose.mjs "${{ runner.temp }}/epicrypt-auth.json" "${{ runner.temp }}/independent-auth.json"
+          php tests/Interop/auth-epicrypt.php consume "${{ runner.temp }}/epicrypt-auth.json" "${{ runner.temp }}/independent-auth.json"
+
   aegis-modern-libsodium:
     name: "AEGIS on libsodium 1.0.22"
     runs-on: ubuntu-latest
