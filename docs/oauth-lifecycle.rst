@@ -1,81 +1,52 @@
-Complete OAuth token lifecycle
-==============================
+OAuth and OpenID Connect lifecycle
+===================================
 
-This example covers Epicrypt's complete part of an OAuth deployment: RFC 9068
-access-token issuance and verification, opaque refresh-token rotation, scope
-narrowing, optional DPoP sender binding and revocation.
+Epicrypt 3.0 provides the transport-neutral OAuth 2.1/OIDC protocol core. It
+validates authorization requests, models authentication/consent interaction,
+issues and atomically consumes authorization codes, authenticates clients,
+issues RFC 9068 access tokens, rotates refresh tokens, performs revocation and
+introspection, validates DPoP, publishes metadata/JWKS, and can extend an
+Authorization Code exchange with an OIDC ID Token.
 
-Epicrypt is not an OAuth authorization server. The host application remains
-responsible for authorization-code and PKCE validation, exact redirect-URI
-matching, client authentication, consent, HTTPS endpoints, rate limiting and
-OAuth JSON responses. The example begins only after those protocol checks have
-produced an authenticated subject, client and approved scope set.
+The host application still owns HTTP routing/serialization, TLS deployment,
+login and consent UI, account/principal lookup, durable store implementations,
+rate limiting, audit and application authorization policy. See
+:doc:`authentication-standards` for the exact supported standards profile.
 
-One-time service setup
-----------------------
+Service composition
+-------------------
 
-Generate the signing key offline and load it from protected deployment
-configuration in production. Give resource servers only the public key.
-``$refreshTokenStore`` is the durable transactional implementation described in
-:doc:`token-storage`; ``$dpopReplayStore`` is a shared
-``JwtReplayStoreInterface`` implementation.
+A deployment constructs Epicrypt services once from trusted configuration. The
+store arguments below are host implementations of Epicrypt's public contracts;
+Epicrypt intentionally ships no production database/cache adapter.
 
-.. code-block:: php
+The principal objects are:
 
-   <?php
+- ``OAuthAuthorizationRequestValidator`` for request/client/redirect/scope/PKCE
+  validation;
+- ``OAuthAuthorizationCodeIssuer`` and ``OAuthAuthorizationCodeConsumer`` for
+  approved authorization and one-time code lifecycle;
+- ``OAuthClientAuthenticator`` for confidential client authentication;
+- ``OAuthAccessTokenService`` for RFC 9068 access-token issue/validation;
+- ``RefreshTokenManager`` for encrypted refresh artifacts plus authoritative
+  rotation/reuse state;
+- ``OAuthTokenEndpoint`` for Authorization Code, Client Credentials and Refresh
+  Token grant mechanics;
+- ``OAuthRevocationEndpoint`` and ``OAuthIntrospectionEndpoint``;
+- optional ``OAuthDpopValidator`` for sender-constrained tokens;
+- optional ``OpenIdTokenResponseExtension`` for OIDC Authorization Code
+  responses.
 
-   declare(strict_types=1);
+The signing/protection keys should use separate Epicrypt ``KeyPurpose`` domains
+for OAuth access tokens, authorization codes, refresh tokens and OIDC ID Tokens.
+Do not reuse one key purpose across credential classes.
 
-   use Infocyph\Epicrypt\Certificate\Enum\OpenSslCurveName;
-   use Infocyph\Epicrypt\Certificate\KeyPairGenerator;
-   use Infocyph\Epicrypt\Token\Jwt\AsymmetricJwt;
-   use Infocyph\Epicrypt\Token\Jwt\JwtClaims;
-   use Infocyph\Epicrypt\Token\Jwt\JwtPolicy;
-   use Infocyph\Epicrypt\Token\Opaque\RefreshTokenGrant;
-   use Infocyph\Epicrypt\Token\Opaque\RefreshTokenManager;
+Authorization request
+---------------------
 
-   // Provision once; production processes load these values from secret storage.
-   $signingKeys = KeyPairGenerator::ec(OpenSslCurveName::PRIME256V1)->generate();
-   $accessTokenIssuer = AsymmetricJwt::issuer(
-       $signingKeys['private'],
-       type: 'at+jwt',
-       keyId: 'oauth-signing-2026-08',
-   );
-   $accessTokenVerifier = AsymmetricJwt::verifier(
-       $signingKeys['public'],
-       JwtPolicy::oauthAccessToken('https://auth.example.com', 'orders-api'),
-   );
-   $refreshTokens = new RefreshTokenManager($refreshTokenStore);
-
-   $issueAccessToken = static function (
-       RefreshTokenGrant $grant,
-   ) use ($accessTokenIssuer): string {
-       $customClaims = [
-           'client_id' => $grant->clientId,
-       ];
-       if ($grant->scopes !== []) {
-           $customClaims['scope'] = $grant->scopes;
-       }
-       if ($grant->dpopKeyThumbprint !== null) {
-           $customClaims['cnf'] = ['jkt' => $grant->dpopKeyThumbprint];
-       }
-
-       return $accessTokenIssuer->issue(JwtClaims::issue(
-           issuer: 'https://auth.example.com',
-           subject: $grant->subject,
-           audiences: $grant->audiences,
-           ttlSeconds: 300,
-           custom: $customClaims,
-       ));
-   };
-
-Initial token endpoint response
--------------------------------
-
-After the application has consumed a valid authorization code, create one
-authorization grant. If the client used DPoP at the token endpoint, set
-``$verifiedDpopThumbprint`` from ``DpopProof::verifyResult()``; otherwise use
-``null``.
+Pass the already parsed HTTP parameters to the authorization validator. The
+validator accepts a bounded ``array<string, string|list<string>>`` envelope and
+rejects duplicate singleton parameters rather than silently choosing one.
 
 .. code-block:: php
 
@@ -83,151 +54,61 @@ authorization grant. If the client used DPoP at the token endpoint, set
 
    declare(strict_types=1);
 
-   $grant = new RefreshTokenGrant(
-       id: sodium_bin2base64(random_bytes(32), SODIUM_BASE64_VARIANT_URLSAFE_NO_PADDING),
-       subject: $authenticatedUserId,
-       clientId: $authenticatedClientId,
-       audiences: ['orders-api'],
-       scopes: $approvedScopes,
-       expiresAt: time() + 90 * 24 * 60 * 60,
-       dpopKeyThumbprint: $verifiedDpopThumbprint,
+   use Infocyph\Epicrypt\Auth\OAuth\OAuthAuthorizationRequestValidator;
+
+   $validator = new OAuthAuthorizationRequestValidator(
+       clients: $clientStore,
+       audienceResolver: $audienceResolver,
    );
 
-   $accessToken = $issueAccessToken($grant);
-   $refreshToken = $refreshTokens->issue($grant);
+   $result = $validator->validate([
+       'client_id' => 'client-1',
+       'redirect_uri' => 'https://client.example/callback',
+       'response_type' => 'code',
+       'scope' => 'orders:read openid',
+       'state' => $state,
+       'code_challenge' => $pkceChallenge,
+       'code_challenge_method' => 'S256',
+       'nonce' => $nonce,
+   ]);
 
-   $tokenResponse = [
-       'access_token' => $accessToken,
-       'token_type' => $grant->dpopKeyThumbprint === null ? 'Bearer' : 'DPoP',
-       'expires_in' => 300,
-       'refresh_token' => $refreshToken,
-   ];
-   if ($grant->scopes !== []) {
-       $tokenResponse['scope'] = implode(' ', $grant->scopes);
+   if ($result->error !== null) {
+       // Serialize only the redirect/error information returned by Epicrypt.
+       // Never redirect to a request-controlled URI that Epicrypt rejected.
+       return;
    }
 
-Return this structure as an OAuth JSON response over TLS with
-``Cache-Control: no-store`` and ``Pragma: no-cache``. Never log either token.
+   $request = $result->acceptedRequest();
 
-Resource-server request
------------------------
+OAuth 2.1 requires the exact registered redirect and Epicrypt's profile requires
+PKCE ``S256``. ``plain``, implicit flow and wildcard/partial redirect matching
+are not accepted.
 
-The API fixes issuer, audience, type and algorithm in trusted configuration.
-After verification, enforce the endpoint's required scope. For a DPoP token,
-verify the proof and bind it to the access token before authorization.
+Authentication and authorization interaction
+--------------------------------------------
 
-.. code-block:: php
+The application authenticates the end-user and renders consent/account UI, but
+Epicrypt decides whether the protocol request is ready for those actions. For
+OIDC requests, ``OpenIdInteractionPolicy`` evaluates ``prompt``, ``max_age``
+and requested ACR values against host-supplied authenticated-session state.
 
-   <?php
+After the host obtains an approved subject/scope decision, pass the validated
+request and approval to ``OAuthAuthorizationCodeIssuer``. Epicrypt creates the
+approved authorization state, stores only authoritative code metadata, and
+returns the compact encrypted authorization-code artifact. The raw code is not
+persisted.
 
-   declare(strict_types=1);
+The successful HTTP authorization response is constructed from Epicrypt's
+result and includes RFC 9207 ``iss`` plus optional ``state``. User denial is an
+``access_denied`` result from an already validated interaction; unsafe redirect
+targets are never recovered from raw request input.
 
-   use Infocyph\Epicrypt\Token\Jwt\DpopProof;
-   use Infocyph\Epicrypt\Token\Jwt\Enum\AsymmetricJwtAlgorithm;
-
-   $verifiedAccessToken = $accessTokenVerifier->verifyResult($presentedAccessToken);
-   if (!$verifiedAccessToken->valid) {
-       throw new RuntimeException('Return an OAuth invalid_token response.');
-   }
-
-   $confirmation = $verifiedAccessToken->claims['cnf'] ?? null;
-   if ($confirmation !== null) {
-       $verifiedProof = new DpopProof()->verifyResult(
-           $presentedDpopProof,
-           $requestMethod,
-           $absoluteRequestUri,
-           AsymmetricJwtAlgorithm::EDDSA,
-           $dpopReplayStore,
-           accessToken: $presentedAccessToken,
-           nonce: $expectedDpopNonce,
-       );
-       new DpopProof()->validateAccessTokenBinding(
-           $verifiedAccessToken->claims,
-           $verifiedProof['publicJwk'],
-       );
-   }
-
-   $grantedScopes = explode(' ', (string) ($verifiedAccessToken->claims['scope'] ?? ''));
-   if (!in_array('orders:read', $grantedScopes, true)) {
-       throw new RuntimeException('Return an OAuth insufficient_scope response.');
-   }
-
-   $orders = $orderRepository->forUser($verifiedAccessToken->claims['sub']);
-
-Refresh-token endpoint
-----------------------
-
-Authenticate confidential clients before this step. Public clients must use
-rotation or another approved sender constraint. Verify a DPoP proof first when
-the grant is sender-constrained, then pass only its verified thumbprint.
-
-.. code-block:: php
-
-   <?php
-
-   declare(strict_types=1);
-
-   use Infocyph\Epicrypt\Token\Opaque\RefreshTokenRotationStatus;
-
-   $rotation = $refreshTokens->rotate(
-       $presentedRefreshToken,
-       $authenticatedClientId,
-       $verifiedDpopThumbprint,
-       requestedScopes: $requestedScopes,
-   );
-
-   if (!$rotation->rotated || $rotation->grant === null || $rotation->token === null) {
-       if ($rotation->status === RefreshTokenRotationStatus::REUSED) {
-           $securityEvents->refreshTokenFamilyReuseDetected($authenticatedClientId);
-       }
-
-       // Expose the same protocol error for invalid, expired, reused, revoked,
-       // binding-mismatched, scope-mismatched and exhausted-conflict outcomes.
-       throw new RuntimeException('Return OAuth invalid_grant.');
-   }
-
-   $replacementAccessToken = $issueAccessToken($rotation->grant);
-   $refreshResponse = [
-       'access_token' => $replacementAccessToken,
-       'token_type' => $rotation->grant->dpopKeyThumbprint === null ? 'Bearer' : 'DPoP',
-       'expires_in' => 300,
-       'refresh_token' => $rotation->token,
-   ];
-   if ($rotation->grant->scopes !== []) {
-       $refreshResponse['scope'] = implode(' ', $rotation->grant->scopes);
-   }
-
-The old refresh token is now retained as consumed history. Presenting it again
-returns ``REUSED`` and the store revokes the entire family, including the
-replacement. Requested scopes may stay equal or become narrower; they can
-never expand.
-
-Logout and security-event revocation
-------------------------------------
-
-Logout revokes the family identified by the presented refresh token. Account
-disablement, authorization withdrawal and password compromise revoke every
-family belonging to the authorization grant.
-
-.. code-block:: php
-
-   <?php
-
-   declare(strict_types=1);
-
-   $refreshTokens->revoke($presentedRefreshToken); // logout
-   $refreshTokens->revokeGrant($authorizationGrantId); // wider security event
-
-Access tokens already issued remain valid until their short expiration unless
-the deployment selects a ``DENYLIST`` JWT policy and updates its shared replay
-store. Refresh-token revocation must therefore complement, not replace,
-short-lived access tokens.
-
-DPoP-bound token endpoint requests
+Token endpoint: Authorization Code
 ----------------------------------
 
-Use the same verification path for initial issuance and refresh. The URI is the
-absolute token-endpoint URI without credentials or fragment.
+Authenticate the client according to its registered method, then pass the
+verified authentication result and raw token-endpoint inputs to
+``OAuthTokenEndpoint``.
 
 .. code-block:: php
 
@@ -235,15 +116,161 @@ absolute token-endpoint URI without credentials or fragment.
 
    declare(strict_types=1);
 
-   $tokenEndpointProof = new DpopProof()->verifyResult(
-       $presentedDpopProof,
-       'POST',
-       'https://auth.example.com/oauth/token',
-       AsymmetricJwtAlgorithm::EDDSA,
-       $dpopReplayStore,
-       nonce: $expectedDpopNonce,
+   $result = $tokenEndpoint->authorizationCode(
+       clientId: $clientId,
+       authentication: $clientAuthentication,
+       code: $presentedCode,
+       redirectUri: $presentedRedirectUri,
+       pkceVerifier: $presentedPkceVerifier,
+       dpopProof: $presentedDpopProof,
    );
-   $verifiedDpopThumbprint = $tokenEndpointProof['keyThumbprint'];
 
-Never calculate the binding from an unverified ``jwk`` header. Each accepted
-proof is consumed atomically by issuer/thumbprint, JWT ID and expiration.
+   if (!$result->successful()) {
+       // Map $result->error to the OAuth JSON/status response at the HTTP layer.
+       return;
+   }
+
+   $response = $result->response;
+
+The code is decrypted, rebound to the exact client/redirect/PKCE state and
+atomically consumed before tokens are issued. Wrong client, redirect or PKCE
+attempts do not consume a valid code. Once consumed, replay fails.
+
+If refresh is permitted, the token endpoint issues a rotated-state refresh
+artifact whose absolute lifetime is bounded by the approved authorization. The
+access token is an RFC 9068 ``at+jwt``. When an OIDC
+``OpenIdTokenResponseExtension`` is configured and the grant contains
+``openid``, the response also includes an ``id_token``; its ``c_hash`` is bound
+to the actual authorization code used in this exchange.
+
+Client Credentials
+------------------
+
+Client Credentials is restricted to an authenticated confidential client.
+Requested scopes must remain inside registration and the audience resolver must
+return registered resource audiences. ``openid`` is rejected for this grant.
+
+.. code-block:: php
+
+   $result = $tokenEndpoint->clientCredentials(
+       authentication: $clientAuthentication,
+       requestedScopes: ['orders:read'],
+       dpopProof: $presentedDpopProof,
+   );
+
+No refresh token is returned for Client Credentials.
+
+Refresh rotation and reuse
+--------------------------
+
+Refresh tokens are compact JWE artifacts plus authoritative store state. The
+raw artifact is never persisted. A successful refresh consumes the current
+record and atomically installs a replacement in the same family.
+
+.. code-block:: php
+
+   $result = $tokenEndpoint->refreshToken(
+       clientId: $clientId,
+       authentication: $clientAuthentication,
+       refreshToken: $presentedRefreshToken,
+       requestedScopes: ['orders:read'],
+       dpopProof: $presentedDpopProof,
+   );
+
+Requested scopes may remain equal or become narrower; they cannot expand beyond
+the original grant or client registration. A sender-constrained refresh token
+must be presented with the same verified DPoP key thumbprint.
+
+If an already-consumed refresh token is presented again, Epicrypt drives the
+reuse path and invalidates the family according to the authoritative store
+contract. Adapters must implement the documented atomic rotation and family
+revocation semantics across processes; a process-local cache is not sufficient.
+
+Resource-server validation
+--------------------------
+
+Use ``OAuthResourceAccessTokenValidator`` at the resource boundary rather than
+parsing JWT claims and enforcing them independently. Fix issuer/audience and
+required endpoint scope in trusted application configuration. For DPoP access
+tokens, pass the proof, HTTP method and absolute request URI so the validator can
+verify proof/replay/``cnf.jkt`` binding before returning an active result.
+
+The application authorizes business actions only after Epicrypt returns a valid
+resource-token result. Do not trust unverified ``scope``, ``sub``, ``client_id``
+or ``cnf`` claims from a decoded JWT.
+
+Revocation and introspection
+----------------------------
+
+``OAuthRevocationEndpoint`` implements the non-oracular RFC 7009 behavior: an
+authenticated client can submit a token and the external response remains
+accepted even when the token is unknown. Known refresh/access/authorization
+state is revoked according to client binding and configured authoritative
+stores.
+
+``OAuthIntrospectionEndpoint`` implements protected RFC 7662-style state
+inspection. Invalid client authentication does not receive token state; unknown,
+invalid, expired, reused or revoked credentials are reported inactive.
+
+.. code-block:: php
+
+   $revocation = $revocationEndpoint->revoke(
+       clientId: $clientId,
+       authentication: $clientAuthentication,
+       token: $presentedToken,
+       tokenTypeHint: $hint,
+   );
+
+   $inspection = $introspectionEndpoint->introspect(
+       authentication: $clientAuthentication,
+       token: $presentedToken,
+       tokenTypeHint: $hint,
+   );
+
+DPoP
+----
+
+When DPoP is enabled, construct ``OAuthDpopValidator`` with a shared durable
+``JwtReplayStoreInterface`` implementation and the allowed proof algorithms.
+``OAuthTokenEndpoint`` validates token-endpoint proofs only against its trusted
+absolute HTTPS token-endpoint URI. Resource validation binds the proof to the
+actual method/URI and access token.
+
+Never derive a sender binding from an unverified JWK header. Replay state must
+be shared across all workers/instances that can accept the same proof.
+
+OIDC provider extension
+-----------------------
+
+OIDC is activated only by the exact ``openid`` scope. Use
+``OpenIdAuthorizationRequestValidator`` to extend the validated OAuth request,
+``OpenIdInteractionPolicy`` for ``prompt``/``max_age``/ACR interaction, and an
+``OpenIdIdTokenIssuer`` configured with issuer-matched
+``OIDC_ID_TOKEN_SIGNING`` keys.
+
+Configure ``OpenIdTokenResponseExtension`` on ``OAuthTokenEndpoint`` to add the
+ID Token to successful Authorization Code responses. ``OpenIdUserInfoProjector``
+combines the host's subject-identifier provider and claims provider while
+preventing claims data from overriding ``sub``. ``OpenIdProviderMetadata``
+projects Discovery metadata from the same configured OAuth capabilities and
+OIDC signing policy.
+
+Persistence and failure ordering
+--------------------------------
+
+Production adapters must preserve the atomicity documented by Epicrypt's store
+interfaces. In particular:
+
+- authorization-code consume is one-time and exact-state;
+- refresh rotation/consume/reuse detection is atomic;
+- refresh family and authorization revocation must become visible immediately;
+- client-assertion and DPoP replay consumption must be shared across workers;
+- authoritative access-token/PAT state must not be served from a stale ordinary
+  cache after revocation;
+- when token issuance fails after a one-time authorization transition, Epicrypt
+  uses fail-closed revocation rather than attempting to resurrect consumed state.
+
+HTTP adapters should emit OAuth/OIDC protocol errors from Epicrypt's typed
+results, add the required transport headers (including ``Cache-Control:
+no-store`` where appropriate), and never log raw authorization codes, access
+credentials, refresh tokens, client assertions, DPoP proofs or ID Tokens.

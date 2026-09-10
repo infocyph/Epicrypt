@@ -13,4 +13,6 @@ enum JwtProfile
     case OAUTH_ACCESS_TOKEN;
 
     case OPENID_ID_TOKEN;
+
+    case PERSONAL_ACCESS_TOKEN;
 }

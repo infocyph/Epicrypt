@@ -19,14 +19,14 @@
         "ext-json": "*",
         "ext-openssl": "*",
         "ext-sodium": "*",
-        "infocyph/pathwise": "^3.1",
-        "phpseclib/phpseclib": "^3.0",
+        "phpseclib/phpseclib": "^4.0.1",
         "psr/clock": "^1.0",
         "psr/http-client": "^1.0",
         "psr/http-factory": "^1.0",
         "psr/simple-cache": "^3.0"
     },
     "require-dev": {
+        "infocyph/pathwise": "^4.0",
         "infocyph/phpforge": "dev-main@dev",
         "nyholm/psr7": "^1.8",
         "php-http/mock-client": "^1.6"
@@ -53,5 +53,9 @@
         "classmap-authoritative": true,
         "optimize-autoloader": true,
         "sort-packages": true
+    },
+    "scripts": {
+        "benchmark:auth": "@php benchmarks/authentication.php",
+        "benchmark:ci": "@composer ic:bench:quick"
     }
 }

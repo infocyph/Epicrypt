@@ -4,9 +4,12 @@ declare(strict_types=1);
 
 namespace Infocyph\Epicrypt\Benchmarks;
 
+use Infocyph\Epicrypt\Certificate\CertificateInspector;
 use Infocyph\Epicrypt\Certificate\Enum\OpenSslRsaBits;
 use Infocyph\Epicrypt\Certificate\KeyExchange;
 use Infocyph\Epicrypt\Certificate\KeyPairGenerator;
+use Infocyph\Epicrypt\Certificate\OpenSSL\CertificateBuilder;
+use Infocyph\Epicrypt\Certificate\Pkcs12;
 use PhpBench\Attributes as Bench;
 
 #[Bench\Revs(5)]
@@ -20,7 +23,13 @@ final class CertificateBench
     /** @var array{private: string, public: string} */
     private array $bob;
 
+    private string $certificate;
+
     private KeyExchange $exchange;
+
+    private string $pfx;
+
+    private Pkcs12 $pkcs12;
 
     public function setUp(): void
     {
@@ -35,8 +44,38 @@ final class CertificateBench
         $this->exchange->deriveKey($this->alice['private'], $this->bob['public'], 32, 'benchmark:v1');
     }
 
+    #[Bench\BeforeMethods('setUpPki')]
+    public function benchOpenSslCertificateParse(): void
+    {
+        openssl_x509_parse($this->certificate, false);
+    }
+
     public function benchOpenSslKeyGeneration(): void
     {
         KeyPairGenerator::rsa(OpenSslRsaBits::BITS_2048)->generate();
+    }
+
+    #[Bench\BeforeMethods('setUpPki')]
+    public function benchPhpseclibCertificateInspect(): void
+    {
+        new CertificateInspector()->inspect($this->certificate);
+    }
+
+    #[Bench\BeforeMethods('setUpPki')]
+    public function benchPhpseclibPfxImport(): void
+    {
+        $this->pkcs12->import($this->pfx, 'benchmark-password');
+    }
+
+    public function setUpPki(): void
+    {
+        $pair = KeyPairGenerator::rsa(OpenSslRsaBits::BITS_2048)->generate();
+        $this->certificate = new CertificateBuilder()->selfSign(
+            ['commonName' => 'benchmark.example.test'],
+            $pair['private'],
+            days: 30,
+        );
+        $this->pkcs12 = new Pkcs12();
+        $this->pfx = $this->pkcs12->export($this->certificate, $pair['private'], 'benchmark-password');
     }
 }

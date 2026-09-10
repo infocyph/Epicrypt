@@ -46,6 +46,22 @@ final readonly class KeyRing
         return $matches[0];
     }
 
+    /** @return list<KeyMetadata> */
+    public function metadata(): array
+    {
+        return array_values(array_map(
+            static fn(KeyRingEntry $entry): KeyMetadata => $entry->metadata(),
+            $this->entries,
+        ));
+    }
+
+    public function metadataFor(string $id): ?KeyMetadata
+    {
+        $entry = $this->entries[$id] ?? null;
+
+        return $entry?->metadata();
+    }
+
     /** @return list<KeyRingEntry> */
     public function readCandidates(
         KeyPurpose $purpose,

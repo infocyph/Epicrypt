@@ -32,4 +32,17 @@ final readonly class KeyRingEntry
             throw new ConfigurationException('Key issuer must be non-empty when provided.');
         }
     }
+
+    public function metadata(): KeyMetadata
+    {
+        return new KeyMetadata(
+            $this->id,
+            $this->status,
+            $this->purpose,
+            $this->algorithm,
+            $this->notBefore,
+            $this->notAfter,
+            $this->issuer,
+        );
+    }
 }

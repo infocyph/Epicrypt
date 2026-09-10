@@ -9,10 +9,10 @@ use Infocyph\Epicrypt\Exception\Crypto\DecryptionException;
 use Infocyph\Epicrypt\Internal\Base64Url;
 use Infocyph\Epicrypt\Internal\Clock\SystemClock;
 use Infocyph\Epicrypt\Internal\Json;
+use Infocyph\Epicrypt\Internal\StreamIO;
 use Infocyph\Epicrypt\Security\KeyPurpose;
 use Infocyph\Epicrypt\Security\KeyRing;
 use Infocyph\Epicrypt\Security\KeyStatus;
-use Infocyph\Pathwise\FileManager\SafeFileReader;
 use Psr\Clock\ClockInterface;
 
 final readonly class FileProtector
@@ -42,6 +42,87 @@ final readonly class FileProtector
         );
     }
 
+    /**
+     * Protect from the current input position into the current output position.
+     * The caller owns stream lifetime and publication/rollback semantics.
+     *
+     * @param resource $input
+     * @param resource $output
+     */
+    public function protectStream(
+        mixed $input,
+        mixed $output,
+        #[\SensitiveParameter]
+        string $key,
+        ProtectionOptions $options,
+        int $chunkSize = SecretStream::DEFAULT_CHUNK_SIZE,
+    ): ProtectionMetadata {
+        return $this->protectStreamWithBinaryKey(
+            $input,
+            $output,
+            Base64Url::decode($key),
+            $options,
+            $chunkSize,
+        );
+    }
+
+    /**
+     * @param resource $input
+     * @param resource $output
+     */
+    public function protectStreamWithBinaryKey(
+        mixed $input,
+        mixed $output,
+        #[\SensitiveParameter]
+        string $key,
+        ProtectionOptions $options,
+        int $chunkSize = SecretStream::DEFAULT_CHUNK_SIZE,
+    ): ProtectionMetadata {
+        $input = StreamIO::readable($input);
+        $output = StreamIO::writable($output);
+
+        $createdAt = $this->clock->now()->getTimestamp();
+        $prefix = $this->encodePrefix($options, $createdAt);
+        StreamIO::writeAll($output, $prefix . "\n");
+        new SecretStream($key, $prefix)->encryptStream($input, $output, $chunkSize);
+
+        return new ProtectionMetadata(
+            self::DOMAIN,
+            $options->purpose,
+            $createdAt,
+            $options->keyId,
+        );
+    }
+
+    /**
+     * @param resource $input
+     * @param resource $output
+     */
+    public function protectStreamWithKeyRing(
+        mixed $input,
+        mixed $output,
+        #[\SensitiveParameter]
+        KeyRing $keyRing,
+        ProtectionOptions $options,
+        int $chunkSize = SecretStream::DEFAULT_CHUNK_SIZE,
+    ): ProtectionMetadata {
+        $input = StreamIO::readable($input);
+        $output = StreamIO::writable($output);
+        $entry = $keyRing->activeForWrite(KeyPurpose::FILE_PROTECTION, self::ALGORITHM);
+
+        return $this->protectStream(
+            $input,
+            $output,
+            $entry->key,
+            new ProtectionOptions(
+                $options->purpose,
+                $options->additionalAuthenticatedData,
+                $entry->id,
+            ),
+            $chunkSize,
+        );
+    }
+
     public function protectWithBinaryKey(
         string $inputPath,
         string $outputPath,
@@ -50,18 +131,22 @@ final readonly class FileProtector
         ProtectionOptions $options,
         int $chunkSize = SecretStream::DEFAULT_CHUNK_SIZE,
     ): ProtectionResult {
-        $this->assertLocalPaths($inputPath, $outputPath);
-        $createdAt = $this->clock->now()->getTimestamp();
-        $prefix = $this->encodePrefix($options, $createdAt);
-        new SecretStream($key, $prefix, $prefix . "\n")->encrypt($inputPath, $outputPath, $chunkSize);
-
-        return new ProtectionResult(
-            $outputPath,
-            self::DOMAIN,
-            $options->purpose,
-            $createdAt,
-            $options->keyId,
+        StreamIO::assertDistinctLocalPaths($inputPath, $outputPath);
+        $metadata = StreamIO::withReadableLocalFile(
+            $inputPath,
+            fn($input): ProtectionMetadata => StreamIO::withAtomicLocalOutput(
+                $outputPath,
+                fn($output): ProtectionMetadata => $this->protectStreamWithBinaryKey(
+                    $input,
+                    $output,
+                    $key,
+                    $options,
+                    $chunkSize,
+                ),
+            ),
         );
+
+        return $this->pathResult($outputPath, $metadata);
     }
 
     public function protectWithKeyRing(
@@ -72,19 +157,22 @@ final readonly class FileProtector
         ProtectionOptions $options,
         int $chunkSize = SecretStream::DEFAULT_CHUNK_SIZE,
     ): ProtectionResult {
-        $entry = $keyRing->activeForWrite(KeyPurpose::FILE_PROTECTION, self::ALGORITHM);
-
-        return $this->protect(
+        StreamIO::assertDistinctLocalPaths($inputPath, $outputPath);
+        $metadata = StreamIO::withReadableLocalFile(
             $inputPath,
-            $outputPath,
-            $entry->key,
-            new ProtectionOptions(
-                $options->purpose,
-                $options->additionalAuthenticatedData,
-                $entry->id,
+            fn($input): ProtectionMetadata => StreamIO::withAtomicLocalOutput(
+                $outputPath,
+                fn($output): ProtectionMetadata => $this->protectStreamWithKeyRing(
+                    $input,
+                    $output,
+                    $keyRing,
+                    $options,
+                    $chunkSize,
+                ),
             ),
-            $chunkSize,
         );
+
+        return $this->pathResult($outputPath, $metadata);
     }
 
     public function unprotect(
@@ -104,6 +192,92 @@ final readonly class FileProtector
         );
     }
 
+    /**
+     * Unprotect from the current input position into the current output position.
+     * For non-seekable outputs, callers should stage output until this method succeeds.
+     *
+     * @param resource $input
+     * @param resource $output
+     */
+    public function unprotectStream(
+        mixed $input,
+        mixed $output,
+        #[\SensitiveParameter]
+        string $key,
+        ProtectionOptions $options,
+        int $chunkSize = SecretStream::DEFAULT_CHUNK_SIZE,
+    ): ProtectionMetadata {
+        return $this->unprotectStreamWithBinaryKey(
+            $input,
+            $output,
+            Base64Url::decode($key),
+            $options,
+            $chunkSize,
+        );
+    }
+
+    /**
+     * @param resource $input
+     * @param resource $output
+     */
+    public function unprotectStreamWithBinaryKey(
+        mixed $input,
+        mixed $output,
+        #[\SensitiveParameter]
+        string $key,
+        ProtectionOptions $options,
+        int $chunkSize = SecretStream::DEFAULT_CHUNK_SIZE,
+    ): ProtectionMetadata {
+        $input = StreamIO::readable($input);
+        $output = StreamIO::writable($output);
+
+        [$prefix, $metadata] = $this->readAndValidatePrefixFromStream($input, $options);
+        new SecretStream($key, $prefix)->decryptStream($input, $output, $chunkSize);
+
+        return new ProtectionMetadata(
+            self::DOMAIN,
+            $metadata['purpose'],
+            $metadata['created_at'],
+            $metadata['kid'],
+        );
+    }
+
+    /**
+     * @param resource $input
+     * @param resource $output
+     */
+    public function unprotectStreamWithKeyRing(
+        mixed $input,
+        mixed $output,
+        #[\SensitiveParameter]
+        KeyRing $keyRing,
+        ProtectionOptions $options,
+        int $chunkSize = SecretStream::DEFAULT_CHUNK_SIZE,
+    ): ProtectionMetadata {
+        $input = StreamIO::readable($input);
+        $output = StreamIO::writable($output);
+
+        [$prefix, $metadata] = $this->readAndValidatePrefixFromStream($input, $options);
+        if ($metadata['kid'] === null) {
+            throw new DecryptionException('Protected-file key id is required for KeyRing decryption.');
+        }
+
+        $entry = $keyRing->resolveForRead($metadata['kid'], KeyPurpose::FILE_PROTECTION, self::ALGORITHM);
+        if ($entry === null) {
+            throw new DecryptionException('Protected-file key id is not eligible for decryption.');
+        }
+
+        new SecretStream(Base64Url::decode($entry->key), $prefix)->decryptStream($input, $output, $chunkSize);
+
+        return new ProtectionMetadata(
+            self::DOMAIN,
+            $metadata['purpose'],
+            $metadata['created_at'],
+            $entry->id,
+            $entry->status === KeyStatus::FALLBACK,
+        );
+    }
+
     public function unprotectWithBinaryKey(
         string $inputPath,
         string $outputPath,
@@ -112,17 +286,22 @@ final readonly class FileProtector
         ProtectionOptions $options,
         int $chunkSize = SecretStream::DEFAULT_CHUNK_SIZE,
     ): ProtectionResult {
-        $this->assertLocalPaths($inputPath, $outputPath);
-        [$prefix, $metadata] = $this->readAndValidatePrefix($inputPath, $options);
-        new SecretStream($key, $prefix, $prefix . "\n")->decrypt($inputPath, $outputPath, $chunkSize);
-
-        return new ProtectionResult(
-            $outputPath,
-            self::DOMAIN,
-            $metadata['purpose'],
-            $metadata['created_at'],
-            $metadata['kid'],
+        StreamIO::assertDistinctLocalPaths($inputPath, $outputPath);
+        $metadata = StreamIO::withReadableLocalFile(
+            $inputPath,
+            fn($input): ProtectionMetadata => StreamIO::withAtomicLocalOutput(
+                $outputPath,
+                fn($output): ProtectionMetadata => $this->unprotectStreamWithBinaryKey(
+                    $input,
+                    $output,
+                    $key,
+                    $options,
+                    $chunkSize,
+                ),
+            ),
         );
+
+        return $this->pathResult($outputPath, $metadata);
     }
 
     public function unprotectWithKeyRing(
@@ -133,37 +312,22 @@ final readonly class FileProtector
         ProtectionOptions $options,
         int $chunkSize = SecretStream::DEFAULT_CHUNK_SIZE,
     ): ProtectionResult {
-        [, $metadata] = $this->readAndValidatePrefix($inputPath, $options);
-        if ($metadata['kid'] === null) {
-            throw new DecryptionException('File key id is required for KeyRing decryption.');
-        }
-
-        $entry = $keyRing->resolveForRead($metadata['kid'], KeyPurpose::FILE_PROTECTION, self::ALGORITHM);
-        if ($entry === null) {
-            throw new DecryptionException('File key id is not eligible for decryption.');
-        }
-
-        $result = $this->unprotect($inputPath, $outputPath, $entry->key, $options, $chunkSize);
-
-        return new ProtectionResult(
-            $result->value,
-            $result->domain,
-            $result->purpose,
-            $result->createdAt,
-            $entry->id,
-            $entry->status === KeyStatus::FALLBACK,
+        StreamIO::assertDistinctLocalPaths($inputPath, $outputPath);
+        $metadata = StreamIO::withReadableLocalFile(
+            $inputPath,
+            fn($input): ProtectionMetadata => StreamIO::withAtomicLocalOutput(
+                $outputPath,
+                fn($output): ProtectionMetadata => $this->unprotectStreamWithKeyRing(
+                    $input,
+                    $output,
+                    $keyRing,
+                    $options,
+                    $chunkSize,
+                ),
+            ),
         );
-    }
 
-    private function assertLocalPaths(string $inputPath, string $outputPath): void
-    {
-        foreach ([$inputPath, $outputPath] as $path) {
-            if (preg_match('/\A[A-Za-z][A-Za-z0-9+.-]*:\/\//D', $path) === 1) {
-                throw new \Infocyph\Epicrypt\Exception\FileAccessException(
-                    'FileProtector supports local filesystem paths only.',
-                );
-            }
-        }
+        return $this->pathResult($outputPath, $metadata);
     }
 
     private function encodePrefix(ProtectionOptions $options, int $createdAt): string
@@ -179,43 +343,45 @@ final readonly class FileProtector
         ]));
     }
 
+    private function pathResult(string $outputPath, ProtectionMetadata $metadata): ProtectionResult
+    {
+        return new ProtectionResult(
+            $outputPath,
+            $metadata->domain,
+            $metadata->purpose,
+            $metadata->createdAt,
+            $metadata->keyId,
+            $metadata->usedFallbackKey,
+        );
+    }
+
     /**
+     * @param resource $input
      * @return array{string, array{v: int, domain: string, alg: string, kid: ?string, purpose: string, created_at: int, aad: string}}
      */
-    private function readAndValidatePrefix(string $path, ProtectionOptions $options): array
+    private function readAndValidatePrefixFromStream(mixed $input, ProtectionOptions $options): array
     {
-        $reader = new SafeFileReader($path);
-
         try {
-            $chunks = $reader->chunks(self::MAX_PREFIX_SIZE);
-            if (!$chunks->valid()) {
-                throw new DecryptionException('Invalid or truncated Epicrypt 2.0 file header.');
-            }
-            $firstChunk = $chunks->current();
-        } finally {
-            $reader->releaseLock();
+            $prefix = StreamIO::readLine($input, self::MAX_PREFIX_SIZE);
+        } catch (\Throwable $exception) {
+            throw new DecryptionException('Invalid or truncated protected-file header.', 0, $exception);
         }
 
-        if ($firstChunk === '') {
-            throw new DecryptionException('Invalid or truncated Epicrypt 2.0 file header.');
+        if ($prefix === '') {
+            throw new DecryptionException('Invalid or truncated protected-file header.');
         }
 
-        $newline = strpos($firstChunk, "\n");
-        if ($newline === false || $newline === 0) {
-            throw new DecryptionException('Invalid or oversized Epicrypt 2.0 file header.');
-        }
-
-        $prefix = substr($firstChunk, 0, $newline);
         $parts = explode('.', $prefix);
         if (count($parts) !== 2 || $parts[0] !== ProtectedPayload::PREFIX) {
-            throw new DecryptionException('Invalid Epicrypt 2.0 file framing.');
+            throw new DecryptionException('Invalid protected-file framing.');
         }
 
         try {
             $metadata = Json::decodeToArray(Base64Url::decode($parts[1]));
         } catch (\Throwable $exception) {
-            throw new DecryptionException('Invalid Epicrypt 2.0 file metadata.', 0, $exception);
+            throw new DecryptionException('Invalid protected-file metadata.', 0, $exception);
         }
+
         $keys = array_keys($metadata);
         sort($keys);
         if ($keys !== ['aad', 'alg', 'created_at', 'domain', 'kid', 'purpose', 'v']
@@ -229,7 +395,7 @@ final readonly class FileProtector
                 && (!is_string($metadata['kid'])
                     || preg_match('/\A[A-Za-z0-9_-]{1,128}\z/D', $metadata['kid']) !== 1))
             || ($options->keyId !== null && $metadata['kid'] !== $options->keyId)) {
-            throw new DecryptionException('Invalid or mismatched Epicrypt 2.0 file metadata.');
+            throw new DecryptionException('Invalid or mismatched protected-file metadata.');
         }
 
         return [$prefix, [

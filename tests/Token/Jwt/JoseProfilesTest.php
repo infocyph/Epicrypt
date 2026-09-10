@@ -179,7 +179,15 @@ it('rejects invalid OIDC configuration and profile claims', function () {
         ->and(fn () => $validator->validate(array_replace($claims, ['auth_time' => 1_700_000_101]), AsymmetricJwtAlgorithm::ES256, 'client', maximumAuthenticationAge: 300))
         ->toThrow(InvalidClaimException::class)
         ->and(fn () => $validator->validate($claims, AsymmetricJwtAlgorithm::ES256, 'client', maximumAuthenticationAge: 99))
-        ->toThrow(InvalidClaimException::class);
+        ->toThrow(InvalidClaimException::class)
+        ->and(fn () => $validator->validate(['aud' => ['client', 'client'], 'azp' => 'client'], AsymmetricJwtAlgorithm::ES256, 'client'))
+        ->toThrow(InvalidClaimException::class)
+        ->and(fn () => $validator->validate(['aud' => array_fill(0, 33, 'aud')], AsymmetricJwtAlgorithm::ES256, 'client'))
+        ->toThrow(InvalidClaimException::class)
+        ->and(fn () => $validator->validate(['aud' => str_repeat('a', 2049)], AsymmetricJwtAlgorithm::ES256, 'client'))
+        ->toThrow(InvalidClaimException::class)
+        ->and(fn () => $validator->validate(['aud' => 'client'], AsymmetricJwtAlgorithm::ES256, 'client', nonce: str_repeat('n', 257)))
+        ->toThrow(ConfigurationException::class);
 });
 
 it('bounds DPoP configuration identifiers age and parser work', function () {
@@ -210,8 +218,39 @@ it('bounds DPoP configuration identifiers age and parser work', function () {
         AsymmetricJwtAlgorithm::EDDSA,
         issuedAt: 1_699_999_699,
     );
+    $future = $dpop->issue(
+        'GET',
+        'https://api.example/resource',
+        $pair['private'],
+        $public,
+        AsymmetricJwtAlgorithm::EDDSA,
+        issuedAt: 1_700_000_006,
+        jwtId: 'future-proof',
+    );
+    $futureBoundary = $dpop->issue(
+        'GET',
+        'https://api.example/resource',
+        $pair['private'],
+        $public,
+        AsymmetricJwtAlgorithm::EDDSA,
+        issuedAt: 1_700_000_005,
+        jwtId: 'future-boundary',
+    );
+
     expect(fn () => $dpop->verify($old, 'GET', 'https://api.example/resource', AsymmetricJwtAlgorithm::EDDSA, joseReplayStore()))
         ->toThrow(InvalidTokenException::class)
         ->and(fn () => $dpop->verify($old, 'GET', 'https://api.example/resource', AsymmetricJwtAlgorithm::EDDSA, joseReplayStore(), maximumAgeSeconds: 0))
+        ->toThrow(ConfigurationException::class)
+        ->and(fn () => $dpop->verify($future, 'GET', 'https://api.example/resource', AsymmetricJwtAlgorithm::EDDSA, joseReplayStore()))
+        ->toThrow(InvalidTokenException::class)
+        ->and(fn () => $dpop->verify($futureBoundary, 'GET', 'https://api.example/resource', AsymmetricJwtAlgorithm::EDDSA, joseReplayStore(), maximumFutureSkewSeconds: 301))
         ->toThrow(ConfigurationException::class);
+
+    expect($dpop->verify(
+        $futureBoundary,
+        'GET',
+        'https://api.example/resource',
+        AsymmetricJwtAlgorithm::EDDSA,
+        joseReplayStore(),
+    ))->toHaveKey('jti', 'future-boundary');
 });

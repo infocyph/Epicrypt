@@ -4,10 +4,11 @@ declare(strict_types=1);
 
 namespace Infocyph\Epicrypt\Tests\Support;
 
-use Infocyph\Epicrypt\Token\Opaque\RefreshTokenRecord;
-use Infocyph\Epicrypt\Token\Opaque\RefreshTokenGrant;
-use Infocyph\Epicrypt\Token\Opaque\RefreshTokenRotationStatus;
-use Infocyph\Epicrypt\Token\Opaque\RefreshTokenStoreInterface;
+use Infocyph\Epicrypt\Auth\OAuth\RefreshTokenInspectionStatus;
+use Infocyph\Epicrypt\Auth\OAuth\RefreshTokenRecord;
+use Infocyph\Epicrypt\Auth\OAuth\RefreshTokenRotationStatus;
+use Infocyph\Epicrypt\Auth\OAuth\RefreshTokenStoreInterface;
+use InvalidArgumentException;
 
 final class InMemoryRefreshTokenStore implements RefreshTokenStoreInterface
 {
@@ -17,41 +18,74 @@ final class InMemoryRefreshTokenStore implements RefreshTokenStoreInterface
     /** @var array<string, true> */
     private array $revokedFamilies = [];
 
-    public function create(#[\SensitiveParameter] RefreshTokenRecord $record): bool
+    public function __construct(
+        private int $createConflictsRemaining = 0,
+        private int $rotateConflictsRemaining = 0,
+    ) {
+        if ($this->createConflictsRemaining < 0 || $this->rotateConflictsRemaining < 0) {
+            throw new InvalidArgumentException('Refresh-token conflict counts cannot be negative.');
+        }
+    }
+
+    public function create(RefreshTokenRecord $record): bool
     {
-        if (isset($this->records[$record->digest])) {
+        if ($this->createConflictsRemaining > 0) {
+            $this->createConflictsRemaining--;
             return false;
         }
-        $this->records[$record->digest] = ['record' => $record, 'consumed' => false];
+        if (isset($this->records[$record->tokenId])) {
+            return false;
+        }
+        foreach ($this->records as $entry) {
+            if ($entry['record']->familyId === $record->familyId) {
+                return false;
+            }
+        }
+        $this->records[$record->tokenId] = ['record' => $record, 'consumed' => false];
 
         return true;
     }
 
-    public function revokeFamily(string $tokenDigest, int $revokedAt): bool
+    public function inspect(RefreshTokenRecord $record, int $now): RefreshTokenInspectionStatus
     {
-        if ($revokedAt < 1) {
+        $entry = $this->records[$record->tokenId] ?? null;
+        if ($entry === null || !$entry['record']->sameState($record)) {
+            return RefreshTokenInspectionStatus::INVALID;
+        }
+        $stored = $entry['record'];
+        if (isset($this->revokedFamilies[$stored->familyId])) {
+            return RefreshTokenInspectionStatus::REVOKED;
+        }
+        if ($entry['consumed']) {
+            return RefreshTokenInspectionStatus::CONSUMED;
+        }
+        if ($now >= $stored->idleExpiresAt || $now >= $stored->grant->expiresAt) {
+            return RefreshTokenInspectionStatus::EXPIRED;
+        }
+
+        return RefreshTokenInspectionStatus::ACTIVE;
+    }
+
+    public function revokeFamily(string $tokenId, int $revokedAt): bool
+    {
+        if ($revokedAt < 1 || !isset($this->records[$tokenId])) {
             return false;
         }
-        $entry = $this->records[$tokenDigest] ?? null;
-        if ($entry === null) {
-            return false;
-        }
-        $this->revokedFamilies[$entry['record']->familyId] = true;
+        $this->revokedFamilies[$this->records[$tokenId]['record']->familyId] = true;
 
         return true;
     }
 
-    public function revokeGrant(string $grantId, int $revokedAt): int
+    public function revokeAuthorization(string $authorizationId, int $revokedAt): int
     {
         if ($revokedAt < 1) {
             return 0;
         }
         $families = [];
         foreach ($this->records as $entry) {
-            $record = $entry['record'];
-            if ($record->grant->id === $grantId) {
-                $families[$record->familyId] = true;
-                $this->revokedFamilies[$record->familyId] = true;
+            if ($entry['record']->grant->authorizationId === $authorizationId) {
+                $families[$entry['record']->familyId] = true;
+                $this->revokedFamilies[$entry['record']->familyId] = true;
             }
         }
 
@@ -59,76 +93,54 @@ final class InMemoryRefreshTokenStore implements RefreshTokenStoreInterface
     }
 
     public function rotate(
-        string $currentDigest,
-        string $replacementDigest,
+        RefreshTokenRecord $current,
+        RefreshTokenRecord $replacement,
         string $clientId,
         ?string $dpopKeyThumbprint,
-        ?array $requestedScopes,
         int $now,
-        int $idleLifetimeSeconds,
-    ): array {
-        if (isset($this->records[$replacementDigest])) {
-            return self::result(RefreshTokenRotationStatus::CONFLICT);
+    ): RefreshTokenRotationStatus {
+        $entry = $this->records[$current->tokenId] ?? null;
+        if ($entry === null || !$entry['record']->sameState($current)) {
+            return RefreshTokenRotationStatus::INVALID;
         }
-        $entry = $this->records[$currentDigest] ?? null;
-        if ($entry === null) {
-            return self::result(RefreshTokenRotationStatus::INVALID);
-        }
-        $record = $entry['record'];
-        if (isset($this->revokedFamilies[$record->familyId])) {
-            return self::result(RefreshTokenRotationStatus::REVOKED);
+        $stored = $entry['record'];
+        if (isset($this->revokedFamilies[$stored->familyId])) {
+            return RefreshTokenRotationStatus::REVOKED;
         }
         if ($entry['consumed']) {
-            $this->revokedFamilies[$record->familyId] = true;
+            $this->revokedFamilies[$stored->familyId] = true;
+            return RefreshTokenRotationStatus::REUSED;
+        }
+        if ($now >= $stored->idleExpiresAt || $now >= $stored->grant->expiresAt) {
+            return RefreshTokenRotationStatus::EXPIRED;
+        }
+        if (!hash_equals($stored->grant->clientId, $clientId)) {
+            return RefreshTokenRotationStatus::CLIENT_MISMATCH;
+        }
+        if (!self::sameSender($stored->grant->dpopKeyThumbprint, $dpopKeyThumbprint)) {
+            return RefreshTokenRotationStatus::SENDER_MISMATCH;
+        }
+        if ($replacement->familyId !== $stored->familyId
+            || !$stored->grant->sameAuthorization($replacement->grant)
+            || $replacement->issuedAt !== $now
+            || $replacement->idleExpiresAt <= $now
+            || $replacement->idleExpiresAt > $replacement->grant->expiresAt) {
+            return RefreshTokenRotationStatus::INVALID;
+        }
+        if (!$stored->grant->scopesContain($replacement->grant)) {
+            return RefreshTokenRotationStatus::SCOPE_MISMATCH;
+        }
+        if ($this->rotateConflictsRemaining > 0) {
+            $this->rotateConflictsRemaining--;
+            return RefreshTokenRotationStatus::CONFLICT;
+        }
+        if (isset($this->records[$replacement->tokenId])) {
+            return RefreshTokenRotationStatus::CONFLICT;
+        }
 
-            return self::result(RefreshTokenRotationStatus::REUSED);
-        }
-        if ($now >= $record->idleExpiresAt || $now >= $record->grant->expiresAt) {
-            return self::result(RefreshTokenRotationStatus::EXPIRED);
-        }
-        if (!hash_equals($record->grant->clientId, $clientId)) {
-            return self::result(RefreshTokenRotationStatus::CLIENT_MISMATCH);
-        }
-        if (!self::sameSender($record->grant->dpopKeyThumbprint, $dpopKeyThumbprint)) {
-            return self::result(RefreshTokenRotationStatus::SENDER_MISMATCH);
-        }
-        $successorGrant = $record->grant;
-        if ($requestedScopes !== null) {
-            foreach ($requestedScopes as $scope) {
-                if (!in_array($scope, $record->grant->scopes, true)) {
-                    return self::result(RefreshTokenRotationStatus::SCOPE_MISMATCH);
-                }
-            }
-            $successorGrant = new RefreshTokenGrant(
-                $record->grant->id,
-                $record->grant->subject,
-                $record->grant->clientId,
-                $record->grant->audiences,
-                $requestedScopes,
-                $record->grant->expiresAt,
-                $record->grant->dpopKeyThumbprint,
-            );
-        }
-
-        $this->records[$currentDigest]['consumed'] = true;
-        $this->records[$replacementDigest] = [
-            'record' => new RefreshTokenRecord(
-                $replacementDigest,
-                $record->familyId,
-                $successorGrant,
-                $now,
-                min($record->grant->expiresAt, $now + $idleLifetimeSeconds),
-            ),
-            'consumed' => false,
-        ];
-
-        return ['status' => RefreshTokenRotationStatus::ROTATED, 'grant' => $successorGrant];
-    }
-
-    /** @return array{status: RefreshTokenRotationStatus, grant: null} */
-    private static function result(RefreshTokenRotationStatus $status): array
-    {
-        return ['status' => $status, 'grant' => null];
+        $this->records[$current->tokenId]['consumed'] = true;
+        $this->records[$replacement->tokenId] = ['record' => $replacement, 'consumed' => false];
+        return RefreshTokenRotationStatus::ROTATED;
     }
 
     private static function sameSender(?string $expected, ?string $actual): bool
@@ -136,7 +148,6 @@ final class InMemoryRefreshTokenStore implements RefreshTokenStoreInterface
         if ($expected === null || $actual === null) {
             return $expected === $actual;
         }
-
         return hash_equals($expected, $actual);
     }
 }

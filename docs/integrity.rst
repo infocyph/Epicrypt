@@ -100,7 +100,10 @@ bytes received from the transport.
        throw new RuntimeException('Webhook authentication failed.');
    }
 
-``FileHasher`` streams through Pathwise's reader abstraction, including
-configured mounted filesystems. ``StringHasher`` and ``FileHasher`` accept
-BLAKE2b output lengths from 16 through 64 bytes; malformed digests return
-``false`` from ``verify()``.
+``FileHasher`` is stream-native. Local-path helpers open local files and use the
+same bounded streaming core; for remote or application-owned storage, open the
+resource in the storage layer and pass the stream to Epicrypt. Epicrypt 3 has no
+production Pathwise dependency or global mount/path registry.
+
+``StringHasher`` and ``FileHasher`` accept BLAKE2b output lengths from 16
+through 64 bytes; malformed digests return ``false`` from ``verify()``.

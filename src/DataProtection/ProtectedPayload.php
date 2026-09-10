@@ -16,6 +16,12 @@ final class ProtectedPayload
 {
     public const string PREFIX = 'ep2';
 
+    private const int MAX_HEADER_SEGMENT_BYTES = 32 * 1024;
+
+    private const int MAX_PAYLOAD_BYTES = 24 * 1024 * 1024;
+
+    private const int MAX_PLAINTEXT_BYTES = 16 * 1024 * 1024;
+
     private const int VERSION = 2;
 
     public static function decrypt(
@@ -28,6 +34,7 @@ final class ProtectedPayload
         ProtectionAlgorithm $algorithm,
     ): ProtectionResult {
         self::assertKey($key, $algorithm);
+        self::assertProtectedPayloadSize($payload);
 
         try {
             $parts = explode('.', $payload);
@@ -52,6 +59,9 @@ final class ProtectedPayload
             );
             if ($plaintext === false) {
                 throw new DecryptionException('Epicrypt 2.0 payload authentication failed.');
+            }
+            if (strlen($plaintext) > self::MAX_PLAINTEXT_BYTES) {
+                throw new DecryptionException('Epicrypt 2.0 plaintext exceeds the protected-value size bound.');
             }
 
             return new ProtectionResult(
@@ -79,6 +89,9 @@ final class ProtectedPayload
         ProtectionAlgorithm $algorithm,
     ): ProtectionResult {
         self::assertKey($key, $algorithm);
+        if (strlen($plaintext) > self::MAX_PLAINTEXT_BYTES) {
+            throw new EncryptionException('Protected plaintext exceeds the 16 MiB protected-value size bound.');
+        }
 
         $header = [
             'v' => self::VERSION,
@@ -90,6 +103,9 @@ final class ProtectedPayload
             'aad' => Base64Url::encode($options->additionalAuthenticatedData),
         ];
         $encodedHeader = Base64Url::encode(Json::encode($header));
+        if (strlen($encodedHeader) > self::MAX_HEADER_SEGMENT_BYTES) {
+            throw new EncryptionException('Protected metadata exceeds the encoded header size bound.');
+        }
         $nonce = random_bytes($algorithm->nonceLength());
         $ciphertext = self::runRawOperation(
             $plaintext,
@@ -103,13 +119,18 @@ final class ProtectedPayload
             throw new EncryptionException('Epicrypt 2.0 payload encryption failed.');
         }
 
+        $payload = implode('.', [
+            self::PREFIX,
+            $encodedHeader,
+            Base64Url::encode($nonce),
+            Base64Url::encode($ciphertext),
+        ]);
+        if (strlen($payload) > self::MAX_PAYLOAD_BYTES) {
+            throw new EncryptionException('Protected payload exceeds the encoded size bound.');
+        }
+
         return new ProtectionResult(
-            value: implode('.', [
-                self::PREFIX,
-                $encodedHeader,
-                Base64Url::encode($nonce),
-                Base64Url::encode($ciphertext),
-            ]),
+            value: $payload,
             domain: $domain,
             purpose: $options->purpose,
             createdAt: $createdAt,
@@ -123,6 +144,7 @@ final class ProtectedPayload
         ProtectionOptions $options,
         ProtectionAlgorithm $algorithm,
     ): ?string {
+        self::assertProtectedPayloadSize($payload);
         $parts = explode('.', $payload);
         if (count($parts) !== 4 || $parts[0] !== self::PREFIX) {
             throw new DecryptionException('Invalid Epicrypt 2.0 protected payload framing.');
@@ -141,6 +163,13 @@ final class ProtectedPayload
         }
     }
 
+    private static function assertProtectedPayloadSize(#[\SensitiveParameter] string $payload): void
+    {
+        if ($payload === '' || strlen($payload) > self::MAX_PAYLOAD_BYTES) {
+            throw new DecryptionException('Protected payload is empty or exceeds the 24 MiB encoded size bound.');
+        }
+    }
+
     /**
      * @return array{v: int, domain: string, alg: string, kid: ?string, purpose: string, created_at: int, aad: string}
      */
@@ -150,6 +179,9 @@ final class ProtectedPayload
         ProtectionOptions $options,
         ProtectionAlgorithm $algorithm,
     ): array {
+        if ($encodedHeader === '' || strlen($encodedHeader) > self::MAX_HEADER_SEGMENT_BYTES) {
+            throw new DecryptionException('Invalid Epicrypt 2.0 protected header size.');
+        }
         $header = Json::decodeToArray(Base64Url::decode($encodedHeader));
         $expectedKeys = ['aad', 'alg', 'created_at', 'domain', 'kid', 'purpose', 'v'];
         $keys = array_keys($header);

@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace Infocyph\Epicrypt\Token\Jwt\Support;
 
 use Infocyph\Epicrypt\Exception\Token\KeyResolutionException;
+use Infocyph\Epicrypt\Token\Jwt\RemoteJoseHostResolverInterface;
 use Psr\Http\Client\ClientExceptionInterface;
 use Psr\Http\Client\ClientInterface;
 use Psr\Http\Message\RequestFactoryInterface;
+use Throwable;
 
 /** @internal Bounded PSR-18 JSON resource boundary. */
 final readonly class RemoteJoseResource
@@ -16,11 +18,15 @@ final readonly class RemoteJoseResource
         private ClientInterface $client,
         private RequestFactoryInterface $requestFactory,
         private int $maximumBytes,
+        private int $maximumKeys,
+        private RemoteJoseHostResolverInterface $hostResolver,
     ) {}
 
     /** @return array{array<string, mixed>, array{maxAge: int|null, noStore: bool, noCache: bool}} */
     public function fetch(string $uri, bool $jwks = false): array
     {
+        $this->assertPublicTarget($uri);
+
         try {
             $request = $this->requestFactory->createRequest('GET', $uri)
                 ->withHeader('Accept', $jwks ? 'application/jwk-set+json, application/json' : 'application/json');
@@ -47,27 +53,39 @@ final readonly class RemoteJoseResource
                 throw new KeyResolutionException('Remote JOSE response exceeds the configured size bound.');
             }
         }
-        $this->assertJsonDepth($json, 16);
 
-        return [JwtToken::decodeJsonObject($json, 'remote JOSE document'), $this->cachePolicy($response->getHeaderLine('Cache-Control'))];
+        $maximumMembers = $jwks
+            ? 1 + ($this->maximumKeys * (JosePolicy::MAX_JWK_MEMBERS + 1))
+            : JosePolicy::MAX_DOCUMENT_MEMBERS;
+
+        return [
+            JwtToken::decodeJsonObject($json, 'remote JOSE document', $this->maximumBytes, $maximumMembers),
+            $this->cachePolicy($response->getHeaderLine('Cache-Control')),
+        ];
     }
 
-    private function assertJsonDepth(string $json, int $maximum): void
+    private function assertPublicTarget(string $uri): void
     {
-        $depth = 0;
-        for ($offset = 0, $length = strlen($json); $offset < $length; $offset++) {
-            $character = $json[$offset];
-            if ($character === '"') {
-                $offset = $this->stringEnd($json, $offset + 1);
+        $host = parse_url($uri, PHP_URL_HOST);
+        if (!is_string($host) || $host === '') {
+            throw new KeyResolutionException('Remote JOSE target host is invalid.');
+        }
+        $host = strtolower(trim($host, '[]'));
 
-                continue;
-            }
-            if ($character === '{' || $character === '[') {
-                if (++$depth > $maximum) {
-                    throw new KeyResolutionException('Remote JOSE JSON exceeds the configured depth bound.');
-                }
-            } elseif ($character === '}' || $character === ']') {
-                $depth--;
+        try {
+            $addresses = filter_var($host, FILTER_VALIDATE_IP) !== false
+                ? [$host]
+                : $this->hostResolver->resolve($host);
+        } catch (Throwable $exception) {
+            throw new KeyResolutionException('Remote JOSE host resolution failed.', 0, $exception);
+        }
+
+        if ($addresses === []) {
+            throw new KeyResolutionException('Remote JOSE host did not resolve to an allowed address.');
+        }
+        foreach ($addresses as $address) {
+            if (!$this->isPublicAddress($address)) {
+                throw new KeyResolutionException('Remote JOSE host resolved to a disallowed address.');
             }
         }
     }
@@ -86,16 +104,25 @@ final readonly class RemoteJoseResource
         ];
     }
 
-    private function stringEnd(string $json, int $offset): int
+    private function isPublicAddress(string $address): bool
     {
-        for ($length = strlen($json); $offset < $length; $offset++) {
-            if ($json[$offset] === '\\') {
-                $offset++;
-            } elseif ($json[$offset] === '"') {
-                return $offset;
-            }
+        if (filter_var($address, FILTER_VALIDATE_IP) === false) {
+            return false;
         }
 
-        throw new KeyResolutionException('Remote JOSE JSON contains an unterminated string.');
+        $packed = inet_pton($address);
+        if (is_string($packed)
+            && strlen($packed) === 16
+            && substr($packed, 0, 12) === str_repeat("\0", 10) . "\xff\xff") {
+            $mapped = inet_ntop(substr($packed, 12, 4));
+
+            return is_string($mapped) && $this->isPublicAddress($mapped);
+        }
+
+        return filter_var(
+            $address,
+            FILTER_VALIDATE_IP,
+            FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE,
+        ) !== false;
     }
 }

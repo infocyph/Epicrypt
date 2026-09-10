@@ -8,15 +8,14 @@ use Infocyph\Epicrypt\Exception\ConfigurationException;
 use Infocyph\Epicrypt\Internal\Base64Url;
 use Infocyph\Epicrypt\Internal\Clock\SystemClock;
 use Infocyph\Epicrypt\Internal\EcdsaSignatureConverter;
-use Infocyph\Epicrypt\Security\KeyPurpose;
 use Infocyph\Epicrypt\Security\KeyRing;
 use Infocyph\Epicrypt\Token\Jwt\Enum\AsymmetricJwtAlgorithm;
 use Infocyph\Epicrypt\Token\Jwt\Support\JwtToken;
 use OpenSSLAsymmetricKey;
-use phpseclib3\Crypt\PublicKeyLoader;
-use phpseclib3\Crypt\RSA;
-use phpseclib3\Crypt\RSA\PrivateKey as RsaPrivateKey;
-use phpseclib3\Crypt\RSA\PublicKey as RsaPublicKey;
+use phpseclib4\Crypt\PublicKeyLoader;
+use phpseclib4\Crypt\RSA;
+use phpseclib4\Crypt\RSA\PrivateKey as RsaPrivateKey;
+use phpseclib4\Crypt\RSA\PublicKey as RsaPublicKey;
 use Psr\Clock\ClockInterface;
 use Throwable;
 
@@ -153,24 +152,13 @@ final readonly class AsymmetricJwt
         #[\SensitiveParameter]
         RsaPrivateKey|RsaPublicKey $key,
     ): RsaPrivateKey|RsaPublicKey {
-        $configured = $key->withPadding(RSA::SIGNATURE_PSS);
-        if (!$configured instanceof RsaPrivateKey && !$configured instanceof RsaPublicKey) {
-            throw new ConfigurationException('Unable to configure RSA-PSS padding.');
-        }
-        $configured = $configured->withHash($this->algorithm->hashAlgorithm());
-        if (!$configured instanceof RsaPrivateKey && !$configured instanceof RsaPublicKey) {
-            throw new ConfigurationException('Unable to configure RSA-PSS hash.');
-        }
-        $configured = $configured->withMGFHash($this->algorithm->hashAlgorithm());
-        if (!$configured instanceof RsaPrivateKey && !$configured instanceof RsaPublicKey) {
-            throw new ConfigurationException('Unable to configure RSA-PSS MGF hash.');
-        }
-        $configured = $configured->withSaltLength(strlen(hash($this->algorithm->hashAlgorithm(), '', true)));
-        if (!$configured instanceof RsaPrivateKey && !$configured instanceof RsaPublicKey) {
-            throw new ConfigurationException('Unable to configure RSA-PSS salt length.');
-        }
+        $hash = $this->algorithm->hashAlgorithm();
 
-        return $configured;
+        return $key
+            ->withPadding(RSA::SIGNATURE_PSS)
+            ->withHash($hash)
+            ->withMGFHash($hash)
+            ->withSaltLength(strlen(hash($hash, '', true)));
     }
 
     /** @return non-empty-string */
@@ -221,11 +209,16 @@ final readonly class AsymmetricJwt
             return [null, null, JwtFailureReason::UNKNOWN_KEY];
         }
 
+        $policy = $this->policy;
+        if (!$policy instanceof JwtPolicy) {
+            return [null, null, JwtFailureReason::KEY_NOT_USABLE];
+        }
+
         $entry = $this->key->resolveForVerification(
             $keyId,
-            KeyPurpose::JWT_SIGNING,
+            $policy->keyPurpose,
             $this->algorithm->value,
-            $this->policy?->expectedIssuer,
+            $policy->expectedIssuer,
         );
 
         return $entry !== null
@@ -235,34 +228,36 @@ final readonly class AsymmetricJwt
 
     private function rsaPssPrivateKey(#[\SensitiveParameter] string $key): RsaPrivateKey
     {
-        $resource = openssl_pkey_get_private($key, $this->passphrase ?? '');
-        if (!$resource instanceof OpenSSLAsymmetricKey || !openssl_pkey_export($resource, $normalizedKey) || !is_string($normalizedKey)) {
-            throw new ConfigurationException('Unable to normalize RSA-PSS private key material.');
+        try {
+            $loaded = PublicKeyLoader::loadPrivateKey($key, $this->passphrase);
+        } catch (Throwable $exception) {
+            throw new ConfigurationException('Unable to load RSA-PSS private key material.', 0, $exception);
         }
-        $loaded = PublicKeyLoader::loadPrivateKey($normalizedKey);
         if (!$loaded instanceof RsaPrivateKey) {
             throw new ConfigurationException('RSA-PSS signing requires an RSA private key.');
         }
         $configured = $this->configureRsaPss($loaded);
-        if (!$configured instanceof RsaPrivateKey) {
-            throw new ConfigurationException('Unable to configure RSA-PSS private key.');
-        }
 
-        return $configured;
+        return $configured instanceof RsaPrivateKey
+            ? $configured
+            : throw new ConfigurationException('Unable to configure RSA-PSS private key.');
     }
 
     private function rsaPssPublicKey(string $key): RsaPublicKey
     {
-        $loaded = PublicKeyLoader::loadPublicKey($key);
+        try {
+            $loaded = PublicKeyLoader::loadPublicKey($key);
+        } catch (Throwable $exception) {
+            throw new ConfigurationException('Unable to load RSA-PSS public key material.', 0, $exception);
+        }
         if (!$loaded instanceof RsaPublicKey) {
             throw new ConfigurationException('RSA-PSS verification requires an RSA public key.');
         }
         $configured = $this->configureRsaPss($loaded);
-        if (!$configured instanceof RsaPublicKey) {
-            throw new ConfigurationException('Unable to configure RSA-PSS public key.');
-        }
 
-        return $configured;
+        return $configured instanceof RsaPublicKey
+            ? $configured
+            : throw new ConfigurationException('Unable to configure RSA-PSS public key.');
     }
 
     private function sign(#[\SensitiveParameter] string $input, #[\SensitiveParameter] string $privateKey): string
@@ -271,7 +266,12 @@ final readonly class AsymmetricJwt
             return sodium_crypto_sign_detached($input, $this->edDsaKey($privateKey, true));
         }
         if ($this->algorithm->isRsaPss()) {
-            return $this->rsaPssPrivateKey($privateKey)->sign($input);
+            $signature = $this->rsaPssPrivateKey($privateKey)->sign($input);
+            if (!is_string($signature)) {
+                throw new ConfigurationException('RSA-PSS signing returned an unsupported signature representation.');
+            }
+
+            return $signature;
         }
 
         $key = $this->loadAndValidateKey($privateKey, true);

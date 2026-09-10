@@ -16,7 +16,7 @@ enum SymmetricJwtAlgorithm: string
 
     public static function fromHeader(string $algorithm): self
     {
-        $resolved = self::tryFrom(strtoupper($algorithm));
+        $resolved = self::tryFrom($algorithm);
         if ($resolved === null) {
             throw new UnsupportedAlgorithmException('Unsupported symmetric JWT algorithm: ' . $algorithm);
         }
@@ -30,6 +30,15 @@ enum SymmetricJwtAlgorithm: string
             self::HS256 => 'sha256',
             self::HS384 => 'sha384',
             self::HS512 => 'sha512',
+        };
+    }
+
+    public function minimumKeyBytes(): int
+    {
+        return match ($this) {
+            self::HS256 => 32,
+            self::HS384 => 48,
+            self::HS512 => 64,
         };
     }
 }

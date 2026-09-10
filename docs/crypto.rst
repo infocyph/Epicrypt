@@ -224,9 +224,10 @@ files because it also authenticates purpose, AAD, key ID, and framing metadata.
    declare(strict_types=1);
 
    use Infocyph\Epicrypt\Crypto\SecretStream;
+   use Infocyph\Epicrypt\Generate\KeyMaterial\Enum\KeyMaterialEncoding;
    use Infocyph\Epicrypt\Generate\KeyMaterial\KeyMaterialGenerator;
 
-   $binaryKey = new KeyMaterialGenerator()->forSecretStream(asBase64Url: false);
+   $binaryKey = new KeyMaterialGenerator()->forSecretStream(KeyMaterialEncoding::RAW);
    $stream = new SecretStream($binaryKey, additionalData: 'video-export/v1');
    $stream->encrypt('/exports/video.mp4', '/exports/video.mp4.encrypted');
    $stream->decrypt('/exports/video.mp4.encrypted', '/restore/video.mp4');

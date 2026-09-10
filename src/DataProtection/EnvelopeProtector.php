@@ -6,6 +6,7 @@ namespace Infocyph\Epicrypt\DataProtection;
 
 use Infocyph\Epicrypt\Exception\ConfigurationException;
 use Infocyph\Epicrypt\Exception\Crypto\DecryptionException;
+use Infocyph\Epicrypt\Exception\Crypto\EncryptionException;
 use Infocyph\Epicrypt\Internal\Base64Url;
 use Infocyph\Epicrypt\Internal\Clock\SystemClock;
 use Infocyph\Epicrypt\Internal\Json;
@@ -19,6 +20,8 @@ final readonly class EnvelopeProtector
     private const string CONTENT_DOMAIN = 'envelope-content';
 
     private const string DOMAIN = 'envelope';
+
+    private const int MAX_PLAINTEXT_BYTES = 8 * 1024 * 1024;
 
     public function __construct(
         private ClockInterface $clock = new SystemClock(),
@@ -65,6 +68,10 @@ final readonly class EnvelopeProtector
         string $masterKey,
         ProtectionOptions $options,
     ): ProtectionResult {
+        if (strlen($plaintext) > self::MAX_PLAINTEXT_BYTES) {
+            throw new EncryptionException('Envelope plaintext exceeds the 8 MiB protected-value size bound.');
+        }
+
         $createdAt = $this->clock->now()->getTimestamp();
         $dataKey = random_bytes($this->algorithm->keyLength());
         $contentOptions = new ProtectionOptions(
@@ -162,7 +169,7 @@ final readonly class EnvelopeProtector
         $dataKey = Base64Url::decode($encodedDataKey);
 
         try {
-            return ProtectedPayload::decrypt(
+            $result = ProtectedPayload::decrypt(
                 $protectedContent,
                 $dataKey,
                 self::CONTENT_DOMAIN,
@@ -172,6 +179,11 @@ final readonly class EnvelopeProtector
                 ),
                 $this->algorithm,
             );
+            if (strlen($result->value) > self::MAX_PLAINTEXT_BYTES) {
+                throw new DecryptionException('Envelope plaintext exceeds the 8 MiB protected-value size bound.');
+            }
+
+            return $result;
         } finally {
             sodium_memzero($dataKey);
         }

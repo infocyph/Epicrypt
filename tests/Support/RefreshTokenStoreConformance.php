@@ -4,19 +4,12 @@ declare(strict_types=1);
 
 namespace Infocyph\Epicrypt\Tests\Support;
 
-use Infocyph\Epicrypt\Token\Opaque\RefreshTokenGrant;
-use Infocyph\Epicrypt\Token\Opaque\RefreshTokenRecord;
-use Infocyph\Epicrypt\Token\Opaque\RefreshTokenRotationStatus;
-use Infocyph\Epicrypt\Token\Opaque\RefreshTokenStoreInterface;
+use Infocyph\Epicrypt\Auth\OAuth\RefreshTokenGrant;
+use Infocyph\Epicrypt\Auth\OAuth\RefreshTokenRecord;
+use Infocyph\Epicrypt\Auth\OAuth\RefreshTokenRotationStatus;
+use Infocyph\Epicrypt\Auth\OAuth\RefreshTokenStoreInterface;
 use PHPUnit\Framework\Assert;
 
-/**
- * Reusable contract checks for application RefreshTokenStoreInterface adapters.
- *
- * Extend this class in the adapter's integration-test suite and return a fresh,
- * transaction-capable store from newStore(). Run the suite against the real
- * database engine used in production.
- */
 abstract class RefreshTokenStoreConformance
 {
     abstract protected function newStore(): RefreshTokenStoreInterface;
@@ -27,44 +20,37 @@ abstract class RefreshTokenStoreConformance
         $this->assertAtomicRotationAndReuse();
         $this->assertBindingsAndScopeDoNotConsume();
         $this->assertExpirationAndRevocation();
+        $this->assertExactReplacementState();
     }
 
     private function assertCreationAndConflict(): void
     {
         $store = $this->newStore();
         $current = $this->record('current', 'family-a');
+        $sameFamily = $this->record('same-family', 'family-a');
         $collision = $this->record('collision', 'family-b');
         Assert::assertTrue($store->create($current));
         Assert::assertFalse($store->create($current));
+        Assert::assertFalse($store->create($sameFamily));
         Assert::assertTrue($store->create($collision));
-        Assert::assertSame(
-            RefreshTokenRotationStatus::CONFLICT,
-            $store->rotate($current->digest, $collision->digest, 'client', str_repeat('A', 43), null, 1_700_000_100, 600)['status'],
-        );
-        Assert::assertSame(
-            RefreshTokenRotationStatus::ROTATED,
-            $store->rotate($current->digest, hash('sha256', 'successor'), 'client', str_repeat('A', 43), null, 1_700_000_100, 600)['status'],
-        );
+
+        $collisionReplacement = $this->replacement($current, tokenId: $collision->tokenId, now: 1_700_000_100);
+        Assert::assertSame(RefreshTokenRotationStatus::CONFLICT, $store->rotate($current, $collisionReplacement, 'client', str_repeat('A', 43), 1_700_000_100));
+        $successor = $this->replacement($current, 'successor', 1_700_000_100);
+        Assert::assertSame(RefreshTokenRotationStatus::ROTATED, $store->rotate($current, $successor, 'client', str_repeat('A', 43), 1_700_000_100));
     }
 
     private function assertAtomicRotationAndReuse(): void
     {
         $store = $this->newStore();
         $current = $this->record('atomic-current', 'family-c');
-        $successorDigest = hash('sha256', 'atomic-successor');
         Assert::assertTrue($store->create($current));
-        Assert::assertSame(
-            RefreshTokenRotationStatus::ROTATED,
-            $store->rotate($current->digest, $successorDigest, 'client', str_repeat('A', 43), ['read'], 1_700_000_100, 600)['status'],
-        );
-        Assert::assertSame(
-            RefreshTokenRotationStatus::REUSED,
-            $store->rotate($current->digest, hash('sha256', 'losing-successor'), 'client', str_repeat('A', 43), null, 1_700_000_100, 600)['status'],
-        );
-        Assert::assertSame(
-            RefreshTokenRotationStatus::REVOKED,
-            $store->rotate($successorDigest, hash('sha256', 'after-reuse'), 'client', str_repeat('A', 43), null, 1_700_000_100, 600)['status'],
-        );
+        $successor = $this->replacement($current, 'atomic-successor', 1_700_000_100, ['read']);
+        Assert::assertSame(RefreshTokenRotationStatus::ROTATED, $store->rotate($current, $successor, 'client', str_repeat('A', 43), 1_700_000_100));
+        $losing = $this->replacement($current, 'losing-successor', 1_700_000_101);
+        Assert::assertSame(RefreshTokenRotationStatus::REUSED, $store->rotate($current, $losing, 'client', str_repeat('A', 43), 1_700_000_101));
+        $afterReuse = $this->replacement($successor, 'after-reuse', 1_700_000_102);
+        Assert::assertSame(RefreshTokenRotationStatus::REVOKED, $store->rotate($successor, $afterReuse, 'client', str_repeat('A', 43), 1_700_000_102));
     }
 
     private function assertBindingsAndScopeDoNotConsume(): void
@@ -72,33 +58,19 @@ abstract class RefreshTokenStoreConformance
         $store = $this->newStore();
         $current = $this->record('binding-current', 'family-d');
         Assert::assertTrue($store->create($current));
-        foreach ([
-            [
-                $store->rotate($current->digest, hash('sha256', 'client-mismatch'), 'other', str_repeat('A', 43), null, 1_700_000_100, 600)['status'],
-                RefreshTokenRotationStatus::CLIENT_MISMATCH,
-            ],
-            [
-                $store->rotate($current->digest, hash('sha256', 'sender-mismatch'), 'client', str_repeat('B', 43), null, 1_700_000_100, 600)['status'],
-                RefreshTokenRotationStatus::SENDER_MISMATCH,
-            ],
-            [
-                $store->rotate($current->digest, hash('sha256', 'scope-expansion'), 'client', str_repeat('A', 43), ['admin'], 1_700_000_100, 600)['status'],
-                RefreshTokenRotationStatus::SCOPE_MISMATCH,
-            ],
-        ] as [$actual, $expected]) {
-            Assert::assertSame($expected, $actual);
-        }
-        $result = $store->rotate(
-            $current->digest,
-            hash('sha256', 'narrowed'),
-            'client',
-            str_repeat('A', 43),
-            ['read'],
-            1_700_000_100,
-            600,
+        Assert::assertSame(RefreshTokenRotationStatus::CLIENT_MISMATCH, $store->rotate($current, $this->replacement($current, 'client-mismatch', 1_700_000_100), 'other', str_repeat('A', 43), 1_700_000_100));
+        Assert::assertSame(RefreshTokenRotationStatus::SENDER_MISMATCH, $store->rotate($current, $this->replacement($current, 'sender-mismatch', 1_700_000_100), 'client', str_repeat('B', 43), 1_700_000_100));
+
+        $expandedGrant = new RefreshTokenGrant(
+            $current->grant->authorizationId, $current->grant->subject, $current->grant->clientId,
+            $current->grant->audiences, ['admin'], $current->grant->expiresAt, $current->grant->dpopKeyThumbprint,
         );
-        Assert::assertSame(RefreshTokenRotationStatus::ROTATED, $result['status']);
-        Assert::assertSame(['read'], $result['grant']?->scopes);
+        $expanded = new RefreshTokenRecord($this->tokenId('scope-expansion'), $current->familyId, $expandedGrant, 1_700_000_100, 1_700_000_700);
+        Assert::assertSame(RefreshTokenRotationStatus::SCOPE_MISMATCH, $store->rotate($current, $expanded, 'client', str_repeat('A', 43), 1_700_000_100));
+
+        $narrowed = $this->replacement($current, 'narrowed', 1_700_000_100, ['read']);
+        Assert::assertSame(RefreshTokenRotationStatus::ROTATED, $store->rotate($current, $narrowed, 'client', str_repeat('A', 43), 1_700_000_100));
+        Assert::assertSame(['read'], $narrowed->grant->scopes);
     }
 
     private function assertExpirationAndRevocation(): void
@@ -106,46 +78,55 @@ abstract class RefreshTokenStoreConformance
         $idleStore = $this->newStore();
         $idle = $this->record('idle', 'family-e', idleExpiresAt: 1_700_000_100);
         Assert::assertTrue($idleStore->create($idle));
-        Assert::assertSame(
-            RefreshTokenRotationStatus::EXPIRED,
-            $idleStore->rotate($idle->digest, hash('sha256', 'idle-next'), 'client', str_repeat('A', 43), null, 1_700_000_100, 600)['status'],
-        );
+        Assert::assertSame(RefreshTokenRotationStatus::EXPIRED, $idleStore->rotate($idle, $this->replacement($idle, 'idle-next', 1_700_000_100), 'client', str_repeat('A', 43), 1_700_000_100));
 
         $familyStore = $this->newStore();
         $family = $this->record('family', 'family-f');
         Assert::assertTrue($familyStore->create($family));
-        Assert::assertTrue($familyStore->revokeFamily($family->digest, 1_700_000_100));
-        Assert::assertSame(
-            RefreshTokenRotationStatus::REVOKED,
-            $familyStore->rotate($family->digest, hash('sha256', 'family-next'), 'client', str_repeat('A', 43), null, 1_700_000_100, 600)['status'],
-        );
+        Assert::assertTrue($familyStore->revokeFamily($family->tokenId, 1_700_000_100));
+        Assert::assertSame(RefreshTokenRotationStatus::REVOKED, $familyStore->rotate($family, $this->replacement($family, 'family-next', 1_700_000_100), 'client', str_repeat('A', 43), 1_700_000_100));
 
-        $grantStore = $this->newStore();
-        $grant = $this->record('grant', 'family-g');
-        Assert::assertTrue($grantStore->create($grant));
-        Assert::assertSame(1, $grantStore->revokeGrant('grant-1', 1_700_000_100));
-        Assert::assertSame(
-            RefreshTokenRotationStatus::REVOKED,
-            $grantStore->rotate($grant->digest, hash('sha256', 'grant-next'), 'client', str_repeat('A', 43), null, 1_700_000_100, 600)['status'],
-        );
+        $authorizationStore = $this->newStore();
+        $authorization = $this->record('authorization', 'family-g');
+        Assert::assertTrue($authorizationStore->create($authorization));
+        Assert::assertSame(1, $authorizationStore->revokeAuthorization('authorization-1', 1_700_000_100));
+        Assert::assertSame(RefreshTokenRotationStatus::REVOKED, $authorizationStore->rotate($authorization, $this->replacement($authorization, 'authorization-next', 1_700_000_100), 'client', str_repeat('A', 43), 1_700_000_100));
+    }
+
+    private function assertExactReplacementState(): void
+    {
+        $store = $this->newStore();
+        $current = $this->record('exact-current', 'family-h');
+        Assert::assertTrue($store->create($current));
+        $wrongFamily = new RefreshTokenRecord($this->tokenId('wrong-family'), $this->familyId('different-family'), $current->grant, 1_700_000_100, 1_700_000_700);
+        Assert::assertSame(RefreshTokenRotationStatus::INVALID, $store->rotate($current, $wrongFamily, 'client', str_repeat('A', 43), 1_700_000_100));
+        $valid = $this->replacement($current, 'exact-successor', 1_700_000_100);
+        Assert::assertSame(RefreshTokenRotationStatus::ROTATED, $store->rotate($current, $valid, 'client', str_repeat('A', 43), 1_700_000_100));
     }
 
     private function record(string $seed, string $familySeed, int $idleExpiresAt = 1_700_001_000): RefreshTokenRecord
     {
         return new RefreshTokenRecord(
-            hash('sha256', $seed),
-            substr(sodium_bin2base64(hash('sha256', $familySeed, true), SODIUM_BASE64_VARIANT_URLSAFE_NO_PADDING), 0, 43),
-            new RefreshTokenGrant(
-                'grant-1',
-                'subject',
-                'client',
-                ['api'],
-                ['read', 'write'],
-                1_700_002_000,
-                str_repeat('A', 43),
-            ),
-            1_700_000_000,
-            $idleExpiresAt,
+            $this->tokenId($seed), $this->familyId($familySeed),
+            new RefreshTokenGrant('authorization-1', 'subject', 'client', ['api'], ['read', 'write'], 1_700_002_000, str_repeat('A', 43)),
+            1_700_000_000, $idleExpiresAt,
         );
+    }
+
+    /** @param null|list<string> $scopes */
+    private function replacement(RefreshTokenRecord $current, string $seed = 'replacement', int $now = 1_700_000_100, ?array $scopes = null, ?string $tokenId = null): RefreshTokenRecord
+    {
+        $grant = $scopes === null ? $current->grant : $current->grant->withScopes($scopes);
+        return new RefreshTokenRecord($tokenId ?? $this->tokenId($seed), $current->familyId, $grant, $now, min($grant->expiresAt, $now + 600));
+    }
+
+    private function familyId(string $seed): string
+    {
+        return sodium_bin2base64(hash('sha256', $seed, true), SODIUM_BASE64_VARIANT_URLSAFE_NO_PADDING);
+    }
+
+    private function tokenId(string $seed): string
+    {
+        return sodium_bin2base64(substr(hash('sha256', $seed, true), 0, 24), SODIUM_BASE64_VARIANT_URLSAFE_NO_PADDING);
     }
 }

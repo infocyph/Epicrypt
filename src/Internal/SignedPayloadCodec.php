@@ -6,6 +6,9 @@ namespace Infocyph\Epicrypt\Internal;
 
 use Infocyph\Epicrypt\Exception\Token\ExpiredTokenException;
 use Infocyph\Epicrypt\Exception\Token\InvalidTokenException;
+use Infocyph\Epicrypt\Exception\Token\NotYetValidTokenException;
+use Infocyph\Epicrypt\Exception\Token\UnsupportedTokenFormatException;
+use Infocyph\Epicrypt\Exception\Token\WrongTokenContextException;
 use Infocyph\Epicrypt\Internal\Clock\SystemClock;
 use Infocyph\Epicrypt\Internal\Enum\SignedPayloadAlgorithm;
 use Infocyph\Epicrypt\Internal\Enum\SignedPayloadVersion;
@@ -25,6 +28,28 @@ final readonly class SignedPayloadCodec
         private ClockInterface $clock = new SystemClock(),
     ) {
         SecurityPolicy::assertHmacSecret($this->secret, 'Signed payload secret');
+    }
+
+    /**
+     * Decode the payload segment without authenticating it.
+     *
+     * The returned data is untrusted and may only be used to select a candidate
+     * verification key. Call verify() before trusting any value.
+     *
+     * @return array<string, mixed>
+     */
+    public static function unverifiedPayload(#[\SensitiveParameter] string $token): array
+    {
+        if (strlen($token) > self::MAX_TOKEN_BYTES) {
+            throw new InvalidTokenException('Signed payload exceeds the maximum encoded size.');
+        }
+
+        $parts = explode('.', $token, 3);
+        if (count($parts) !== 3 || $parts[0] === '' || $parts[1] === '' || $parts[2] === '') {
+            throw new InvalidTokenException('Invalid signed payload format.');
+        }
+
+        return Json::decodeToArray(Base64Url::decode($parts[1]));
     }
 
     /**
@@ -135,12 +160,16 @@ final readonly class SignedPayloadCodec
         $expectedKeys = $expectedType === null ? ['alg', 'typ', 'v'] : ['alg', 'ctx', 'typ', 'v'];
         $actualKeys = array_keys($header);
         sort($actualKeys);
-        if ($actualKeys !== $expectedKeys
-            || $header['v'] !== SignedPayloadVersion::V2->value
-            || $header['typ'] !== 'SPT'
-            || $header['alg'] !== strtoupper($this->algorithm->value)
-            || ($expectedType !== null && $header['ctx'] !== $expectedType)) {
+        if ($actualKeys !== $expectedKeys) {
             throw new InvalidTokenException('Invalid signed payload header.');
+        }
+        if ($header['v'] !== SignedPayloadVersion::V2->value
+            || $header['typ'] !== 'SPT'
+            || $header['alg'] !== strtoupper($this->algorithm->value)) {
+            throw new UnsupportedTokenFormatException('Unsupported signed payload format.');
+        }
+        if ($expectedType !== null && $header['ctx'] !== $expectedType) {
+            throw new WrongTokenContextException('Signed payload context does not match the expected context.');
         }
     }
 
@@ -155,7 +184,7 @@ final readonly class SignedPayloadCodec
         $expiresAt = $this->integerClaim($payload, 'exp');
 
         if ($notBefore !== null && $now < $notBefore) {
-            throw new InvalidTokenException('Token is not yet valid.');
+            throw new NotYetValidTokenException('Token is not yet valid.');
         }
 
         if ($expiresAt !== null && $now >= $expiresAt) {

@@ -12,5 +12,8 @@ final readonly class SignedUrlVerificationResult
         public bool $invalidSignature = false,
         public ?int $expiresAt = null,
         public ?int $version = null,
+        public ?string $matchedKeyId = null,
+        public bool $usedFallbackKey = false,
+        public bool $keyNotUsable = false,
     ) {}
 }

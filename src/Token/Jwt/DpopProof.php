@@ -15,6 +15,8 @@ use Psr\Clock\ClockInterface;
 
 final readonly class DpopProof
 {
+    private const int MAX_FUTURE_SKEW_SECONDS = 300;
+
     private const int MAX_IDENTIFIER_BYTES = 256;
 
     private const int MAX_PROOF_AGE_SECONDS = 3600;
@@ -73,9 +75,7 @@ final readonly class DpopProof
         }
     }
 
-    /**
-     * @return array<string, mixed>
-     */
+    /** @return array<string, mixed> */
     public function verify(
         #[\SensitiveParameter]
         string $proof,
@@ -87,6 +87,7 @@ final readonly class DpopProof
         ?string $accessToken = null,
         ?string $nonce = null,
         int $maximumAgeSeconds = 300,
+        int $maximumFutureSkewSeconds = 5,
     ): array {
         return $this->verifyResult(
             $proof,
@@ -97,12 +98,11 @@ final readonly class DpopProof
             $accessToken,
             $nonce,
             $maximumAgeSeconds,
+            $maximumFutureSkewSeconds,
         )['claims'];
     }
 
-    /**
-     * @return array{claims: array<string, mixed>, publicJwk: array<string, mixed>, keyThumbprint: string}
-     */
+    /** @return array{claims: array<string, mixed>, publicJwk: array<string, mixed>, keyThumbprint: string} */
     public function verifyResult(
         #[\SensitiveParameter]
         string $proof,
@@ -114,13 +114,12 @@ final readonly class DpopProof
         ?string $accessToken = null,
         ?string $nonce = null,
         int $maximumAgeSeconds = 300,
+        int $maximumFutureSkewSeconds = 5,
     ): array {
         if (strlen($proof) > JwtToken::MAX_TOKEN_SIZE) {
             throw new InvalidTokenException('DPoP proof exceeds the maximum size.');
         }
-        if ($maximumAgeSeconds < 1 || $maximumAgeSeconds > self::MAX_PROOF_AGE_SECONDS) {
-            throw new ConfigurationException('DPoP maximum proof age must be between 1 and 3600 seconds.');
-        }
+        $this->assertTemporalPolicy($maximumAgeSeconds, $maximumFutureSkewSeconds);
         $method = $this->normalizeMethod($method);
         $this->assertOptionalIdentifier($nonce, 'DPoP nonce');
         [$header, $claims] = $this->parse($proof);
@@ -136,11 +135,12 @@ final readonly class DpopProof
         if (!Jws::verifier($publicKey, $algorithm)->verifyCompact($proof)) {
             throw new InvalidTokenException('DPoP signature is invalid.');
         }
+
         $current = $this->clock->now()->getTimestamp();
         $issuedAt = $claims['iat'] ?? null;
         $jwtId = $claims['jti'] ?? null;
         if (($claims['htm'] ?? null) !== $method || ($claims['htu'] ?? null) !== $this->normalizeUri($uri)
-            || !is_int($issuedAt) || abs($current - $issuedAt) > $maximumAgeSeconds
+            || !is_int($issuedAt) || !$this->isAcceptedIssuedAt($issuedAt, $current, $maximumAgeSeconds, $maximumFutureSkewSeconds)
             || !is_string($jwtId) || !$this->isValidIdentifier($jwtId)) {
             throw new InvalidTokenException('DPoP request binding or temporal claims are invalid.');
         }
@@ -184,6 +184,22 @@ final readonly class DpopProof
         }
     }
 
+    private function assertTemporalPolicy(int $maximumAgeSeconds, int $maximumFutureSkewSeconds): void
+    {
+        if ($maximumAgeSeconds < 1 || $maximumAgeSeconds > self::MAX_PROOF_AGE_SECONDS) {
+            throw new ConfigurationException('DPoP maximum proof age must be between 1 and 3600 seconds.');
+        }
+        if ($maximumFutureSkewSeconds < 0 || $maximumFutureSkewSeconds > self::MAX_FUTURE_SKEW_SECONDS) {
+            throw new ConfigurationException('DPoP maximum future skew must be between 0 and 300 seconds.');
+        }
+    }
+
+    private function isAcceptedIssuedAt(int $issuedAt, int $current, int $maximumAgeSeconds, int $maximumFutureSkewSeconds): bool
+    {
+        return $issuedAt <= $current + $maximumFutureSkewSeconds
+            && $issuedAt >= $current - $maximumAgeSeconds;
+    }
+
     private function isValidIdentifier(string $value): bool
     {
         return $value !== ''
@@ -214,6 +230,9 @@ final readonly class DpopProof
         }
         $port = $parts['port'] ?? null;
         $authority = strtolower($parts['host']);
+        if (str_contains($authority, ':') && !str_starts_with($authority, '[')) {
+            $authority = '[' . $authority . ']';
+        }
         if (is_int($port) && !(($scheme === 'https' && $port === 443) || ($scheme === 'http' && $port === 80))) {
             $authority .= ':' . $port;
         }

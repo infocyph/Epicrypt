@@ -3,9 +3,10 @@ Application security
 
 This domain provides purpose-bound application tokens, signed URLs, CSRF
 tokens, and policy-aware key rotation. These values authenticate data but do
-not make their contents secret. Signed application tokens and URLs use
-HMAC-SHA-512 with a minimum 32-byte secret; the algorithm is fixed rather than
-selected from untrusted input.
+not make their contents secret. Purpose-bound signed application tokens use
+HMAC-SHA-512, while signed URLs use HMAC-SHA-256. Both use fixed algorithms
+rather than algorithms selected from untrusted input and require at least a
+32-byte secret.
 
 Complete path: issue and consume a single-use password reset
 ------------------------------------------------------------
@@ -20,6 +21,7 @@ transaction that replaces the password hash.
 
    declare(strict_types=1);
 
+   use Infocyph\Epicrypt\Generate\KeyMaterial\Enum\KeyMaterialEncoding;
    use Infocyph\Epicrypt\Generate\KeyMaterial\KeyMaterialGenerator;
    use Infocyph\Epicrypt\Password\Generator\PasswordPolicy;
    use Infocyph\Epicrypt\Password\PasswordHasher;
@@ -27,7 +29,7 @@ transaction that replaces the password hash.
    use Infocyph\Epicrypt\Security\PasswordResetToken;
 
    $ttlSeconds = 1800;
-   $resetSecret = new KeyMaterialGenerator()->forMasterSecret(asBase64Url: false);
+   $resetSecret = new KeyMaterialGenerator()->forMasterSecret(KeyMaterialEncoding::RAW);
    $passwordResets = new PasswordResetToken($resetSecret, $ttlSeconds);
 
    // Request endpoint: return the same response whether or not the user exists.
@@ -77,7 +79,10 @@ Create a method- and host-bound download URL
 
 Both generation and verification must use the same options. An allowlist
 prevents an attacker from asking the signer to produce a valid URL for an
-untrusted host.
+untrusted host. A ``KeyRing`` gives signed URLs active/fallback rotation without
+trying every key: new URLs use the single active ``SIGNED_URL`` key and carry a
+MAC-protected ``ep_kid`` selector; old URLs remain verifiable while their key is
+an eligible fallback.
 
 .. code-block:: php
 
@@ -85,18 +90,39 @@ untrusted host.
 
    declare(strict_types=1);
 
+   use Infocyph\Epicrypt\Generate\KeyMaterial\Enum\KeyMaterialEncoding;
    use Infocyph\Epicrypt\Generate\KeyMaterial\KeyMaterialGenerator;
+   use Infocyph\Epicrypt\Security\KeyPurpose;
+   use Infocyph\Epicrypt\Security\KeyRing;
+   use Infocyph\Epicrypt\Security\KeyRingEntry;
+   use Infocyph\Epicrypt\Security\KeyStatus;
    use Infocyph\Epicrypt\Security\SignedUrl;
    use Infocyph\Epicrypt\Security\SignedUrlOptions;
 
-   $secret = new KeyMaterialGenerator()->forMasterSecret(asBase64Url: false);
+   $keys = new KeyMaterialGenerator();
+   $ring = new KeyRing([
+       new KeyRingEntry(
+           id: 'download-2026-09',
+           key: $keys->forMasterSecret(KeyMaterialEncoding::RAW),
+           status: KeyStatus::ACTIVE,
+           purpose: KeyPurpose::SIGNED_URL,
+           algorithm: 'sha256',
+       ),
+       new KeyRingEntry(
+           id: 'download-2026-08',
+           key: $_ENV['PREVIOUS_SIGNED_URL_KEY'],
+           status: KeyStatus::FALLBACK,
+           purpose: KeyPurpose::SIGNED_URL,
+           algorithm: 'sha256',
+       ),
+   ]);
    $options = new SignedUrlOptions(
        method: 'GET',
        bindHost: true,
        bindScheme: true,
        allowedHosts: ['downloads.example.com'],
    );
-   $signer = new SignedUrl($secret);
+   $signer = new SignedUrl($ring);
    $url = $signer->generate(
        'https://downloads.example.com/report',
        ['file' => 'report-1847.csv'],
@@ -108,6 +134,14 @@ untrusted host.
    if (!$result->verified) {
        throw new RuntimeException($result->expired ? 'Link expired.' : 'Invalid link.');
    }
+   if ($result->usedFallbackKey) {
+       $linkStore->renewUnderActiveKey($result->matchedKeyId);
+   }
+
+Passing one raw secret to ``SignedUrl`` remains supported for single-key
+applications and preserves the existing signed-URL v2 wire format. Applications
+that need rotation should use ``KeyRing`` and keep signed-URL keys separate from
+signed-payload or other HMAC purposes.
 
 Protect a browser session from CSRF
 -----------------------------------
@@ -121,10 +155,11 @@ session identifier when the form is submitted.
 
    declare(strict_types=1);
 
+   use Infocyph\Epicrypt\Generate\KeyMaterial\Enum\KeyMaterialEncoding;
    use Infocyph\Epicrypt\Generate\KeyMaterial\KeyMaterialGenerator;
    use Infocyph\Epicrypt\Security\CsrfTokenManager;
 
-   $secret = new KeyMaterialGenerator()->forMasterSecret(asBase64Url: false);
+   $secret = new KeyMaterialGenerator()->forMasterSecret(KeyMaterialEncoding::RAW);
    $csrf = new CsrfTokenManager($secret, ttlSeconds: 3600);
    $formToken = $csrf->issueToken($sessionId);
 
@@ -144,13 +179,14 @@ password-reset token cannot be replayed as an email-verification token.
 
    declare(strict_types=1);
 
+   use Infocyph\Epicrypt\Generate\KeyMaterial\Enum\KeyMaterialEncoding;
    use Infocyph\Epicrypt\Generate\KeyMaterial\KeyMaterialGenerator;
    use Infocyph\Epicrypt\Security\ActionToken;
    use Infocyph\Epicrypt\Security\EmailVerificationToken;
    use Infocyph\Epicrypt\Security\PasswordResetToken;
    use Infocyph\Epicrypt\Security\RememberToken;
 
-   $secret = new KeyMaterialGenerator()->forMasterSecret(asBase64Url: false);
+   $secret = new KeyMaterialGenerator()->forMasterSecret(KeyMaterialEncoding::RAW);
 
    $reset = new PasswordResetToken($secret);
    $resetToken = $reset->issue('user-42');
@@ -185,6 +221,7 @@ window, and optional issuer. Retired and disabled keys are never eligible.
 
    declare(strict_types=1);
 
+   use Infocyph\Epicrypt\Generate\KeyMaterial\Enum\KeyMaterialEncoding;
    use Infocyph\Epicrypt\Generate\KeyMaterial\KeyMaterialGenerator;
    use Infocyph\Epicrypt\Security\KeyPurpose;
    use Infocyph\Epicrypt\Security\KeyRing;
@@ -196,7 +233,7 @@ window, and optional issuer. Retired and disabled keys are never eligible.
    $ring = new KeyRing([
        new KeyRingEntry(
            id: 'signing-2026-08',
-           key: $keys->forMasterSecret(asBase64Url: false),
+           key: $keys->forMasterSecret(KeyMaterialEncoding::RAW),
            status: KeyStatus::ACTIVE,
            purpose: KeyPurpose::KEY_ROTATION,
            algorithm: 'sha512',

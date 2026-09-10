@@ -9,16 +9,13 @@ use Infocyph\Epicrypt\Internal\Base64Url;
 use Infocyph\Epicrypt\Internal\Json;
 use Infocyph\Epicrypt\Token\Jwt\Enum\AsymmetricJwtAlgorithm;
 use Infocyph\Epicrypt\Token\Jwt\Enum\SymmetricJwtAlgorithm;
+use Infocyph\Epicrypt\Token\Jwt\Support\JosePolicy;
 use Infocyph\Epicrypt\Token\Jwt\Support\JwsSignature;
 use Infocyph\Epicrypt\Token\Jwt\Support\JwtToken;
 use Throwable;
 
 final readonly class Jws
 {
-    private const int MAX_PARTICIPANTS = 32;
-
-    private const int MAX_SERIALIZED_SIZE = 16 * 1024;
-
     private const string SIGNER = 'signer';
 
     private const string VERIFIER = 'verifier';
@@ -34,9 +31,7 @@ final readonly class Jws
         #[\SensitiveParameter]
         ?string $passphrase,
     ) {
-        if ($this->keyId !== null && preg_match('/\A[A-Za-z0-9_-]{1,128}\z/D', $this->keyId) !== 1) {
-            throw new ConfigurationException('JWS key id must be a Base64URL-safe identifier.');
-        }
+        JosePolicy::assertConfiguredKeyId($this->keyId, 'JWS key id');
         $this->signature = new JwsSignature($key, $this->algorithm, $this->mode === self::SIGNER, $passphrase);
     }
 
@@ -51,9 +46,7 @@ final readonly class Jws
         return new self(self::SIGNER, $privateOrSharedKey, $algorithm, $keyId, $passphrase);
     }
 
-    /**
-     * @param list<self> $signers
-     */
+    /** @param list<self> $signers */
     public static function signGeneral(
         #[\SensitiveParameter]
         string $payload,
@@ -62,9 +55,7 @@ final readonly class Jws
         bool $detached = false,
         bool $base64Payload = true,
     ): string {
-        if ($signers === [] || count($signers) > self::MAX_PARTICIPANTS) {
-            throw new ConfigurationException('General JWS requires between 1 and 32 signers.');
-        }
+        JosePolicy::assertParticipantCount(count($signers), 'General JWS');
 
         $signatures = [];
         $payloadPart = null;
@@ -78,8 +69,10 @@ final readonly class Jws
         if (!$detached) {
             $document['payload'] = $payloadPart;
         }
+        $encoded = Json::encode($document);
+        JosePolicy::assertGeneratedSize($encoded, JosePolicy::MAX_COMPACT_TOKEN_BYTES, 'General JWS serialization');
 
-        return Json::encode($document);
+        return $encoded;
     }
 
     public static function verifier(
@@ -91,9 +84,7 @@ final readonly class Jws
         return new self(self::VERIFIER, $publicOrSharedKey, $algorithm, $keyId, null);
     }
 
-    /**
-     * @param list<self> $verifiers
-     */
+    /** @param list<self> $verifiers */
     public static function verifyGeneral(
         #[\SensitiveParameter]
         string $jws,
@@ -103,9 +94,7 @@ final readonly class Jws
         #[\SensitiveParameter]
         ?string $detachedPayload = null,
     ): bool {
-        if ($verifiers === [] || count($verifiers) > self::MAX_PARTICIPANTS) {
-            throw new ConfigurationException('General JWS requires between 1 and 32 configured verifiers.');
-        }
+        JosePolicy::assertParticipantCount(count($verifiers), 'General JWS');
         if ($requiredSignatures < 1 || $requiredSignatures > count($verifiers)) {
             throw new ConfigurationException('General JWS signature threshold is invalid.');
         }
@@ -136,9 +125,7 @@ final readonly class Jws
         }
     }
 
-    /**
-     * @param array<string, mixed> $protectedHeaders
-     */
+    /** @param array<string, mixed> $protectedHeaders */
     public function signCompact(
         #[\SensitiveParameter]
         string $payload,
@@ -151,8 +138,10 @@ final readonly class Jws
         if (!$base64Payload && !$detached && str_contains($payload, '.')) {
             throw new ConfigurationException('An embedded unencoded compact JWS payload must not contain a period.');
         }
+        $serialized = $encodedHeader . '.' . ($detached ? '' : $payloadPart) . '.' . $signature;
+        JosePolicy::assertGeneratedSize($serialized, JosePolicy::MAX_COMPACT_TOKEN_BYTES, 'Compact JWS');
 
-        return $encodedHeader . '.' . ($detached ? '' : $payloadPart) . '.' . $signature;
+        return $serialized;
     }
 
     /**
@@ -181,8 +170,10 @@ final readonly class Jws
         if (!$detached) {
             $document['payload'] = $payloadPart;
         }
+        $encoded = Json::encode($document);
+        JosePolicy::assertGeneratedSize($encoded, JosePolicy::MAX_COMPACT_TOKEN_BYTES, 'Flattened JWS serialization');
 
-        return Json::encode($document);
+        return $encoded;
     }
 
     public function verifyCompact(
@@ -192,7 +183,7 @@ final readonly class Jws
         ?string $detachedPayload = null,
     ): bool {
         $this->requireMode(self::VERIFIER);
-        if ($jws === '' || strlen($jws) > self::MAX_SERIALIZED_SIZE) {
+        if ($jws === '' || strlen($jws) > JosePolicy::MAX_COMPACT_TOKEN_BYTES) {
             return false;
         }
         $parts = explode('.', $jws);
@@ -223,15 +214,17 @@ final readonly class Jws
     /** @return array{signatures: non-empty-list<array<string, mixed>>, payload?: mixed} */
     private static function decodeGeneralDocument(#[\SensitiveParameter] string $jws): array
     {
-        if ($jws === '' || strlen($jws) > self::MAX_SERIALIZED_SIZE) {
-            throw new ConfigurationException('General JWS size is invalid.');
-        }
-        $document = JwtToken::decodeJsonObject($jws, 'general JWS JSON serialization');
+        $document = JwtToken::decodeJsonObject(
+            $jws,
+            'general JWS JSON serialization',
+            JosePolicy::MAX_COMPACT_TOKEN_BYTES,
+            JosePolicy::MAX_DOCUMENT_MEMBERS,
+        );
         $signatures = $document['signatures'] ?? null;
         if (!is_array($signatures) || $signatures === [] || !array_is_list($signatures)) {
             throw new ConfigurationException('General JWS must contain a non-empty signatures list.');
         }
-        if (count($signatures) > self::MAX_PARTICIPANTS) {
+        if (count($signatures) > JosePolicy::MAX_PARTICIPANTS) {
             throw new ConfigurationException('General JWS contains too many signatures.');
         }
         $normalized = [];
@@ -287,11 +280,12 @@ final readonly class Jws
     /** @return array<string, mixed> */
     private function decodeDocument(#[\SensitiveParameter] string $jws): array
     {
-        if ($jws === '' || strlen($jws) > self::MAX_SERIALIZED_SIZE) {
-            throw new ConfigurationException('JWS JSON serialization size is invalid.');
-        }
-
-        return JwtToken::decodeJsonObject($jws, 'JWS JSON serialization');
+        return JwtToken::decodeJsonObject(
+            $jws,
+            'JWS JSON serialization',
+            JosePolicy::MAX_COMPACT_TOKEN_BYTES,
+            JosePolicy::MAX_DOCUMENT_MEMBERS,
+        );
     }
 
     /**
@@ -309,8 +303,10 @@ final readonly class Jws
         if ($this->keyId !== null) {
             $protectedHeaders['kid'] = $this->keyId;
         }
+        $protectedHeaders = $this->applyPayloadEncodingHeaders($protectedHeaders, $base64Payload);
+        JosePolicy::assertConfiguredMemberCount($protectedHeaders, JosePolicy::MAX_HEADER_MEMBERS, 'JWS protected header');
 
-        return $this->applyPayloadEncodingHeaders($protectedHeaders, $base64Payload);
+        return $protectedHeaders;
     }
 
     private function requireMode(string $mode): void
@@ -318,6 +314,23 @@ final readonly class Jws
         if ($this->mode !== $mode) {
             throw new ConfigurationException(sprintf('This JWS instance is not configured as a %s.', $mode));
         }
+    }
+
+    /** @param array<string, mixed> $protected */
+    private function resolveBase64Payload(array $protected): bool
+    {
+        $base64Payload = $protected['b64'] ?? true;
+        if (!is_bool($base64Payload)) {
+            throw new ConfigurationException('JWS b64 must be boolean.');
+        }
+        if (!$base64Payload && ($protected['crit'] ?? null) !== ['b64']) {
+            throw new ConfigurationException('Unencoded JWS payload requires crit=["b64"].');
+        }
+        if ($base64Payload && isset($protected['crit'])) {
+            throw new ConfigurationException('Unknown or unnecessary JWS critical headers are not supported.');
+        }
+
+        return $base64Payload;
     }
 
     /**
@@ -332,8 +345,11 @@ final readonly class Jws
         array $unprotectedHeaders,
         bool $base64Payload,
     ): array {
+        JosePolicy::assertConfiguredMemberCount($unprotectedHeaders, JosePolicy::MAX_HEADER_MEMBERS, 'JWS unprotected header');
         $protected = $this->normalizedProtectedHeaders($protectedHeaders, $unprotectedHeaders, $base64Payload);
-        $encodedHeader = Base64Url::encode(Json::encode($protected));
+        $headerJson = Json::encode($protected);
+        JosePolicy::assertGeneratedSize($headerJson, JosePolicy::MAX_HEADER_BYTES, 'JWS protected header');
+        $encodedHeader = Base64Url::encode($headerJson);
         $payloadPart = $base64Payload ? Base64Url::encode($payload) : $payload;
         $signature = $this->signature->sign($encodedHeader . '.' . $payloadPart);
 
@@ -357,19 +373,11 @@ final readonly class Jws
         if ($this->keyId !== null && ($protected['kid'] ?? null) !== $this->keyId) {
             throw new ConfigurationException('JWS kid does not match the configured verifier.');
         }
-        $base64Payload = $protected['b64'] ?? true;
-        if (!is_bool($base64Payload)) {
-            throw new ConfigurationException('JWS b64 must be boolean.');
-        }
-        if (!$base64Payload) {
-            if (($protected['crit'] ?? null) !== ['b64']) {
-                throw new ConfigurationException('Unencoded JWS payload requires crit=["b64"].');
-            }
-        } elseif (isset($protected['crit'])) {
-            throw new ConfigurationException('Unknown or unnecessary JWS critical headers are not supported.');
+        if (isset($protected['kid']) && (!is_string($protected['kid']) || !JosePolicy::isKeyId($protected['kid']))) {
+            throw new ConfigurationException('JWS kid is invalid.');
         }
 
-        return $base64Payload;
+        return $this->resolveBase64Payload($protected);
     }
 
     /**
@@ -389,10 +397,12 @@ final readonly class Jws
         if (isset($protectedHeaders['alg']) && $protectedHeaders['alg'] !== $this->algorithm->value) {
             throw new ConfigurationException('JWS alg does not match the configured signer.');
         }
-        if ($this->keyId !== null) {
-            if (isset($protectedHeaders['kid']) && $protectedHeaders['kid'] !== $this->keyId) {
-                throw new ConfigurationException('JWS kid does not match the configured signer.');
-            }
+        if (isset($protectedHeaders['kid'])
+            && (!is_string($protectedHeaders['kid']) || !JosePolicy::isKeyId($protectedHeaders['kid']))) {
+            throw new ConfigurationException('JWS kid is invalid.');
+        }
+        if ($this->keyId !== null && isset($protectedHeaders['kid']) && $protectedHeaders['kid'] !== $this->keyId) {
+            throw new ConfigurationException('JWS kid does not match the configured signer.');
         }
     }
 
@@ -442,7 +452,13 @@ final readonly class Jws
         ?string $detachedPayload,
     ): bool {
         try {
-            $protected = JwtToken::decodeJsonObject(Base64Url::decode($encodedHeader), 'JWS protected header');
+            $protected = JwtToken::decodeJsonObject(
+                Base64Url::decode($encodedHeader),
+                'JWS protected header',
+                JosePolicy::MAX_HEADER_BYTES,
+                JosePolicy::MAX_HEADER_MEMBERS,
+            );
+            JosePolicy::assertMemberCount($unprotectedHeaders, JosePolicy::MAX_HEADER_MEMBERS, 'JWS unprotected header');
             $base64Payload = $this->validateProtectedHeaders($protected, $unprotectedHeaders);
             if ($detachedPayload !== null) {
                 if ($payloadPart !== '') {

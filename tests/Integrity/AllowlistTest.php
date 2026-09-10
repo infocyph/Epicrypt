@@ -2,12 +2,11 @@
 
 declare(strict_types=1);
 
+use Infocyph\Epicrypt\Exception\Integrity\HashingException;
 use Infocyph\Epicrypt\Integrity\FileHasher;
 use Infocyph\Epicrypt\Integrity\IntegrityAlgorithm;
 use Infocyph\Epicrypt\Integrity\StringHasher;
-use Infocyph\Epicrypt\Exception\Integrity\HashingException;
-use Infocyph\Pathwise\PathwiseFacade;
-use Infocyph\Pathwise\Utils\FlysystemHelper;
+use Infocyph\Pathwise\Storage\StorageContext;
 
 it('supports only the security integrity allowlist', function (IntegrityAlgorithm $algorithm) {
     $hasher = new StringHasher($algorithm);
@@ -34,20 +33,28 @@ it('validates BLAKE2b output lengths and treats malformed digests as mismatches'
         ->and(fn () => new StringHasher()->hash('content', length: 32))->toThrow(HashingException::class);
 });
 
-it('streams large local and Pathwise-mounted files', function () {
+it('streams large local and Pathwise context files without global mounts', function () {
     $directory = sys_get_temp_dir().'/epicrypt-pathwise-hash-'.bin2hex(random_bytes(6));
     mkdir($directory, recursive: true);
     $content = str_repeat('streamed-content-', 100_000);
     file_put_contents($directory.'/artifact.bin', $content);
     $hasher = new FileHasher(IntegrityAlgorithm::SHA384);
-    $filesystem = PathwiseFacade::mountStorage('integrity-test', ['driver' => 'local', 'root' => $directory]);
+    $context = new StorageContext(['integrity-test' => ['driver' => 'local', 'root' => $directory]], 'integrity-test');
+    $filesystem = $context->filesystem();
 
+    $artifact = $filesystem->readStream('artifact.bin');
     try {
         expect($hasher->hash($directory.'/artifact.bin'))->toBe(hash('sha384', $content))
-            ->and($hasher->hash('integrity-test://artifact.bin'))->toBe(hash('sha384', $content));
-        $filesystem->write('mounted-only.bin', 'mounted content');
-        expect($hasher->verify('integrity-test://mounted-only.bin', hash('sha384', 'mounted content')))->toBeTrue();
+            ->and($hasher->hashStream($artifact))->toBe(hash('sha384', $content));
     } finally {
-        FlysystemHelper::unmount('integrity-test');
+        fclose($artifact);
+    }
+
+    $filesystem->write('mounted-only.bin', 'mounted content');
+    $mountedOnly = $filesystem->readStream('mounted-only.bin');
+    try {
+        expect($hasher->verifyStream($mountedOnly, hash('sha384', 'mounted content')))->toBeTrue();
+    } finally {
+        fclose($mountedOnly);
     }
 });

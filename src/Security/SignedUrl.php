@@ -20,20 +20,31 @@ use Psr\Clock\ClockInterface;
  */
 final readonly class SignedUrl
 {
+    private const string ALGORITHM = 'sha256';
+
     private const string METHOD_PARAM = 'ep_m';
 
     public function __construct(
         #[\SensitiveParameter]
-        private string $secret,
+        private string|KeyRing $keys,
         private string $signatureParam = 'ep_sig',
         private string $expiresParam = 'ep_exp',
         private string $versionParam = SecurityPolicy::SIGNED_URL_VERSION_PARAM,
         private ClockInterface $clock = new SystemClock(),
         private SignedUrlOptions $defaultOptions = new SignedUrlOptions(),
+        private string $keyIdParam = 'ep_kid',
     ) {
-        SecurityPolicy::assertHmacSecret($this->secret, 'Signed URL secret');
+        if (is_string($this->keys)) {
+            SecurityPolicy::assertHmacSecret($this->keys, 'Signed URL secret');
+        }
 
-        $reservedNames = [$this->signatureParam, $this->expiresParam, $this->versionParam, self::METHOD_PARAM];
+        $reservedNames = [
+            $this->signatureParam,
+            $this->expiresParam,
+            $this->versionParam,
+            self::METHOD_PARAM,
+            $this->keyIdParam,
+        ];
         foreach ($reservedNames as $name) {
             if (preg_match('/\A[A-Za-z0-9_-]+\z/D', $name) !== 1) {
                 throw new ConfigurationException('Signed URL reserved parameter names must use the safe query-key grammar.');
@@ -74,13 +85,18 @@ final readonly class SignedUrl
             $merged[self::METHOD_PARAM] = $options->method;
         }
 
+        [$key, $keyId] = $this->writeKey();
+        if ($keyId !== null) {
+            $merged[$this->keyIdParam] = $keyId;
+        }
+
         $merged = $this->normalizeQuery($merged, $options->allowArrayParameters);
         if ($merged === null) {
             throw new ConfigurationException('Signed URL query parameters contain unsupported values.');
         }
 
         $signatureBasePath = $this->buildSignatureBasePath($parts, $options);
-        $signature = $this->computeSignature($signatureBasePath, $merged);
+        $signature = $this->computeSignature($signatureBasePath, $merged, $key);
         $merged[$this->signatureParam] = $signature;
 
         return $this->buildDisplayBasePath($parts) . '?' . $this->buildQueryString($merged);
@@ -128,9 +144,14 @@ final readonly class SignedUrl
             return SignedUrlGuard::invalidSignatureResult($expiresAt, $version);
         }
 
-        $signatureBasePath = $this->buildSignatureBasePath($parts, $options);
-        $computed = $this->computeSignature($signatureBasePath, $normalized);
+        $selected = $this->verificationKey($normalized, $expiresAt, $version);
+        if ($selected instanceof SignedUrlVerificationResult) {
+            return $selected;
+        }
+        [$key, $keyId, $usedFallbackKey] = $selected;
 
+        $signatureBasePath = $this->buildSignatureBasePath($parts, $options);
+        $computed = $this->computeSignature($signatureBasePath, $normalized, $key);
         $verified = SecureCompare::equals($computed, $givenSignature);
 
         return new SignedUrlVerificationResult(
@@ -138,6 +159,8 @@ final readonly class SignedUrl
             invalidSignature: !$verified,
             expiresAt: $expiresAt,
             version: $version,
+            matchedKeyId: $verified ? $keyId : null,
+            usedFallbackKey: $verified && $usedFallbackKey,
         );
     }
 
@@ -183,7 +206,13 @@ final readonly class SignedUrl
     /** @param array<array-key, mixed> $query */
     private function assertNoReservedParameters(array $query): void
     {
-        foreach ([$this->signatureParam, $this->expiresParam, $this->versionParam, self::METHOD_PARAM] as $reserved) {
+        foreach ([
+            $this->signatureParam,
+            $this->expiresParam,
+            $this->versionParam,
+            self::METHOD_PARAM,
+            $this->keyIdParam,
+        ] as $reserved) {
             if (array_key_exists($reserved, $query)) {
                 throw new ConfigurationException(sprintf('Signed URL input must not contain reserved parameter "%s".', $reserved));
             }
@@ -249,9 +278,13 @@ final readonly class SignedUrl
     /**
      * @param QueryMap $query
      */
-    private function computeSignature(string $basePath, array $query): string
-    {
-        return Base64Url::encode(hash_hmac('sha256', $basePath . '?' . $this->buildQueryString($query), $this->secret, true));
+    private function computeSignature(
+        string $basePath,
+        array $query,
+        #[\SensitiveParameter]
+        string $key,
+    ): string {
+        return Base64Url::encode(hash_hmac(self::ALGORITHM, $basePath . '?' . $this->buildQueryString($query), $key, true));
     }
 
     /** @return array{name: string, root: string, index: ?string, value: string}|null */
@@ -426,5 +459,65 @@ final readonly class SignedUrl
     private function pathFromParts(array $parts): string
     {
         return isset($parts['path']) && is_string($parts['path']) && $parts['path'] !== '' ? $parts['path'] : '/';
+    }
+
+    /**
+     * @param QueryMap $query
+     * @return array{string, ?string, bool}|SignedUrlVerificationResult
+     */
+    private function verificationKey(array $query, ?int $expiresAt, ?int $version): array|SignedUrlVerificationResult
+    {
+        if (is_string($this->keys)) {
+            return [$this->keys, null, false];
+        }
+
+        $keyId = $query[$this->keyIdParam] ?? null;
+        if (!is_string($keyId) || preg_match('/\A[A-Za-z0-9_-]{1,128}\z/D', $keyId) !== 1) {
+            return new SignedUrlVerificationResult(
+                verified: false,
+                invalidSignature: true,
+                expiresAt: $expiresAt,
+                version: $version,
+                keyNotUsable: true,
+            );
+        }
+
+        $entry = $this->keys->resolveForVerification($keyId, KeyPurpose::SIGNED_URL, self::ALGORITHM);
+        if (!$entry instanceof KeyRingEntry) {
+            return new SignedUrlVerificationResult(
+                verified: false,
+                invalidSignature: true,
+                expiresAt: $expiresAt,
+                version: $version,
+                keyNotUsable: true,
+            );
+        }
+
+        try {
+            SecurityPolicy::assertHmacSecret($entry->key, 'Signed URL key');
+        } catch (ConfigurationException) {
+            return new SignedUrlVerificationResult(
+                verified: false,
+                invalidSignature: true,
+                expiresAt: $expiresAt,
+                version: $version,
+                keyNotUsable: true,
+            );
+        }
+
+        return [$entry->key, $entry->id, $entry->status === KeyStatus::FALLBACK];
+    }
+
+    /** @return array{string, ?string} */
+    private function writeKey(): array
+    {
+        if (is_string($this->keys)) {
+            return [$this->keys, null];
+        }
+
+        $entry = $this->keys->activeForWrite(KeyPurpose::SIGNED_URL, self::ALGORITHM);
+        SecurityPolicy::assertHmacSecret($entry->key, 'Signed URL key');
+
+        return [$entry->key, $entry->id];
     }
 }

@@ -13,15 +13,34 @@ use Throwable;
 /** @internal */
 final class JwtToken
 {
-    public const int MAX_TOKEN_SIZE = 16 * 1024;
+    public const int MAX_TOKEN_SIZE = JosePolicy::MAX_COMPACT_TOKEN_BYTES;
 
     /** @return array<string, mixed> */
-    public static function decodeJsonObject(#[\SensitiveParameter] string $json, string $name): array
-    {
+    public static function decodeJsonObject(
+        #[\SensitiveParameter]
+        string $json,
+        string $name,
+        int $maximumBytes = JosePolicy::MAX_COMPACT_TOKEN_BYTES,
+        int $maximumMembers = JosePolicy::MAX_DOCUMENT_MEMBERS,
+    ): array {
         try {
+            JosePolicy::assertInputSize($json, $maximumBytes, 'JOSE ' . $name);
             self::rejectDuplicateObjectKeys($json);
+            $decoded = json_decode($json, true, JosePolicy::MAX_JSON_DEPTH, JSON_THROW_ON_ERROR);
+            if (!is_array($decoded) || array_is_list($decoded)) {
+                throw new JsonException('JOSE JSON payload must decode to an object.');
+            }
 
-            return Json::decodeToArray($json);
+            $result = [];
+            foreach ($decoded as $key => $value) {
+                if (!is_string($key)) {
+                    throw new JsonException('JOSE JSON object keys must be strings.');
+                }
+                $result[$key] = $value;
+            }
+            JosePolicy::assertMemberCount($result, $maximumMembers, 'JOSE ' . $name);
+
+            return $result;
         } catch (Throwable $exception) {
             throw new InvalidTokenException(sprintf('Invalid JWT %s.', $name), 0, $exception);
         }
@@ -45,9 +64,7 @@ final class JwtToken
      */
     public static function parse(#[\SensitiveParameter] string $token): array
     {
-        if ($token === '' || strlen($token) > self::MAX_TOKEN_SIZE) {
-            throw new InvalidTokenException('JWT size is invalid.');
-        }
+        JosePolicy::assertInputSize($token, JosePolicy::MAX_COMPACT_TOKEN_BYTES, 'JWT');
 
         $parts = explode('.', $token);
         if (count($parts) !== 3 || in_array('', $parts, true)) {
@@ -55,8 +72,18 @@ final class JwtToken
         }
 
         [$encodedHeader, $encodedPayload, $encodedSignature] = $parts;
-        $header = self::decodeSegment($encodedHeader, 'header');
-        $payload = self::decodeSegment($encodedPayload, 'payload');
+        $header = self::decodeSegment(
+            $encodedHeader,
+            'header',
+            JosePolicy::MAX_HEADER_BYTES,
+            JosePolicy::MAX_HEADER_MEMBERS,
+        );
+        $payload = self::decodeSegment(
+            $encodedPayload,
+            'payload',
+            JosePolicy::MAX_COMPACT_TOKEN_BYTES,
+            JosePolicy::MAX_CLAIM_MEMBERS,
+        );
         $signature = Base64Url::decode($encodedSignature);
         if ($signature === '') {
             throw new InvalidTokenException('JWT signature must not be empty.');
@@ -65,13 +92,21 @@ final class JwtToken
         return [$encodedHeader, $encodedPayload, $signature, $header, $payload];
     }
 
-    /**
-     * @return array<string, mixed>
-     */
-    private static function decodeSegment(#[\SensitiveParameter] string $encodedSegment, string $name): array
-    {
+    /** @return array<string, mixed> */
+    private static function decodeSegment(
+        #[\SensitiveParameter]
+        string $encodedSegment,
+        string $name,
+        int $maximumBytes,
+        int $maximumMembers,
+    ): array {
         try {
-            return self::decodeJsonObject(Base64Url::decode($encodedSegment), $name);
+            return self::decodeJsonObject(
+                Base64Url::decode($encodedSegment),
+                $name,
+                $maximumBytes,
+                $maximumMembers,
+            );
         } catch (Throwable $exception) {
             throw new InvalidTokenException(sprintf('Invalid JWT %s.', $name), 0, $exception);
         }

@@ -2,8 +2,10 @@ Secure generation and key derivation
 ====================================
 
 All generators use cryptographically secure operating-system randomness.
-``KeyMaterialGenerator`` returns Base64URL by default so keys can be stored in a
-secret manager without corrupting binary bytes.
+``KeyMaterialGenerator`` measures requested lengths in raw entropy bytes and
+then applies an explicit ``KeyMaterialEncoding``. Base64URL is the default for
+safe secret-manager storage; RAW is for binary crypto APIs; HEX is useful for
+environment/configuration values that require hexadecimal text.
 
 Complete path: derive and use purpose-isolated application keys
 ----------------------------------------------------------------
@@ -65,8 +67,8 @@ Generate purpose-sized material
 
    declare(strict_types=1);
 
+   use Infocyph\Epicrypt\Generate\KeyMaterial\Enum\KeyMaterialEncoding;
    use Infocyph\Epicrypt\Generate\KeyMaterial\KeyMaterialGenerator;
-   use Infocyph\Epicrypt\Generate\KeyMaterial\TokenMaterialGenerator;
    use Infocyph\Epicrypt\Generate\NonceGenerator;
    use Infocyph\Epicrypt\Generate\RandomBytesGenerator;
    use Infocyph\Epicrypt\Generate\SaltGenerator;
@@ -74,14 +76,26 @@ Generate purpose-sized material
    $keys = new KeyMaterialGenerator();
    $databaseFieldKey = $keys->forAead();
    $fileStreamKey = $keys->forSecretStream();
-   $refreshToken = new TokenMaterialGenerator()->generate();
+   $binaryKey = $keys->forMasterSecret(KeyMaterialEncoding::RAW);
+   $environmentTokenSecret = $keys->forTokenSecret(KeyMaterialEncoding::HEX);
+   $refreshTokenMaterial = new RandomBytesGenerator()->string(48);
    $passwordSalt = new SaltGenerator()->generate();
    $protocolNonce = new NonceGenerator()->generate();
    $rawChallenge = new RandomBytesGenerator()->bytes(32);
    $traceId = new RandomBytesGenerator()->string(32, prefix: 'trace_');
 
-Use ``RandomBytesGenerator::bytes()`` only when the protocol specifies an exact
-raw-byte length. Nonces and salts are not interchangeable with secret keys.
+``forMasterSecret()`` and ``forTokenSecret()`` both provide 32 raw bytes of
+entropy before encoding. Therefore their HEX form is exactly 64 lowercase hex
+characters and their Base64URL form decodes to exactly 32 bytes. Encoding does
+not increase entropy. Keep the generated value in a deployment secret manager
+or restricted environment file; do not log it.
+
+Use ``RandomBytesGenerator`` for generic random byte/string material and opaque
+identifiers. Use ``KeyMaterialGenerator`` when the generated value is a
+cryptographic key or signing/MAC secret. ``NonceGenerator`` and
+``SaltGenerator`` remain separate semantic helpers because nonces and salts are
+not interchangeable with secret keys. Use ``RandomBytesGenerator::bytes()``
+only when a protocol specifies an exact raw-byte length.
 
 Derive isolated keys from one root key
 --------------------------------------
@@ -112,7 +126,6 @@ bytes and the numeric IDs must remain stable for the lifetime of stored data.
 ``subkeyBinary()`` and ``hkdfBinary()`` are the explicit raw-byte variants.
 HKDF supports only ``HkdfAlgorithm::SHA256``, ``SHA384``, and ``SHA512`` and
 defaults to SHA-256; set a unique non-empty ``info`` value for each purpose.
-``deriveFromPassword()`` uses
-Argon2id with a Base64URL Sodium pwhash salt, while
-``deriveBinaryFromPassword()`` is the raw-byte variant. Never substitute fast
-HKDF for password stretching.
+``deriveFromPassword()`` uses Argon2id with a Base64URL Sodium pwhash salt,
+while ``deriveBinaryFromPassword()`` is the raw-byte variant. Never substitute
+fast HKDF for password stretching.

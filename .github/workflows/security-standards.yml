@@ -11,38 +11,15 @@ on:
 jobs:
   phpforge:
     uses: infocyph/phpforge/.github/workflows/security-standards.yml@main
+    with:
+      fail_on_skipped_tests: true
+      integration_services: '[]'
+      service_topologies: '{}'
+      php_extensions: "hash, json, openssl, sodium"
     permissions:
       security-events: write
       actions: read
       contents: read
-    with:
-      php_versions: '["8.4","8.5"]'
-      dependency_versions: '["prefer-lowest","prefer-stable"]'
-      php_extensions: "hash, json, openssl, sodium"
-      composer_flags: ""
-      phpstan_memory_limit: "1G"
-      psalm_threads: "1"
-      run_analysis: true
-      run_svg_report: true
-      fail_on_skipped_tests: true
-      run_clean_install: true
-      benchmark_composer_script: ""
-      benchmark_result_file: ""
-      benchmark_baseline_file: ""
-      benchmark_max_regression_percent: 2
-      benchmark_stable_environment: false
-      enable_redis_service: false
-      enable_valkey_service: false
-      enable_memcached_service: false
-      enable_postgres_service: false
-      enable_mysql_service: false
-      enable_scylladb_service: false
-      enable_elasticsearch_service: false
-      enable_mongodb_service: false
-      service_db_name: "phpforge"
-      service_db_user: "phpforge"
-      service_db_password: "phpforge"
-      artifact_retention_days: 61
 
   jose-interoperability:
     name: "Independent JOSE interoperability"
@@ -75,6 +52,62 @@ jobs:
           php tests/Interop/epicrypt.php produce "${{ runner.temp }}/epicrypt-jose.json"
           node tests/Interop/jose.mjs "${{ runner.temp }}/epicrypt-jose.json" "${{ runner.temp }}/independent-jose.json"
           php tests/Interop/epicrypt.php consume "${{ runner.temp }}/epicrypt-jose.json" "${{ runner.temp }}/independent-jose.json"
+
+  auth-interoperability:
+    name: "Independent OAuth OIDC interoperability"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.4"
+          extensions: "hash, json, openssl, sodium"
+          coverage: none
+          tools: composer:v2
+        env:
+          fail-fast: true
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: npm
+      - name: Install PHP dependencies
+        run: composer install --no-interaction --no-progress --prefer-dist
+      - name: Install and audit the independent JOSE implementation
+        run: |
+          npm ci --ignore-scripts
+          npm audit --audit-level=high
+      - name: Verify bidirectional OAuth and OIDC profiles
+        run: |
+          php tests/Interop/auth-epicrypt.php produce "${{ runner.temp }}/epicrypt-auth.json"
+          node tests/Interop/auth-jose.mjs "${{ runner.temp }}/epicrypt-auth.json" "${{ runner.temp }}/independent-auth.json"
+          php tests/Interop/auth-epicrypt.php consume "${{ runner.temp }}/epicrypt-auth.json" "${{ runner.temp }}/independent-auth.json"
+
+  auth-performance:
+    name: "Authentication performance and memory evidence"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.4"
+          extensions: "hash, json, openssl, sodium"
+          coverage: none
+          tools: composer:v2
+        env:
+          fail-fast: true
+      - name: Install dependencies
+        run: composer install --no-interaction --no-progress --prefer-dist
+      - name: Record authentication performance and persistent-worker memory evidence
+        run: php benchmarks/authentication.php | tee "${{ runner.temp }}/authentication-evidence.json"
+      - name: Validate recorded evidence document
+        run: |
+          php -r '$e=json_decode(file_get_contents($argv[1]), true, 32, JSON_THROW_ON_ERROR); $required=["access_token_issue_verify","authorization_code_jwe","refresh_token_jwe","dpop_issue_verify","oidc_id_token_issue_verify","pat_store_validation","fallback_key_verification"]; foreach ($required as $name) { if (!isset($e["measurements"][$name]["us_per_operation"])) { fwrite(STDERR, "Missing evidence: $name\n"); exit(1); } } if (($e["persistent_worker_memory"]["growth_bytes"] ?? PHP_INT_MAX) > ($e["persistent_worker_memory"]["max_growth_bytes"] ?? -1)) { exit(1); }' "${{ runner.temp }}/authentication-evidence.json"
 
   aegis-modern-libsodium:
     name: "AEGIS on libsodium 1.0.22"
@@ -132,19 +165,31 @@ jobs:
           - shard: jwe
             classes: 'Infocyph\Epicrypt\Token\Jwt\Jwe'
           - shard: jws
-            classes: 'Infocyph\Epicrypt\Token\Jwt\Jws'
+            classes: 'Infocyph\Epicrypt\Token\Jwt\Jws,Infocyph\Epicrypt\Token\Jwt\Support\JosePolicy,Infocyph\Epicrypt\Token\Jwt\Support\JwtToken'
           - shard: validation-policy
-            classes: 'Infocyph\Epicrypt\Password\PasswordHasher,Infocyph\Epicrypt\Token\Jwt\JwtValidator,Infocyph\Epicrypt\Security\KeyRing'
+            classes: 'Infocyph\Epicrypt\Password\PasswordHasher,Infocyph\Epicrypt\Token\Jwt\JwtValidator,Infocyph\Epicrypt\Security\AsymmetricSigningKeySet,Infocyph\Epicrypt\Security\KeyRing'
           - shard: jwt-policy
-            classes: 'Infocyph\Epicrypt\Token\Jwt\AsymmetricJwt,Infocyph\Epicrypt\Token\Jwt\DpopProof,Infocyph\Epicrypt\Token\Jwt\JwtPolicy,Infocyph\Epicrypt\Token\Jwt\SymmetricJwt'
-          - shard: refresh-token
-            classes: 'Infocyph\Epicrypt\Token\Opaque\OpaqueToken,Infocyph\Epicrypt\Token\Opaque\RefreshTokenGrant,Infocyph\Epicrypt\Token\Opaque\RefreshTokenManager,Infocyph\Epicrypt\Token\Opaque\RefreshTokenRecord'
+            classes: 'Infocyph\Epicrypt\Token\Jwt\AsymmetricJwt,Infocyph\Epicrypt\Token\Jwt\DpopProof,Infocyph\Epicrypt\Token\Jwt\JwtPolicy,Infocyph\Epicrypt\Token\Jwt\OpenIdIdTokenValidator,Infocyph\Epicrypt\Token\Jwt\SymmetricJwt'
           - shard: signed-helpers
-            classes: 'Infocyph\Epicrypt\Internal\SecurityPolicy,Infocyph\Epicrypt\Internal\SignedPayloadCodec,Infocyph\Epicrypt\Security\SignedUrl,Infocyph\Epicrypt\Security\Support\AbstractPurposeToken'
+            classes: 'Infocyph\Epicrypt\Generate\KeyMaterial\KeyDeriver,Infocyph\Epicrypt\Generate\KeyMaterial\KeyMaterialGenerator,Infocyph\Epicrypt\Internal\SecurityPolicy,Infocyph\Epicrypt\Internal\SignedPayloadCodec,Infocyph\Epicrypt\Security\SignedUrl,Infocyph\Epicrypt\Security\Support\AbstractPurposeToken,Infocyph\Epicrypt\Token\Payload\PurposeToken'
           - shard: primitive-verification
             classes: 'Infocyph\Epicrypt\Crypto\Mac,Infocyph\Epicrypt\Crypto\SecretStream,Infocyph\Epicrypt\Crypto\Signature,Infocyph\Epicrypt\Internal\EcdsaSignatureConverter'
           - shard: remote-jose
-            classes: 'Infocyph\Epicrypt\Token\Jwt\RemoteJwks,Infocyph\Epicrypt\Token\Jwt\RemoteJwksConfiguration,Infocyph\Epicrypt\Token\Jwt\Support\JweKeyManager,Infocyph\Epicrypt\Token\Jwt\Support\RemoteJoseResource'
+            classes: 'Infocyph\Epicrypt\Token\Jwt\RemoteJwks,Infocyph\Epicrypt\Token\Jwt\RemoteJwksConfiguration,Infocyph\Epicrypt\Token\Jwt\Support\JweKeyManager,Infocyph\Epicrypt\Token\Jwt\Support\NativeRemoteJoseHostResolver,Infocyph\Epicrypt\Token\Jwt\Support\RemoteJoseResource'
+          - shard: certificate-pki
+            classes: 'Infocyph\Epicrypt\Certificate\CertificateChainVerifier,Infocyph\Epicrypt\Certificate\CertificateInspector,Infocyph\Epicrypt\Certificate\CsrInspector,Infocyph\Epicrypt\Certificate\Pkcs12'
+          - shard: oauth-authorization
+            classes: 'Infocyph\Epicrypt\Auth\OAuth\AuthorizationCodeArtifact,Infocyph\Epicrypt\Auth\OAuth\OAuthAuthorizationRequestValidator,Infocyph\Epicrypt\Auth\OAuth\OAuthAuthorizationInteraction,Infocyph\Epicrypt\Auth\OAuth\OAuthAuthorizationCodeIssuer,Infocyph\Epicrypt\Auth\OAuth\OAuthAuthorizationCodeConsumer'
+          - shard: oauth-token-grants
+            classes: 'Infocyph\Epicrypt\Auth\OAuth\OAuthTokenEndpoint,Infocyph\Epicrypt\Auth\OAuth\OAuthAccessTokenService,Infocyph\Epicrypt\Auth\OAuth\OAuthAccessTokenInspector,Infocyph\Epicrypt\Auth\OAuth\OAuthResourceAccessTokenValidator'
+          - shard: oauth-refresh-revocation
+            classes: 'Infocyph\Epicrypt\Auth\OAuth\RefreshTokenArtifact,Infocyph\Epicrypt\Auth\OAuth\RefreshTokenManager,Infocyph\Epicrypt\Auth\OAuth\OAuthRevocationEndpoint,Infocyph\Epicrypt\Auth\OAuth\OAuthIntrospectionEndpoint'
+          - shard: oauth-client-auth
+            classes: 'Infocyph\Epicrypt\Auth\OAuth\OAuthClientAuthenticator,Infocyph\Epicrypt\Auth\OAuth\OAuthClientAssertionValidator,Infocyph\Epicrypt\Auth\OAuth\OAuthClientKeySet,Infocyph\Epicrypt\Auth\OAuth\OAuthClientSecret'
+          - shard: oidc-provider
+            classes: 'Infocyph\Epicrypt\Auth\Oidc\OpenIdAuthorizationRequestValidator,Infocyph\Epicrypt\Auth\Oidc\OpenIdInteractionPolicy,Infocyph\Epicrypt\Auth\Oidc\OpenIdIdTokenIssuer,Infocyph\Epicrypt\Auth\Oidc\OpenIdTokenResponseExtension,Infocyph\Epicrypt\Auth\Oidc\OpenIdUserInfoProjector,Infocyph\Epicrypt\Auth\Oidc\OpenIdProviderMetadata'
+          - shard: personal-access-token
+            classes: 'Infocyph\Epicrypt\Auth\Personal\PersonalAccessTokenManager,Infocyph\Epicrypt\Auth\Personal\PersonalAccessTokenPolicy,Infocyph\Epicrypt\Auth\Personal\PersonalAccessTokenAbilities,Infocyph\Epicrypt\Auth\Personal\PersonalAccessTokenWildcardPolicy'
     steps:
       - uses: actions/checkout@v7
       - uses: shivammathur/setup-php@v2

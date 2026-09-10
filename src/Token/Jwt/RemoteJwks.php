@@ -7,11 +7,14 @@ namespace Infocyph\Epicrypt\Token\Jwt;
 use Infocyph\Epicrypt\Exception\Token\KeyResolutionException;
 use Infocyph\Epicrypt\Internal\Clock\SystemClock;
 use Infocyph\Epicrypt\Token\Jwt\Enum\AsymmetricJwtAlgorithm;
+use Infocyph\Epicrypt\Token\Jwt\Support\JosePolicy;
+use Infocyph\Epicrypt\Token\Jwt\Support\NativeRemoteJoseHostResolver;
 use Infocyph\Epicrypt\Token\Jwt\Support\RemoteJoseResource;
 use Psr\Clock\ClockInterface;
 use Psr\Http\Client\ClientInterface;
 use Psr\Http\Message\RequestFactoryInterface;
 use Psr\SimpleCache\CacheInterface;
+use Throwable;
 
 final readonly class RemoteJwks
 {
@@ -25,8 +28,15 @@ final readonly class RemoteJwks
         private RemoteJwksConfiguration $configuration,
         private ?CacheInterface $cache = null,
         private ClockInterface $clock = new SystemClock(),
+        ?RemoteJoseHostResolverInterface $hostResolver = null,
     ) {
-        $this->resource = new RemoteJoseResource($client, $requestFactory, $configuration->maximumResponseBytes);
+        $this->resource = new RemoteJoseResource(
+            $client,
+            $requestFactory,
+            $configuration->maximumResponseBytes,
+            $configuration->maximumKeys,
+            $hostResolver ?? new NativeRemoteJoseHostResolver(),
+        );
         $this->cacheKey = 'epicrypt:jwks:' . hash('sha256', $configuration->issuer . "\0" . ($configuration->jwksUri ?? 'discovery'));
     }
 
@@ -46,6 +56,7 @@ final readonly class RemoteJwks
 
                 return $jwks;
             }
+
             $ttl = $cachePolicy['noCache']
                 ? 0
                 : max($this->configuration->minimumTtl, min(
@@ -61,7 +72,7 @@ final readonly class RemoteJwks
             $this->cache?->set($this->cacheKey, $entry, max(1, $ttl + $staleTtl));
 
             return $jwks;
-        } catch (\Throwable $exception) {
+        } catch (Throwable $exception) {
             if (!$forceRefresh && $cached !== null && $cached['staleUntil'] > $now) {
                 return $cached['jwks'];
             }
@@ -91,21 +102,12 @@ final readonly class RemoteJwks
     {
         $entry = $this->cache?->get($this->cacheKey);
         if (!is_array($entry) || !is_int($entry['freshUntil'] ?? null) || !is_int($entry['staleUntil'] ?? null)
-            || !is_array($entry['jwks'] ?? null) || !is_array($entry['jwks']['keys'] ?? null)) {
+            || !is_array($entry['jwks'] ?? null)) {
             return null;
         }
-        $keys = [];
-        foreach ($entry['jwks']['keys'] as $key) {
-            if (!is_array($key)) {
-                return null;
-            }
-            $normalized = [];
-            foreach ($key as $name => $value) {
-                if (is_string($name)) {
-                    $normalized[$name] = $value;
-                }
-            }
-            $keys[] = $normalized;
+        $keys = $this->normalizeKeys($entry['jwks']['keys'] ?? null);
+        if ($keys === null || $entry['staleUntil'] < $entry['freshUntil']) {
+            return null;
         }
 
         return ['jwks' => ['keys' => $keys], 'freshUntil' => $entry['freshUntil'], 'staleUntil' => $entry['staleUntil']];
@@ -124,24 +126,42 @@ final readonly class RemoteJwks
             $this->configuration->validateJwksUrl($uri);
         }
         [$document, $cachePolicy] = $this->resource->fetch($uri, jwks: true);
-        $keys = $document['keys'] ?? null;
-        if (!is_array($keys) || !array_is_list($keys) || count($keys) > $this->configuration->maximumKeys) {
+        $keys = $this->normalizeKeys($document['keys'] ?? null);
+        if ($keys === null) {
             throw new KeyResolutionException('Remote JWKS keys collection is invalid or exceeds its bound.');
         }
+
+        return [['keys' => $keys], $cachePolicy];
+    }
+
+    /** @return list<array<string, mixed>>|null */
+    private function normalizeKeys(mixed $keys): ?array
+    {
+        if (!is_array($keys) || !array_is_list($keys) || count($keys) > $this->configuration->maximumKeys) {
+            return null;
+        }
+
         $normalized = [];
         foreach ($keys as $key) {
             if (!is_array($key)) {
-                throw new KeyResolutionException('Remote JWKS contains a non-object key.');
+                return null;
+            }
+
+            try {
+                JosePolicy::assertMemberCount($key, JosePolicy::MAX_JWK_MEMBERS, 'Remote JWK');
+            } catch (Throwable) {
+                return null;
             }
             $entry = [];
             foreach ($key as $name => $value) {
-                if (is_string($name)) {
-                    $entry[$name] = $value;
+                if (!is_string($name)) {
+                    return null;
                 }
+                $entry[$name] = $value;
             }
             $normalized[] = $entry;
         }
 
-        return [['keys' => $normalized], $cachePolicy];
+        return $normalized;
     }
 }

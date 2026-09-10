@@ -7,6 +7,14 @@ where Sodium reports hardware support. Both use the common authenticated
 ``ep2`` framing model. The version, domain, algorithm identifier, key ID,
 purpose, creation time, and caller AAD are authenticated.
 
+Protected in-memory values are intentionally bounded before expensive parsing
+or cryptographic work. ``StringProtector`` accepts at most 16 MiB of plaintext;
+the encoded compact ``ep2`` payload is capped at 24 MiB and its encoded metadata
+header at 32 KiB. ``EnvelopeProtector`` accepts at most 8 MiB of plaintext so its
+nested protected representation stays inside the same bounded-value model. Use
+``FileProtector`` stream APIs for larger content instead of increasing these
+ceilings.
+
 ``FileProtector`` exclusively uses authenticated XChaCha20-Poly1305
 SecretStream, the appropriate bounded-memory primitive for files. Its default
 chunk size is 64 KiB.
@@ -176,12 +184,20 @@ Protect a database backup without loading it into memory
    $files->protect('/backups/db.sql', '/backups/db.sql.ep2', $key, $options);
    $files->unprotect('/backups/db.sql.ep2', '/restore/db.sql', $key, $options);
 
-The destination is staged and committed only after the complete operation
-succeeds, and an existing destination is preserved after every failed
-decryption. Epicrypt owns this one atomic staging/commit layer; Pathwise is the
-bounded streaming I/O layer. Input and output paths must differ, and
-``FileProtector`` accepts local filesystem paths only in 2.0 (no stream-wrapper
-or mounted-remote paths).
+The local-path APIs create a sibling staging file with restrictive ``0600``
+permissions and publish it only after the complete authenticated operation
+succeeds. An existing destination is preserved when protection or unprotection
+fails, and the staging file is removed. This is the single crypto-adjacent
+local publication layer; application frameworks should not wrap it in a second
+temporary/backup protocol.
+
+The stream APIs intentionally do not stage or publish caller-owned streams.
+They process bounded chunks and leave stream lifetime, rollback, localization
+and remote-storage commit semantics to the caller. Epicrypt has no production
+Pathwise dependency. Local path APIs accept local filesystem paths only; storage
+schemes and stream-wrapper paths must be opened by the storage owner and passed
+to the stream APIs. Application-specific path and symbolic-link policy remains
+at the application/storage boundary rather than being hidden in Epicrypt.
 
 Rotate keys with policy metadata
 --------------------------------

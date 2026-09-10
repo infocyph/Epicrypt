@@ -26,11 +26,11 @@ final readonly class PasswordHashOptions
         if ($this->algorithm === PasswordHashAlgorithm::BCRYPT && ($this->bcryptCost < 4 || $this->bcryptCost > 31)) {
             throw new PasswordHashException('Bcrypt cost must be between 4 and 31.');
         }
-        if ($this->algorithm !== PasswordHashAlgorithm::BCRYPT
+        if ($this->algorithm === PasswordHashAlgorithm::ARGON2ID
             && ($this->memoryCost < 8192 || $this->memoryCost > 1_048_576
                 || $this->timeCost < 1 || $this->timeCost > 10
                 || $this->threads < 1 || $this->threads > 16)) {
-            throw new PasswordHashException('Argon2 costs are outside the supported security bounds.');
+            throw new PasswordHashException('Argon2id costs are outside the supported security bounds.');
         }
     }
 
@@ -39,7 +39,7 @@ final readonly class PasswordHashOptions
     {
         return match ($this->algorithm) {
             PasswordHashAlgorithm::BCRYPT => ['cost' => $this->bcryptCost],
-            PasswordHashAlgorithm::ARGON2I, PasswordHashAlgorithm::ARGON2ID => [
+            PasswordHashAlgorithm::ARGON2ID => [
                 'memory_cost' => $this->memoryCost,
                 'time_cost' => $this->timeCost,
                 'threads' => $this->threads,

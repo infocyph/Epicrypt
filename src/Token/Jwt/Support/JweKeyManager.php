@@ -8,8 +8,10 @@ use Infocyph\Epicrypt\Exception\Token\InvalidTokenException;
 use Infocyph\Epicrypt\Internal\Base64Url;
 use Infocyph\Epicrypt\Token\Jwt\Enum\JweKeyManagementAlgorithm;
 use Infocyph\Epicrypt\Token\Jwt\Jwks;
-use phpseclib3\Crypt\PublicKeyLoader;
-use phpseclib3\Crypt\RSA;
+use phpseclib4\Crypt\PublicKeyLoader;
+use phpseclib4\Crypt\RSA;
+use phpseclib4\Crypt\RSA\PrivateKey as RsaPrivateKey;
+use phpseclib4\Crypt\RSA\PublicKey as RsaPublicKey;
 
 /** @internal JOSE key-management and Concat-KDF boundary. */
 final class JweKeyManager
@@ -270,32 +272,19 @@ final class JweKeyManager
     private function rsaUnwrap(#[\SensitiveParameter] string $privateKey, string $encryptedKey): string
     {
         try {
-            $resource = openssl_pkey_get_private($privateKey, '');
-            $normalized = '';
-            if ($resource === false || !openssl_pkey_export($resource, $normalized) || !is_string($normalized)) {
-                throw new \RuntimeException('RSA private key normalization failed.');
-            }
-            $rsa = PublicKeyLoader::loadPrivateKey($normalized);
-            if (!$rsa instanceof \phpseclib3\Crypt\RSA\PrivateKey) {
+            $rsa = PublicKeyLoader::loadPrivateKey($privateKey);
+            if (!$rsa instanceof RsaPrivateKey) {
                 throw new \RuntimeException('RSA private key required.');
             }
-            $rsa = $rsa->withPadding(RSA::ENCRYPTION_OAEP);
-            if (!$rsa instanceof \phpseclib3\Crypt\RSA\PrivateKey) {
-                throw new \RuntimeException('RSA padding configuration failed.');
-            }
-            $rsa = $rsa->withHash('sha256');
-            if (!$rsa instanceof \phpseclib3\Crypt\RSA\PrivateKey) {
-                throw new \RuntimeException('RSA hash configuration failed.');
-            }
-            $rsa = $rsa->withMGFHash('sha256');
-            if (!$rsa instanceof \phpseclib3\Crypt\RSA\PrivateKey) {
-                throw new \RuntimeException('RSA MGF configuration failed.');
-            }
+            $rsa = $rsa
+                ->withPadding(RSA::ENCRYPTION_OAEP)
+                ->withHash('sha256')
+                ->withMGFHash('sha256');
             $cek = $rsa->decrypt($encryptedKey);
         } catch (\Throwable $exception) {
             throw new InvalidTokenException('JWE RSA-OAEP-256 decryption failed.', 0, $exception);
         }
-        if (!is_string($cek) || strlen($cek) !== 32) {
+        if (strlen($cek) !== 32) {
             throw new InvalidTokenException('JWE RSA-OAEP-256 returned an invalid content key.');
         }
 
@@ -314,25 +303,14 @@ final class JweKeyManager
     ): array {
         try {
             $rsa = PublicKeyLoader::loadPublicKey($publicKey);
-            if (!$rsa instanceof \phpseclib3\Crypt\RSA\PublicKey) {
+            if (!$rsa instanceof RsaPublicKey) {
                 throw new \RuntimeException('RSA public key required.');
             }
-            $rsa = $rsa->withPadding(RSA::ENCRYPTION_OAEP);
-            if (!$rsa instanceof \phpseclib3\Crypt\RSA\PublicKey) {
-                throw new \RuntimeException('RSA padding configuration failed.');
-            }
-            $rsa = $rsa->withHash('sha256');
-            if (!$rsa instanceof \phpseclib3\Crypt\RSA\PublicKey) {
-                throw new \RuntimeException('RSA hash configuration failed.');
-            }
-            $rsa = $rsa->withMGFHash('sha256');
-            if (!$rsa instanceof \phpseclib3\Crypt\RSA\PublicKey) {
-                throw new \RuntimeException('RSA MGF configuration failed.');
-            }
-            $encrypted = $rsa->encrypt($cek);
-            if (!is_string($encrypted)) {
-                throw new \RuntimeException('RSA encryption returned invalid output.');
-            }
+            $encrypted = $rsa
+                ->withPadding(RSA::ENCRYPTION_OAEP)
+                ->withHash('sha256')
+                ->withMGFHash('sha256')
+                ->encrypt($cek);
         } catch (\Throwable $exception) {
             throw new InvalidTokenException('JWE RSA-OAEP-256 encryption failed.', 0, $exception);
         }

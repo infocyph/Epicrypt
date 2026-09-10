@@ -8,18 +8,23 @@
 ![GitHub Code Size](https://img.shields.io/github/languages/code-size/infocyph/Epicrypt)
 [![Documentation](https://img.shields.io/badge/Documentation-Epicrypt-blue?logo=readthedocs&logoColor=white)](https://docs.infocyph.com/projects/Epicrypt/)
 
-Epicrypt is a capability-first PHP security toolkit.
+Epicrypt is a capability-first PHP security toolkit and transport-neutral authentication protocol core.
 
 It provides focused security building blocks for:
 
 - Certificate / PKI / key exchange
 - Crypto primitives
-- Token security (JWT, payload, opaque)
+- Token security (JWT, JWS, JWE, JWK/JWKS, payload and opaque identifiers)
+- OAuth 2.1 Authorization Code + PKCE, Client Credentials, refresh rotation, revocation/introspection and DPoP
+- OpenID Connect Authorization Code provider mechanics, ID Tokens, UserInfo and discovery
+- Generic personal/API tokens with authoritative revocation and abilities
 - Password and secret protection
 - Integrity verification
 - Secure generation
 - Data protection workflows
 - Security utilities (signed URL, CSRF, reset/action tokens)
+
+Epicrypt owns protocol/security mechanics and public persistence contracts; host applications own HTTP routing, login/consent UI, durable store adapters, rate limiting, audit and application authorization policy.
 
 ## Installation
 
@@ -120,10 +125,11 @@ $rehash = $hasher->verifyAndRehash('MyStrongPassword!2026', $hash);
 
 declare(strict_types=1);
 
-use Infocyph\Epicrypt\Security\CsrfTokenManager;
+use Infocyph\Epicrypt\Generate\KeyMaterial\Enum\KeyMaterialEncoding;
 use Infocyph\Epicrypt\Generate\KeyMaterial\KeyMaterialGenerator;
+use Infocyph\Epicrypt\Security\CsrfTokenManager;
 
-$csrfSecret = new KeyMaterialGenerator()->forMasterSecret(asBase64Url: false);
+$csrfSecret = new KeyMaterialGenerator()->forMasterSecret(KeyMaterialEncoding::RAW);
 $csrf = new CsrfTokenManager($csrfSecret);
 $token = $csrf->issueToken('session-1');
 
@@ -137,10 +143,11 @@ $ok = $csrf->verifyToken('session-1', $token);
 
 declare(strict_types=1);
 
-use Infocyph\Epicrypt\Security\SignedUrl;
+use Infocyph\Epicrypt\Generate\KeyMaterial\Enum\KeyMaterialEncoding;
 use Infocyph\Epicrypt\Generate\KeyMaterial\KeyMaterialGenerator;
+use Infocyph\Epicrypt\Security\SignedUrl;
 
-$urlSecret = new KeyMaterialGenerator()->forMasterSecret(asBase64Url: false);
+$urlSecret = new KeyMaterialGenerator()->forMasterSecret(KeyMaterialEncoding::RAW);
 $signed = new SignedUrl($urlSecret);
 $url = $signed->generate('https://example.com/download', ['file' => 'report.pdf'], time() + 300);
 
@@ -171,44 +178,72 @@ $verifier = SymmetricJwt::verifier($key, JwtPolicy::oauthAccessToken('issuer-ser
 $ok = $verifier->verify($token);
 ```
 
-### Issue and rotate an OAuth refresh token
+### Exchange and rotate OAuth credentials
+
+`OAuthTokenEndpoint` owns the supported grant mechanics after the host adapter has parsed the HTTP request and authenticated the client when required.
 
 ```php
 <?php
 
 declare(strict_types=1);
 
-use Infocyph\Epicrypt\Token\Opaque\RefreshTokenGrant;
-use Infocyph\Epicrypt\Token\Opaque\RefreshTokenManager;
-
-// Implement RefreshTokenStoreInterface with one durable database transaction.
-$refreshTokens = new RefreshTokenManager($refreshTokenStore);
-$refreshToken = $refreshTokens->issue(new RefreshTokenGrant(
-    id: 'authorization-grant-42',
-    subject: 'user-1',
-    clientId: 'web-client',
-    audiences: ['api'],
-    scopes: ['profile:read', 'orders:read'],
-    expiresAt: time() + 90 * 24 * 60 * 60,
-));
-
-$rotation = $refreshTokens->rotate(
-    $presentedRefreshToken,
-    'web-client',
-    requestedScopes: ['profile:read'],
+// Authorization Code + mandatory PKCE S256.
+$codeResult = $tokenEndpoint->authorizationCode(
+    clientId: $clientId,
+    authentication: $clientAuthentication,
+    code: $presentedCode,
+    redirectUri: $presentedRedirectUri,
+    pkceVerifier: $presentedPkceVerifier,
+    dpopProof: $presentedDpopProof,
 );
-if (!$rotation->rotated) {
-    throw new RuntimeException('Map every failure status to invalid_grant.');
+
+if (!$codeResult->successful()) {
+    throw new RuntimeException($codeResult->error?->code->value ?? 'token exchange failed');
 }
 
-$replacementRefreshToken = $rotation->token;
+// Later: rotate the encrypted refresh artifact. Requested scopes may only narrow.
+$refreshResult = $tokenEndpoint->refreshToken(
+    clientId: $clientId,
+    authentication: $clientAuthentication,
+    refreshToken: $presentedRefreshToken,
+    requestedScopes: ['profile:read'],
+    dpopProof: $presentedDpopProof,
+);
+
+if (!$refreshResult->successful()) {
+    throw new RuntimeException($refreshResult->error?->code->value ?? 'refresh failed');
+}
 ```
 
-The [complete OAuth lifecycle](https://docs.infocyph.com/projects/Epicrypt/oauth-lifecycle.html)
-connects initial issuance, API verification, DPoP, rotation and revocation. The
-[token storage guide](https://docs.infocyph.com/projects/Epicrypt/token-storage.html)
-defines the required schema and atomic transaction. Raw refresh tokens must
-never be stored.
+The raw authorization-code JWE, refresh-token JWE and personal-access-token JWT are never persisted by Epicrypt stores. Applications implement the durable store contracts with the documented atomic consume/rotation/revocation guarantees.
+
+The [complete OAuth/OIDC lifecycle](https://docs.infocyph.com/projects/Epicrypt/oauth-lifecycle.html) covers authorization, token grants, resource validation, DPoP, refresh rotation, revocation/introspection and OIDC extension. The [authentication standards profile](https://docs.infocyph.com/projects/Epicrypt/authentication-standards.html) records the supported OAuth 2.1/OIDC behavior and explicit exclusions. The [token storage guide](https://docs.infocyph.com/projects/Epicrypt/token-storage.html) defines the durable atomicity requirements.
+
+### Issue, authorize, and revoke a personal/API token
+
+`PersonalAccessTokenManager` combines a purpose-isolated `pat+jwt` credential with authoritative application-owned token state. The configured manager below uses a durable store and dedicated `API_PERSONAL_TOKEN_SIGNING` keys.
+
+```php
+<?php
+
+declare(strict_types=1);
+
+$issue = $personalTokens->issue(
+    subject: 'user-1',
+    name: 'deployment-cli',
+    abilities: ['releases:read', 'releases:deploy'],
+);
+
+// Return $issue->token once over TLS. Persist metadata, never the raw JWT.
+$validation = $personalTokens->verify($presentedBearerToken);
+if (!$validation->accepted() || !$validation->allows('releases:deploy')) {
+    throw new RuntimeException('Personal access token rejected.');
+}
+
+$personalTokens->revoke($issue->record->tokenId, 'user-1');
+```
+
+The [complete personal/API-token lifecycle](https://docs.infocyph.com/projects/Epicrypt/personal-access-tokens.html) covers signing-key setup, issue, verification, exact/wildcard abilities, usage tracking, listing, key rotation, single-token revocation, `revokeAll()`, and persistence/concurrency requirements.
 
 ### Generate certificate with SAN
 

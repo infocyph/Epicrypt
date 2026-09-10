@@ -5,13 +5,13 @@ declare(strict_types=1);
 use Infocyph\Epicrypt\Exception\Password\InvalidPasswordException;
 use Infocyph\Epicrypt\Exception\Password\PasswordHashException;
 use Infocyph\Epicrypt\Exception\Password\SecretProtectionException;
+use Infocyph\Epicrypt\Generate\KeyMaterial\KeyMaterialGenerator;
 use Infocyph\Epicrypt\Password\Enum\PasswordHashAlgorithm;
 use Infocyph\Epicrypt\Password\Generator\PasswordGenerator;
 use Infocyph\Epicrypt\Password\Generator\PasswordPolicy;
 use Infocyph\Epicrypt\Password\PasswordHasher;
 use Infocyph\Epicrypt\Password\PasswordHashOptions;
 use Infocyph\Epicrypt\Password\PasswordPolicyValidator;
-use Infocyph\Epicrypt\Password\Secret\MasterSecretGenerator;
 use Infocyph\Epicrypt\Password\Secret\SecureSecretSerializer;
 use Infocyph\Epicrypt\Password\Secret\WrappedSecretManager;
 use Infocyph\Epicrypt\Security\KeyPurpose;
@@ -25,6 +25,18 @@ it('defaults to Argon2id and preserves rehash detection', function () {
     expect($hash)->toStartWith('$argon2id$')
         ->and($hasher->verifyPassword('correct horse battery staple', $hash))->toBeTrue()
         ->and($hasher->needsRehash($hash))->toBeFalse();
+});
+
+it('verifies legacy Argon2i hashes and migrates them to Argon2id', function () {
+    $algorithm = defined('PASSWORD_ARGON2I') ? constant('PASSWORD_ARGON2I') : 'argon2i';
+    $legacyHash = password_hash('correct horse battery staple', $algorithm);
+    $hasher = new PasswordHasher();
+    $result = $hasher->verifyAndRehash('correct horse battery staple', $legacyHash);
+
+    expect($legacyHash)->toStartWith('$argon2i$')
+        ->and($result->verified)->toBeTrue()
+        ->and($result->needsRehash)->toBeTrue()
+        ->and($result->rehashedHash)->toStartWith('$argon2id$');
 });
 
 it('rejects bcrypt passwords over 72 bytes and invalid hashing options', function () {
@@ -70,8 +82,9 @@ it('uses the exact shared ASCII ambiguous-character policy', function () {
 it('serializes and wraps recoverable secrets with explicit key formats and exact KeyRing resolution', function () {
     $serializer = new SecureSecretSerializer();
     $manager = new WrappedSecretManager();
-    $old = new MasterSecretGenerator()->generate();
-    $new = new MasterSecretGenerator()->generate();
+    $generator = new KeyMaterialGenerator();
+    $old = $generator->forMasterSecret();
+    $new = $generator->forMasterSecret();
     $serialized = $serializer->serialize(['provider' => 'payments', 'api_key' => 'secret']);
     $wrapped = $manager->wrap($serialized, $old, 'wrap-old');
     $ring = new KeyRing([

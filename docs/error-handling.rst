@@ -45,6 +45,28 @@ Do not retry deterministic authentication or configuration failures. Retry
 only an independently identified transient storage or network operation, with
 an explicit bound and idempotency protection where required.
 
+Safe diagnostics and logging
+----------------------------
+
+Treat plaintext, private keys, passphrases, passwords, raw tokens, proofs,
+serialized secrets, PKCS#12 containers and key material as non-loggable. Do not
+log complete attacker-controlled JWT/JWE/JWS strings, signed URLs, remote JOSE
+response bodies or protected payloads merely because an operation failed.
+Prefer an operation name, stable Epicrypt exception type, non-secret purpose,
+validated key ID, issuer identifier or internal correlation ID.
+
+Epicrypt marks secret-bearing call-chain parameters with
+``#[SensitiveParameter]`` and the test suite audits that coverage by reflection.
+That protects common stack-trace/debug rendering, but it is not a substitute for
+application log discipline. Never serialize exception arguments or arbitrary
+locals into telemetry.
+
+Backend exceptions may be retained as ``previous`` exceptions when useful for
+operator diagnostics. Their public Epicrypt wrapper message is deliberately
+stable and non-sensitive. If an application forwards exception chains to an
+external service, apply the same redaction policy to the complete chain and
+never expose backend exception messages to an untrusted client.
+
 Root
 ----
 
