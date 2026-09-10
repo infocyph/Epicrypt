@@ -127,7 +127,7 @@ final readonly class OAuthClientAssertionValidator
     {
         return array_all(
             ['iss', 'sub', 'aud', 'exp', 'iat', 'jti'],
-            static fn (string $required): bool => array_key_exists($required, $claims),
+            static fn(string $required): bool => array_key_exists($required, $claims),
         );
     }
 
