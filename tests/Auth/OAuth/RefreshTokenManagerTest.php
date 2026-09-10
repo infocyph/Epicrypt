@@ -6,6 +6,7 @@ use Infocyph\Epicrypt\Auth\OAuth\RefreshTokenArtifact;
 use Infocyph\Epicrypt\Auth\OAuth\RefreshTokenGrant;
 use Infocyph\Epicrypt\Auth\OAuth\RefreshTokenManager;
 use Infocyph\Epicrypt\Auth\OAuth\RefreshTokenRotationStatus;
+use Infocyph\Epicrypt\Exception\ConfigurationException;
 use Infocyph\Epicrypt\Security\KeyPurpose;
 use Infocyph\Epicrypt\Security\KeyRing;
 use Infocyph\Epicrypt\Security\KeyRingEntry;
@@ -99,4 +100,35 @@ it('maps malformed and absolutely expired refresh credentials to stable lifecycl
     $token = $manager->issue(oauthRefreshManagerGrant(1_700_000_010), 10);
     $clock->timestamp += 10;
     expect($manager->rotate($token, 'browser-client', str_repeat('A', 43), 10)->status)->toBe(RefreshTokenRotationStatus::EXPIRED);
+});
+
+it('retries refresh create and rotation conflicts within the bounded storage budget', function () {
+    $clock = oauthRefreshManagerClock(1_700_000_000);
+    $manager = new RefreshTokenManager(
+        new InMemoryRefreshTokenStore(createConflictsRemaining: 2, rotateConflictsRemaining: 2),
+        oauthRefreshManagerArtifact(random_bytes(32), $clock),
+        $clock,
+    );
+    $token = $manager->issue(oauthRefreshManagerGrant(1_700_086_400), 300);
+    $rotation = $manager->rotate($token, 'browser-client', str_repeat('A', 43), 300);
+
+    expect($rotation->status)->toBe(RefreshTokenRotationStatus::ROTATED)
+        ->and($rotation->token)->not->toBeNull();
+});
+
+it('fails closed when refresh create or rotation conflicts exhaust the retry budget', function () {
+    $clock = oauthRefreshManagerClock(1_700_000_000);
+    $artifact = oauthRefreshManagerArtifact(random_bytes(32), $clock);
+    $createBlocked = new RefreshTokenManager(new InMemoryRefreshTokenStore(createConflictsRemaining: 3), $artifact, $clock);
+    expect(fn () => $createBlocked->issue(oauthRefreshManagerGrant(1_700_086_400), 300))
+        ->toThrow(ConfigurationException::class, 'Unable to persist a unique OAuth refresh token.');
+
+    $rotationBlocked = new RefreshTokenManager(
+        new InMemoryRefreshTokenStore(rotateConflictsRemaining: 3),
+        $artifact,
+        $clock,
+    );
+    $token = $rotationBlocked->issue(oauthRefreshManagerGrant(1_700_086_400, 'authorization-2'), 300);
+    expect($rotationBlocked->rotate($token, 'browser-client', str_repeat('A', 43), 300)->status)
+        ->toBe(RefreshTokenRotationStatus::CONFLICT);
 });
