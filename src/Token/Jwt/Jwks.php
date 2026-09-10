@@ -410,7 +410,13 @@ final class Jwks
     private function exportEc(array $details, string $kid, AsymmetricJwtAlgorithm $algorithm): array
     {
         $ec = $details['ec'] ?? null;
-        if (!is_array($ec) || !isset($ec['curve_name'], $ec['x'], $ec['y']) || !is_string($ec['curve_name']) || !is_string($ec['x']) || !is_string($ec['y'])) {
+        if (!is_array($ec)
+            || !isset($ec['curve_name'], $ec['x'], $ec['y'])
+            || !is_string($ec['curve_name'])
+            || !is_string($ec['x'])
+            || !is_string($ec['y'])
+            || $ec['x'] === ''
+            || $ec['y'] === '') {
             throw new KeyResolutionException('Unable to export EC key as JWK.');
         }
 
@@ -429,14 +435,25 @@ final class Jwks
             throw new KeyResolutionException('EC key curve does not match the intended JWT algorithm.');
         }
 
+        $coordinateLength = match ($crv) {
+            'P-256' => 32,
+            'P-384' => 48,
+            'P-521' => 66,
+        };
+        if (strlen($ec['x']) > $coordinateLength || strlen($ec['y']) > $coordinateLength) {
+            throw new KeyResolutionException('EC key coordinates exceed the expected curve width.');
+        }
+        $x = str_pad($ec['x'], $coordinateLength, "\x00", STR_PAD_LEFT);
+        $y = str_pad($ec['y'], $coordinateLength, "\x00", STR_PAD_LEFT);
+
         return [
             'kty' => 'EC',
             'kid' => $kid,
             'alg' => $algorithm->value,
             'use' => 'sig',
             'crv' => $crv,
-            'x' => Base64Url::encode($ec['x']),
-            'y' => Base64Url::encode($ec['y']),
+            'x' => Base64Url::encode($x),
+            'y' => Base64Url::encode($y),
         ];
     }
 
