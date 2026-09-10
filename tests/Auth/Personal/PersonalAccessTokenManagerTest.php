@@ -203,3 +203,29 @@ it('coalesces optional last-used writes across fibers and persistent verificatio
     expect($manager->verify($issue->token)->accepted())->toBeTrue()
         ->and($usage->writes)->toBe(2);
 });
+
+it('retries personal-token uniqueness conflicts within the bounded storage budget', function () {
+    $clock = patClock();
+    $manager = new PersonalAccessTokenManager(
+        patSigningKeys(),
+        new InMemoryPersonalAccessTokenStore(2),
+        new PersonalAccessTokenPolicy('https://api.example.test'),
+        clock: $clock,
+    );
+
+    $issue = $manager->issue('user-1', 'conflicted', ['read']);
+    expect($manager->verify($issue->token)->status)->toBe(PersonalAccessTokenValidationStatus::VALID);
+});
+
+it('fails closed when personal-token uniqueness conflicts exhaust the retry budget', function () {
+    $clock = patClock();
+    $manager = new PersonalAccessTokenManager(
+        patSigningKeys(),
+        new InMemoryPersonalAccessTokenStore(3),
+        new PersonalAccessTokenPolicy('https://api.example.test'),
+        clock: $clock,
+    );
+
+    expect(fn () => $manager->issue('user-1', 'blocked', ['read']))
+        ->toThrow(ConfigurationException::class, 'Unable to persist a unique personal access token.');
+});
