@@ -8,6 +8,7 @@ use Infocyph\Epicrypt\Auth\OAuth\RefreshTokenInspectionStatus;
 use Infocyph\Epicrypt\Auth\OAuth\RefreshTokenRecord;
 use Infocyph\Epicrypt\Auth\OAuth\RefreshTokenRotationStatus;
 use Infocyph\Epicrypt\Auth\OAuth\RefreshTokenStoreInterface;
+use InvalidArgumentException;
 
 final class InMemoryRefreshTokenStore implements RefreshTokenStoreInterface
 {
@@ -17,8 +18,21 @@ final class InMemoryRefreshTokenStore implements RefreshTokenStoreInterface
     /** @var array<string, true> */
     private array $revokedFamilies = [];
 
+    public function __construct(
+        private int $createConflictsRemaining = 0,
+        private int $rotateConflictsRemaining = 0,
+    ) {
+        if ($this->createConflictsRemaining < 0 || $this->rotateConflictsRemaining < 0) {
+            throw new InvalidArgumentException('Refresh-token conflict counts cannot be negative.');
+        }
+    }
+
     public function create(RefreshTokenRecord $record): bool
     {
+        if ($this->createConflictsRemaining > 0) {
+            $this->createConflictsRemaining--;
+            return false;
+        }
         if (isset($this->records[$record->tokenId])) {
             return false;
         }
@@ -115,6 +129,10 @@ final class InMemoryRefreshTokenStore implements RefreshTokenStoreInterface
         }
         if (!$stored->grant->scopesContain($replacement->grant)) {
             return RefreshTokenRotationStatus::SCOPE_MISMATCH;
+        }
+        if ($this->rotateConflictsRemaining > 0) {
+            $this->rotateConflictsRemaining--;
+            return RefreshTokenRotationStatus::CONFLICT;
         }
         if (isset($this->records[$replacement->tokenId])) {
             return RefreshTokenRotationStatus::CONFLICT;
