@@ -12,6 +12,7 @@ final readonly class OAuthAuthorizationInteraction
     /** @var list<string> */
     public array $authenticationMethods;
 
+    /** @param array<array-key, mixed> $authenticationMethods */
     private function __construct(
         public OAuthAuthorizationRequest $request,
         public OAuthClient $client,
