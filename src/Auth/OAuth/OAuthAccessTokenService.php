@@ -69,30 +69,8 @@ final readonly class OAuthAccessTokenService
         }
 
         $now = $this->clock->now()->getTimestamp();
-        $ttl = $this->lifetimeSeconds;
-        if ($authorizationId !== null) {
-            $authorization = $this->authorizations->find($authorizationId);
-            if (!$authorization instanceof OAuthAuthorizationRecord
-                || !$authorization->isActive($now)
-                || !$this->authorizationAllows($authorization, $subject, $clientId, $audiences, $scopes)) {
-                throw new ConfigurationException('OAuth authorization is not active for the requested access token.');
-            }
-            $ttl = min($ttl, $authorization->expiresAt - $now);
-            if ($ttl < 1) {
-                throw new ConfigurationException('OAuth authorization expires before an access token can be issued.');
-            }
-        }
-
-        $custom = ['client_id' => $clientId];
-        if ($scopes !== []) {
-            $custom['scope'] = $scopes;
-        }
-        if ($authorizationId !== null) {
-            $custom['authorization_id'] = $authorizationId;
-        }
-        if ($dpopKeyThumbprint !== null) {
-            $custom['cnf'] = ['jkt' => $dpopKeyThumbprint];
-        }
+        $ttl = $this->authorizedTtl($authorizationId, $subject, $clientId, $audiences, $scopes, $now);
+        $custom = $this->customClaims($clientId, $scopes, $authorizationId, $dpopKeyThumbprint);
 
         $attempts = $this->statusStore === null ? 1 : self::STORAGE_ATTEMPTS;
         for ($attempt = 0; $attempt < $attempts; $attempt++) {
@@ -233,7 +211,10 @@ final readonly class OAuthAccessTokenService
         return OAuthAccessTokenValidationResult::success($jwt->claims, $jwt->matchedKeyId);
     }
 
-    /** @param list<string> $audiences @param list<string> $scopes */
+    /**
+     * @param list<string> $audiences
+     * @param list<string> $scopes
+     */
     private function authorizationAllows(
         OAuthAuthorizationRecord $authorization,
         string $subject,
@@ -250,7 +231,62 @@ final readonly class OAuthAccessTokenService
             }
         }
 
-        return array_all($scopes, fn($scope) => in_array($scope, $authorization->scopes, true));
+        return array_all($scopes, fn(string $scope): bool => in_array($scope, $authorization->scopes, true));
+    }
+
+    /**
+     * @param list<string> $audiences
+     * @param list<string> $scopes
+     */
+    private function authorizedTtl(
+        ?string $authorizationId,
+        string $subject,
+        string $clientId,
+        array $audiences,
+        array $scopes,
+        int $now,
+    ): int {
+        if ($authorizationId === null) {
+            return $this->lifetimeSeconds;
+        }
+
+        $authorization = $this->authorizations->find($authorizationId);
+        if (!$authorization instanceof OAuthAuthorizationRecord
+            || !$authorization->isActive($now)
+            || !$this->authorizationAllows($authorization, $subject, $clientId, $audiences, $scopes)) {
+            throw new ConfigurationException('OAuth authorization is not active for the requested access token.');
+        }
+
+        $ttl = min($this->lifetimeSeconds, $authorization->expiresAt - $now);
+        if ($ttl < 1) {
+            throw new ConfigurationException('OAuth authorization expires before an access token can be issued.');
+        }
+
+        return $ttl;
+    }
+
+    /**
+     * @param list<string> $scopes
+     * @return array<string, mixed>
+     */
+    private function customClaims(
+        string $clientId,
+        array $scopes,
+        ?string $authorizationId,
+        ?string $dpopKeyThumbprint,
+    ): array {
+        $custom = ['client_id' => $clientId];
+        if ($scopes !== []) {
+            $custom['scope'] = $scopes;
+        }
+        if ($authorizationId !== null) {
+            $custom['authorization_id'] = $authorizationId;
+        }
+        if ($dpopKeyThumbprint !== null) {
+            $custom['cnf'] = ['jkt' => $dpopKeyThumbprint];
+        }
+
+        return $custom;
     }
 
     /** @param array{token_id:string,subject:string,client_id:string,expires_at:int,authorization_id:?string} $state */
