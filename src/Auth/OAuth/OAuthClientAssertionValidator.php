@@ -121,6 +121,20 @@ final readonly class OAuthClientAssertionValidator
     }
 
     /**
+     * @param array<string, mixed> $claims
+     */
+    private function hasRequiredClaims(array $claims): bool
+    {
+        foreach (['iss', 'sub', 'aud', 'exp', 'iat', 'jti'] as $required) {
+            if (!array_key_exists($required, $claims)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
      * @param array<string, mixed> $header
      * @return null|array{AsymmetricJwtAlgorithm, ?string}
      */
@@ -151,13 +165,8 @@ final readonly class OAuthClientAssertionValidator
     /** @param array<string, mixed> $claims */
     private function validateClaims(array $claims, string $clientId, string $audience): OAuthClientAssertionStatus
     {
-        if (count($claims) > AuthProtocolPolicy::MAX_AUTH_CLAIMS) {
+        if (count($claims) > AuthProtocolPolicy::MAX_AUTH_CLAIMS || !$this->hasRequiredClaims($claims)) {
             return OAuthClientAssertionStatus::INVALID_CLAIMS;
-        }
-        foreach (['iss', 'sub', 'aud', 'exp', 'iat', 'jti'] as $required) {
-            if (!array_key_exists($required, $claims)) {
-                return OAuthClientAssertionStatus::INVALID_CLAIMS;
-            }
         }
         if (!is_string($claims['iss'])
             || !is_string($claims['sub'])
