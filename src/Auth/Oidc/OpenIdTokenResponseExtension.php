@@ -23,7 +23,11 @@ final readonly class OpenIdTokenResponseExtension implements OAuthAuthorizationC
             return [];
         }
 
-        $idToken = $this->idTokens->issue($code, accessToken: $accessToken->token);
+        $idToken = $this->idTokens->issue(
+            $code,
+            accessToken: $accessToken->token,
+            authorizationCode: $authorizationCode,
+        );
 
         return ['id_token' => $idToken->token];
     }
