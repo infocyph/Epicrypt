@@ -8,6 +8,7 @@ use Infocyph\Epicrypt\Auth\OAuth\OAuthAuthorizationCodeConsumer;
 use Infocyph\Epicrypt\Auth\OAuth\OAuthAuthorizationCodeConsumeStatus;
 use Infocyph\Epicrypt\Auth\OAuth\OAuthAuthorizationCodeIssuer;
 use Infocyph\Epicrypt\Auth\OAuth\OAuthAuthorizationRequest;
+use Infocyph\Epicrypt\Exception\ConfigurationException;
 use Infocyph\Epicrypt\Internal\Base64Url;
 use Infocyph\Epicrypt\Security\KeyPurpose;
 use Infocyph\Epicrypt\Security\KeyRing;
@@ -31,7 +32,7 @@ function phaseDClock(int $timestamp): ClockInterface
 }
 
 /** @return array{OAuthAuthorizationCodeIssuer, OAuthAuthorizationCodeConsumer, InMemoryOAuthAuthorizationStore, ClockInterface, string} */
-function phaseDCodeLifecycle(): array
+function phaseDCodeLifecycle(?InMemoryAuthorizationCodeStore $codeStore = null): array
 {
     $clock = phaseDClock(1_700_000_000);
     $key = random_bytes(32);
@@ -47,7 +48,7 @@ function phaseDCodeLifecycle(): array
     ], $clock);
     $artifact = new AuthorizationCodeArtifact($ring, 'https://issuer.example', $clock);
     $authorizationStore = new InMemoryOAuthAuthorizationStore();
-    $codeStore = new InMemoryAuthorizationCodeStore();
+    $codeStore ??= new InMemoryAuthorizationCodeStore();
     $issuer = new OAuthAuthorizationCodeIssuer($authorizationStore, $codeStore, $artifact, $clock);
     $consumer = new OAuthAuthorizationCodeConsumer($artifact, $codeStore, $authorizationStore, $clock);
     $verifier = str_repeat('V', 43);
@@ -162,4 +163,28 @@ it('rejects a code when its authoritative authorization has been revoked', funct
         'https://client.example/callback',
         $verifier,
     )->status)->toBe(OAuthAuthorizationCodeConsumeStatus::AUTHORIZATION_INACTIVE);
+});
+
+it('retries authorization-code uniqueness conflicts within the bounded storage budget', function () {
+    [$issuer, $consumer, , , $verifier] = phaseDCodeLifecycle(new InMemoryAuthorizationCodeStore(2));
+    $issue = $issuer->issue(
+        phaseDCodeRequest($verifier),
+        new OAuthAuthorizationApproval('user-42', ['orders:read'], 1_699_999_900, 3_600),
+    );
+
+    expect($consumer->consume(
+        $issue->token,
+        'browser-client',
+        'https://client.example/callback',
+        $verifier,
+    )->status)->toBe(OAuthAuthorizationCodeConsumeStatus::CONSUMED);
+});
+
+it('fails closed when authorization-code uniqueness conflicts exhaust the retry budget', function () {
+    [$issuer, , , , $verifier] = phaseDCodeLifecycle(new InMemoryAuthorizationCodeStore(3));
+
+    expect(fn () => $issuer->issue(
+        phaseDCodeRequest($verifier),
+        new OAuthAuthorizationApproval('user-42', ['orders:read'], 1_699_999_900, 3_600),
+    ))->toThrow(ConfigurationException::class, 'Unable to persist a unique OAuth authorization code.');
 });
