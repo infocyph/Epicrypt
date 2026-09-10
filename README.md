@@ -217,7 +217,33 @@ if (!$refreshResult->successful()) {
 
 The raw authorization-code JWE, refresh-token JWE and personal-access-token JWT are never persisted by Epicrypt stores. Applications implement the durable store contracts with the documented atomic consume/rotation/revocation guarantees.
 
-The [complete OAuth/OIDC lifecycle](https://docs.infocyph.com/projects/Epicrypt/oauth-lifecycle.html) covers authorization, token grants, DPoP, refresh rotation, revocation/introspection and OIDC extension. The [authentication standards profile](https://docs.infocyph.com/projects/Epicrypt/authentication-standards.html) records the supported OAuth 2.1/OIDC behavior and explicit exclusions. The [token storage guide](https://docs.infocyph.com/projects/Epicrypt/token-storage.html) defines the durable atomicity requirements.
+The [complete OAuth/OIDC lifecycle](https://docs.infocyph.com/projects/Epicrypt/oauth-lifecycle.html) covers authorization, token grants, resource validation, DPoP, refresh rotation, revocation/introspection and OIDC extension. The [authentication standards profile](https://docs.infocyph.com/projects/Epicrypt/authentication-standards.html) records the supported OAuth 2.1/OIDC behavior and explicit exclusions. The [token storage guide](https://docs.infocyph.com/projects/Epicrypt/token-storage.html) defines the durable atomicity requirements.
+
+### Issue, authorize, and revoke a personal/API token
+
+`PersonalAccessTokenManager` combines a purpose-isolated `pat+jwt` credential with authoritative application-owned token state. The configured manager below uses a durable store and dedicated `API_PERSONAL_TOKEN_SIGNING` keys.
+
+```php
+<?php
+
+declare(strict_types=1);
+
+$issue = $personalTokens->issue(
+    subject: 'user-1',
+    name: 'deployment-cli',
+    abilities: ['releases:read', 'releases:deploy'],
+);
+
+// Return $issue->token once over TLS. Persist metadata, never the raw JWT.
+$validation = $personalTokens->verify($presentedBearerToken);
+if (!$validation->accepted() || !$validation->allows('releases:deploy')) {
+    throw new RuntimeException('Personal access token rejected.');
+}
+
+$personalTokens->revoke($issue->record->tokenId, 'user-1');
+```
+
+The [complete personal/API-token lifecycle](https://docs.infocyph.com/projects/Epicrypt/personal-access-tokens.html) covers signing-key setup, issue, verification, exact/wildcard abilities, usage tracking, listing, key rotation, single-token revocation, `revokeAll()`, and persistence/concurrency requirements.
 
 ### Generate certificate with SAN
 
