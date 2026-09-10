@@ -61,7 +61,10 @@ final readonly class OpenIdAuthorizationRequestValidator
         }
     }
 
-    /** @return list<string> */
+    /**
+     * @param string|list<string>|null $value
+     * @return list<string>
+     */
     private function acrValues(string|array|null $value): array
     {
         if ($value === null) {
@@ -87,6 +90,7 @@ final readonly class OpenIdAuthorizationRequestValidator
         ));
     }
 
+    /** @param string|list<string>|null $value */
     private function maximumAuthenticationAge(string|array|null $value): ?int
     {
         if ($value === null) {
@@ -113,7 +117,10 @@ final readonly class OpenIdAuthorizationRequestValidator
         return $value;
     }
 
-    /** @return list<OpenIdPrompt> */
+    /**
+     * @param string|list<string>|null $value
+     * @return list<OpenIdPrompt>
+     */
     private function prompts(string|array|null $value): array
     {
         if ($value === null) {
