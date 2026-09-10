@@ -8,7 +8,6 @@ use Infocyph\Epicrypt\Exception\ConfigurationException;
 use Infocyph\Epicrypt\Internal\Base64Url;
 use Infocyph\Epicrypt\Internal\Clock\SystemClock;
 use Infocyph\Epicrypt\Internal\EcdsaSignatureConverter;
-use Infocyph\Epicrypt\Security\KeyPurpose;
 use Infocyph\Epicrypt\Security\KeyRing;
 use Infocyph\Epicrypt\Token\Jwt\Enum\AsymmetricJwtAlgorithm;
 use Infocyph\Epicrypt\Token\Jwt\Support\JwtToken;
@@ -210,11 +209,16 @@ final readonly class AsymmetricJwt
             return [null, null, JwtFailureReason::UNKNOWN_KEY];
         }
 
+        $policy = $this->policy;
+        if (!$policy instanceof JwtPolicy) {
+            return [null, null, JwtFailureReason::KEY_NOT_USABLE];
+        }
+
         $entry = $this->key->resolveForVerification(
             $keyId,
-            $this->policy?->keyPurpose ?? KeyPurpose::JWT_SIGNING,
+            $policy->keyPurpose,
             $this->algorithm->value,
-            $this->policy?->expectedIssuer,
+            $policy->expectedIssuer,
         );
 
         return $entry !== null
