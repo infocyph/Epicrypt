@@ -198,7 +198,7 @@ $codeResult = $tokenEndpoint->authorizationCode(
 );
 
 if (!$codeResult->successful()) {
-    throw new RuntimeException($codeResult->error?->value ?? 'token exchange failed');
+    throw new RuntimeException($codeResult->error?->code->value ?? 'token exchange failed');
 }
 
 // Later: rotate the encrypted refresh artifact. Requested scopes may only narrow.
@@ -211,7 +211,7 @@ $refreshResult = $tokenEndpoint->refreshToken(
 );
 
 if (!$refreshResult->successful()) {
-    throw new RuntimeException($refreshResult->error?->value ?? 'refresh failed');
+    throw new RuntimeException($refreshResult->error?->code->value ?? 'refresh failed');
 }
 ```
 
