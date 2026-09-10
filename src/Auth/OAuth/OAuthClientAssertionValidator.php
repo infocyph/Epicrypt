@@ -125,13 +125,10 @@ final readonly class OAuthClientAssertionValidator
      */
     private function hasRequiredClaims(array $claims): bool
     {
-        foreach (['iss', 'sub', 'aud', 'exp', 'iat', 'jti'] as $required) {
-            if (!array_key_exists($required, $claims)) {
-                return false;
-            }
-        }
-
-        return true;
+        return array_all(
+            ['iss', 'sub', 'aud', 'exp', 'iat', 'jti'],
+            static fn (string $required): bool => array_key_exists($required, $claims),
+        );
     }
 
     /**
