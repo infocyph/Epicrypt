@@ -53,7 +53,10 @@ final readonly class OpenIdAuthorizationRequest
         return in_array($prompt, $this->prompts, true);
     }
 
-    /** @param array<array-key, mixed> $acrValues @return list<string> */
+    /**
+     * @param array<array-key, mixed> $acrValues
+     * @return list<string>
+     */
     private static function normalizeAcrValues(array $acrValues): array
     {
         if (!array_is_list($acrValues) || count($acrValues) > self::MAX_ACR_VALUES) {
@@ -76,7 +79,10 @@ final readonly class OpenIdAuthorizationRequest
         return $normalized;
     }
 
-    /** @param array<array-key, mixed> $prompts @return list<OpenIdPrompt> */
+    /**
+     * @param array<array-key, mixed> $prompts
+     * @return list<OpenIdPrompt>
+     */
     private static function normalizePrompts(array $prompts): array
     {
         if (!array_is_list($prompts) || count($prompts) > count(OpenIdPrompt::cases())) {
