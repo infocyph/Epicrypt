@@ -94,9 +94,7 @@ final readonly class RefreshTokenManager
         ?array $requestedScopes = null,
     ): RefreshTokenRotationResult {
         AuthProtocolPolicy::assertText($clientId, AuthProtocolPolicy::MAX_IDENTIFIER_BYTES, 'Refresh-token client ID');
-        if ($dpopKeyThumbprint !== null && !RefreshTokenGrant::validDpopKeyThumbprint($dpopKeyThumbprint)) {
-            throw new ConfigurationException('Refresh-token DPoP key thumbprint must be a SHA-256 Base64URL value.');
-        }
+        $this->assertDpopKeyThumbprint($dpopKeyThumbprint);
 
         try {
             $currentClaims = $this->artifact->decryptForStateResolution($token);
@@ -145,6 +143,13 @@ final readonly class RefreshTokenManager
         }
 
         return RefreshTokenRotationResult::failure(RefreshTokenRotationStatus::CONFLICT);
+    }
+
+    private function assertDpopKeyThumbprint(?string $dpopKeyThumbprint): void
+    {
+        if ($dpopKeyThumbprint !== null && !RefreshTokenGrant::validDpopKeyThumbprint($dpopKeyThumbprint)) {
+            throw new ConfigurationException('Refresh-token DPoP key thumbprint must be a SHA-256 Base64URL value.');
+        }
     }
 
     /**
