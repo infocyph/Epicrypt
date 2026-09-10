@@ -23,8 +23,10 @@ Complete-path examples
 - :doc:`password`: register, authenticate, and transparently rehash a password.
 - :doc:`security`: issue and atomically consume a single-use password-reset
   token.
-- :doc:`oauth-lifecycle`: issue and verify access tokens, rotate refresh tokens,
-  bind DPoP, narrow scopes, and revoke authorization.
+- :doc:`oauth-lifecycle`: build the transport-neutral OAuth/OIDC token lifecycle
+  over Epicrypt's authorization, token, refresh, revocation and DPoP services.
+- :doc:`authentication-standards`: review the exact OAuth 2.1, OIDC Core and
+  Discovery standards profile, supported behavior and explicit 3.0 exclusions.
 - :doc:`remote-jose-security`: deploy Remote JWKS/OpenID discovery with explicit
   DNS, redirect, timeout, cache, and SSRF boundaries.
 - :doc:`error-handling`: map cryptographic failures at an application boundary.
@@ -49,6 +51,7 @@ integration example.
    security
    token
    oauth-lifecycle
+   authentication-standards
    remote-jose-security
    token-storage
    error-handling
