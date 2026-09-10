@@ -53,9 +53,9 @@ PEM;
     $x = sodium_base642bin((string) $jwk['x'], SODIUM_BASE64_VARIANT_URLSAFE_NO_PADDING);
     $y = sodium_base642bin((string) $jwk['y'], SODIUM_BASE64_VARIANT_URLSAFE_NO_PADDING);
 
-    expect($x)->toHaveLength(32)
+    expect(strlen($x))->toBe(32)
         ->and($x[0])->toBe("\x00")
-        ->and($y)->toHaveLength(32)
+        ->and(strlen($y))->toBe(32)
         ->and($jwks->importPublicKeyFromJwk($jwk, AsymmetricJwtAlgorithm::ES256))->toContain('BEGIN PUBLIC KEY');
 });
 
