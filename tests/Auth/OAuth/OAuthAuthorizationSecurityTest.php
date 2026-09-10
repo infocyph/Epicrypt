@@ -136,6 +136,10 @@ it('contains audience resolver failures within an already validated redirect', f
     $resolver = new class implements OAuthAuthorizationAudienceResolverInterface {
         public function resolve(OAuthClient $client, array $scopes): array
         {
+            if (!$client->enabled || $scopes !== ['read']) {
+                throw new LogicException('Audience resolver received unvalidated request state.');
+            }
+
             throw new RuntimeException('adapter failure');
         }
     };
