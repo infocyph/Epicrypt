@@ -74,7 +74,10 @@ final readonly class OpenIdProviderMetadata
         ];
     }
 
-    /** @param array<array-key, mixed> $claims @return list<string> */
+    /**
+     * @param array<array-key, mixed> $claims
+     * @return list<string>
+     */
     private static function normalizeClaims(array $claims): array
     {
         if (!array_is_list($claims) || count($claims) > AuthProtocolPolicy::MAX_AUTH_CLAIMS) {
