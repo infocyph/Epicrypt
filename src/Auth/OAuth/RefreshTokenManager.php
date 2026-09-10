@@ -105,15 +105,10 @@ final readonly class RefreshTokenManager
         }
 
         $current = RefreshTokenRecord::fromClaims($currentClaims);
-        $successorGrant = $current->grant;
-        if ($requestedScopes !== null) {
-            try {
-                $successorGrant = $current->grant->withScopes($requestedScopes);
-            } catch (ConfigurationException) {
-                return RefreshTokenRotationResult::failure(RefreshTokenRotationStatus::SCOPE_MISMATCH);
-            }
+        $successorGrant = $this->successorGrant($current, $requestedScopes);
+        if (!$successorGrant instanceof RefreshTokenGrant) {
+            return RefreshTokenRotationResult::failure(RefreshTokenRotationStatus::SCOPE_MISMATCH);
         }
-
         if ($this->clock->now()->getTimestamp() >= $current->grant->expiresAt) {
             return RefreshTokenRotationResult::failure(RefreshTokenRotationStatus::EXPIRED);
         }
@@ -150,5 +145,21 @@ final readonly class RefreshTokenManager
         }
 
         return RefreshTokenRotationResult::failure(RefreshTokenRotationStatus::CONFLICT);
+    }
+
+    /**
+     * @param null|array<array-key, mixed> $requestedScopes
+     */
+    private function successorGrant(RefreshTokenRecord $current, ?array $requestedScopes): ?RefreshTokenGrant
+    {
+        if ($requestedScopes === null) {
+            return $current->grant;
+        }
+
+        try {
+            return $current->grant->withScopes($requestedScopes);
+        } catch (ConfigurationException) {
+            return null;
+        }
     }
 }
