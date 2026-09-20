@@ -8,9 +8,10 @@ use Infocyph\Epicrypt\Password\Contract\CompromisedPasswordCheckerInterface;
 
 final class NullCompromisedPasswordChecker implements CompromisedPasswordCheckerInterface
 {
-    // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter -- The null implementation intentionally performs no lookup.
     public function isCompromised(#[\SensitiveParameter] string $password): bool
     {
+        unset($password);
+
         return false;
     }
 }

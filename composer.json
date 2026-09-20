@@ -26,7 +26,7 @@
         "psr/simple-cache": "^3.0"
     },
     "require-dev": {
-        "infocyph/pathwise": "^4.0",
+        "infocyph/pathwise": "^4.1",
         "infocyph/phpforge": "dev-main@dev",
         "nyholm/psr7": "^1.8",
         "php-http/mock-client": "^1.6"

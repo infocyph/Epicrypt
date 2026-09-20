@@ -196,12 +196,16 @@ it('enforces same-host or explicitly allowed JWKS destinations', function () {
         ->toThrow(ConfigurationException::class);
 });
 
-it('requires approved media types and treats visible redirects as failures', function () {
+it('requires approved media types and rejects every visible redirect status', function () {
     $factory = new Psr17Factory();
     foreach ([
         new Response(200, [], '{"keys":[]}'),
         new Response(200, ['Content-Type' => 'text/html'], '{"keys":[]}'),
+        new Response(301, ['Location' => 'https://issuer.example/other']),
         new Response(302, ['Location' => 'https://issuer.example/other']),
+        new Response(303, ['Location' => 'https://issuer.example/other']),
+        new Response(307, ['Location' => 'https://issuer.example/other']),
+        new Response(308, ['Location' => 'https://issuer.example/other']),
     ] as $response) {
         $client = new Client($factory);
         $client->addResponse($response);

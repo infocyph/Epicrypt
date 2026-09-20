@@ -31,11 +31,7 @@ function removeFilePublicationSafetyDirectory(string $directory): void
     }
 }
 
-it('publishes local protected and unprotected outputs with restrictive permissions', function () {
-    if (PHP_OS_FAMILY === 'Windows') {
-        $this->markTestSkipped('POSIX permission bits are not authoritative on Windows.');
-    }
-
+it('publishes local outputs safely with restrictive POSIX permissions', function () {
     $directory = filePublicationSafetyDirectory();
 
     try {
@@ -54,9 +50,37 @@ it('publishes local protected and unprotected outputs with restrictive permissio
         clearstatcache(true, $protected);
         clearstatcache(true, $restored);
 
-        expect(fileperms($protected) & 0777)->toBe(0600)
-            ->and(fileperms($restored) & 0777)->toBe(0600)
-            ->and(file_get_contents($restored))->toBe("APP_ENV=production\nSECRET=value\n")
+        if (PHP_OS_FAMILY !== 'Windows') {
+            expect(fileperms($protected) & 0777)->toBe(0600)
+                ->and(fileperms($restored) & 0777)->toBe(0600);
+        }
+
+        expect(file_get_contents($restored))->toBe("APP_ENV=production\nSECRET=value\n")
+            ->and(glob($directory . DIRECTORY_SEPARATOR . '.epicrypt-*') ?: [])->toBe([]);
+    } finally {
+        removeFilePublicationSafetyDirectory($directory);
+    }
+});
+
+it('atomically replaces an existing destination after successful publication', function () {
+    $directory = filePublicationSafetyDirectory();
+
+    try {
+        $plaintext = $directory . DIRECTORY_SEPARATOR . 'source.env';
+        $protected = $directory . DIRECTORY_SEPARATOR . 'target.env.encrypted';
+        $restored = $directory . DIRECTORY_SEPARATOR . 'target.env';
+        file_put_contents($plaintext, "SECRET=current-value\n");
+        file_put_contents($protected, 'previous-protected-value');
+        file_put_contents($restored, "SECRET=previous-value\n");
+
+        $key = sodium_bin2base64(random_bytes(32), SODIUM_BASE64_VARIANT_URLSAFE_NO_PADDING);
+        $options = new ProtectionOptions('environment-file', 'environment-file/v1');
+        $protector = new FileProtector();
+
+        $protector->protect($plaintext, $protected, $key, $options);
+        $protector->unprotect($protected, $restored, $key, $options);
+
+        expect(file_get_contents($restored))->toBe("SECRET=current-value\n")
             ->and(glob($directory . DIRECTORY_SEPARATOR . '.epicrypt-*') ?: [])->toBe([]);
     } finally {
         removeFilePublicationSafetyDirectory($directory);

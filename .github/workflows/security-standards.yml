@@ -109,6 +109,37 @@ jobs:
         run: |
           php -r '$e=json_decode(file_get_contents($argv[1]), true, 32, JSON_THROW_ON_ERROR); $required=["access_token_issue_verify","authorization_code_jwe","refresh_token_jwe","dpop_issue_verify","oidc_id_token_issue_verify","pat_store_validation","fallback_key_verification"]; foreach ($required as $name) { if (!isset($e["measurements"][$name]["us_per_operation"])) { fwrite(STDERR, "Missing evidence: $name\n"); exit(1); } } if (($e["persistent_worker_memory"]["growth_bytes"] ?? PHP_INT_MAX) > ($e["persistent_worker_memory"]["max_growth_bytes"] ?? -1)) { exit(1); }' "${{ runner.temp }}/authentication-evidence.json"
 
+  windows-file-publication:
+    name: "Windows atomic file publication"
+    runs-on: windows-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.4"
+          extensions: "hash, json, openssl, sodium, fileinfo"
+          coverage: none
+          tools: composer:v2
+        env:
+          fail-fast: true
+      - name: Install dependencies
+        run: composer install --no-interaction --no-progress --prefer-dist
+      - name: Resolve PHPForge Pest template for Windows
+        shell: pwsh
+        run: |
+          $workspace = $env:GITHUB_WORKSPACE -replace '\\', '/'
+          $config = Get-Content 'vendor/infocyph/phpforge/resources/pest.xml' -Raw
+          $config = $config.Replace('vendor/phpunit/phpunit/phpunit.xsd', "$workspace/vendor/phpunit/phpunit/phpunit.xsd")
+          $config = $config.Replace('bootstrap="vendor/autoload.php"', "bootstrap=`"$workspace/vendor/autoload.php`"")
+          $config = $config.Replace('<directory>./tests</directory>', "<directory>$workspace/tests</directory>")
+          $config = $config.Replace('<directory suffix=".php">./src</directory>', "<directory suffix=`".php`">$workspace/src</directory>")
+          Set-Content -Path "$env:RUNNER_TEMP/pest-windows.xml" -Value $config -Encoding utf8
+      - name: Exercise Windows publication and replacement semantics
+        run: php vendor/bin/pest --configuration "$env:RUNNER_TEMP/pest-windows.xml" tests/DataProtection/FilePublicationSafetyTest.php --fail-on-skipped
+
   aegis-modern-libsodium:
     name: "AEGIS on libsodium 1.0.22"
     runs-on: ubuntu-latest
