@@ -64,9 +64,12 @@ transport-level DNS pinning through an arbitrary PSR-18 client.
 
 For production deployments:
 
-- disable automatic redirects in the supplied HTTP client;
-- treat visible 3xx responses as failures (Epicrypt already rejects non-200
-  responses);
+- disable automatic redirects in the supplied HTTP client; this is a security
+  requirement because PSR-18 does not expose redirect history or the final
+  connected destination to Epicrypt;
+- treat every visible 3xx response as a failure (Epicrypt rejects every
+  non-200 response and tests the standard redirect statuses 301, 302, 303,
+  307 and 308);
 - configure short connect and overall/read timeouts in the HTTP client;
 - when DNS-rebinding resistance must include the connected socket, use a client
   whose resolver/pinning controls can be coupled to the injected
