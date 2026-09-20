@@ -127,8 +127,18 @@ jobs:
           fail-fast: true
       - name: Install dependencies
         run: composer install --no-interaction --no-progress --prefer-dist
+      - name: Resolve PHPForge Pest template for Windows
+        shell: pwsh
+        run: |
+          $workspace = $env:GITHUB_WORKSPACE.Replace('\\', '/')
+          $config = Get-Content 'vendor/infocyph/phpforge/resources/pest.xml' -Raw
+          $config = $config.Replace('vendor/phpunit/phpunit/phpunit.xsd', "$workspace/vendor/phpunit/phpunit/phpunit.xsd")
+          $config = $config.Replace('bootstrap="vendor/autoload.php"', "bootstrap=`"$workspace/vendor/autoload.php`"")
+          $config = $config.Replace('<directory>./tests</directory>', "<directory>$workspace/tests</directory>")
+          $config = $config.Replace('<directory suffix=".php">./src</directory>', "<directory suffix=`".php`">$workspace/src</directory>")
+          Set-Content -Path "$env:RUNNER_TEMP/pest-windows.xml" -Value $config -Encoding utf8
       - name: Exercise Windows publication and replacement semantics
-        run: php vendor/bin/pest --configuration vendor/infocyph/phpforge/resources/pest.xml tests/DataProtection/FilePublicationSafetyTest.php --fail-on-skipped
+        run: php vendor/bin/pest --configuration "$env:RUNNER_TEMP/pest-windows.xml" tests/DataProtection/FilePublicationSafetyTest.php --fail-on-skipped
 
   aegis-modern-libsodium:
     name: "AEGIS on libsodium 1.0.22"
