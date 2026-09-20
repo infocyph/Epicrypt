@@ -31,11 +31,7 @@ function removeFilePublicationSafetyDirectory(string $directory): void
     }
 }
 
-it('publishes local protected and unprotected outputs with restrictive permissions', function () {
-    if (PHP_OS_FAMILY === 'Windows') {
-        $this->markTestSkipped('POSIX permission bits are not authoritative on Windows.');
-    }
-
+it('publishes local outputs safely with restrictive POSIX permissions', function () {
     $directory = filePublicationSafetyDirectory();
 
     try {
@@ -54,9 +50,12 @@ it('publishes local protected and unprotected outputs with restrictive permissio
         clearstatcache(true, $protected);
         clearstatcache(true, $restored);
 
-        expect(fileperms($protected) & 0777)->toBe(0600)
-            ->and(fileperms($restored) & 0777)->toBe(0600)
-            ->and(file_get_contents($restored))->toBe("APP_ENV=production\nSECRET=value\n")
+        if (PHP_OS_FAMILY !== 'Windows') {
+            expect(fileperms($protected) & 0777)->toBe(0600)
+                ->and(fileperms($restored) & 0777)->toBe(0600);
+        }
+
+        expect(file_get_contents($restored))->toBe("APP_ENV=production\nSECRET=value\n")
             ->and(glob($directory . DIRECTORY_SEPARATOR . '.epicrypt-*') ?: [])->toBe([]);
     } finally {
         removeFilePublicationSafetyDirectory($directory);
