@@ -62,6 +62,31 @@ it('publishes local outputs safely with restrictive POSIX permissions', function
     }
 });
 
+it('atomically replaces an existing destination after successful publication', function () {
+    $directory = filePublicationSafetyDirectory();
+
+    try {
+        $plaintext = $directory . DIRECTORY_SEPARATOR . 'source.env';
+        $protected = $directory . DIRECTORY_SEPARATOR . 'target.env.encrypted';
+        $restored = $directory . DIRECTORY_SEPARATOR . 'target.env';
+        file_put_contents($plaintext, "SECRET=current-value\n");
+        file_put_contents($protected, 'previous-protected-value');
+        file_put_contents($restored, "SECRET=previous-value\n");
+
+        $key = sodium_bin2base64(random_bytes(32), SODIUM_BASE64_VARIANT_URLSAFE_NO_PADDING);
+        $options = new ProtectionOptions('environment-file', 'environment-file/v1');
+        $protector = new FileProtector();
+
+        $protector->protect($plaintext, $protected, $key, $options);
+        $protector->unprotect($protected, $restored, $key, $options);
+
+        expect(file_get_contents($restored))->toBe("SECRET=current-value\n")
+            ->and(glob($directory . DIRECTORY_SEPARATOR . '.epicrypt-*') ?: [])->toBe([]);
+    } finally {
+        removeFilePublicationSafetyDirectory($directory);
+    }
+});
+
 it('preserves an existing destination and removes staging files after failed decryption', function () {
     $directory = filePublicationSafetyDirectory();
 
