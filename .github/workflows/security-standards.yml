@@ -130,7 +130,7 @@ jobs:
       - name: Resolve PHPForge Pest template for Windows
         shell: pwsh
         run: |
-          $workspace = $env:GITHUB_WORKSPACE.Replace('\\', '/')
+          $workspace = $env:GITHUB_WORKSPACE -replace '\\', '/'
           $config = Get-Content 'vendor/infocyph/phpforge/resources/pest.xml' -Raw
           $config = $config.Replace('vendor/phpunit/phpunit/phpunit.xsd', "$workspace/vendor/phpunit/phpunit/phpunit.xsd")
           $config = $config.Replace('bootstrap="vendor/autoload.php"', "bootstrap=`"$workspace/vendor/autoload.php`"")
