@@ -13,7 +13,7 @@ Epicrypt 3.0 requires PHP 8.4 or later and the ``hash``, ``json``, ``openssl``
 and ``sodium`` extensions. The asymmetric/PKI dependency is phpseclib 4.0.1 or
 later.
 
-``infocyph/pathwise`` is no longer a production dependency. Pathwise 4 is used
+``infocyph/pathwise`` is no longer a production dependency. Pathwise 4.1 is used
 only by Epicrypt's development interoperability suite. Storage/framework code
 opens its own streams and passes those streams to Epicrypt; Epicrypt does not
 own global mounts, registries or application path policy.
