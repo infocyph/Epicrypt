@@ -43,7 +43,7 @@ rss_kib() {
 }
 sample() {
   local variant=$1 url=$2 master=$3 round=$4 log proc peak=0 current metrics
-  local marker valid invalid completed connect read_errors write_errors timeout duration p50 p95 p99
+  local marker valid invalid completed connect read_errors write_errors timeout elapsed_us p50 p95 p99
   log=$(mktemp)
   wrk -t"$threads" -c"$connections" -d"$duration" --latency \
     -s "$validation_script" "$url" > "$log" 2>&1 &
@@ -67,8 +67,8 @@ sample() {
     rm -f "$log"
     return 1
   fi
-  read -r marker valid invalid completed connect read_errors write_errors timeout duration p50 p95 p99 <<< "$metrics"
-  for value in "$valid" "$invalid" "$completed" "$connect" "$read_errors" "$write_errors" "$timeout" "$duration" "$p50" "$p95" "$p99"; do
+  read -r marker valid invalid completed connect read_errors write_errors timeout elapsed_us p50 p95 p99 <<< "$metrics"
+  for value in "$valid" "$invalid" "$completed" "$connect" "$read_errors" "$write_errors" "$timeout" "$elapsed_us" "$p50" "$p95" "$p99"; do
     if ! [[ $value =~ ^[0-9]+$ ]]; then
       cat "$log" >&2
       echo "Invalid wrk evidence: $value" >&2
@@ -76,7 +76,7 @@ sample() {
       return 1
     fi
   done
-  if (( valid == 0 || valid != completed || invalid != 0 || connect != 0 || read_errors != 0 || write_errors != 0 || timeout != 0 || duration == 0 )); then
+  if (( valid == 0 || valid != completed || invalid != 0 || connect != 0 || read_errors != 0 || write_errors != 0 || timeout != 0 || elapsed_us == 0 )); then
     cat "$log" >&2
     echo "Incomplete/incorrect responses or transport errors: $metrics" >&2
     rm -f "$log"
@@ -90,7 +90,7 @@ sample() {
       return 1
     fi
   fi
-  awk -v name="$variant" -v round="$round" -v valid="$valid" -v elapsed="$duration" \
+  awk -v name="$variant" -v round="$round" -v valid="$valid" -v elapsed="$elapsed_us" \
     -v rss="$peak" -v p50="$p50" -v p95="$p95" -v p99="$p99" 'BEGIN {
     printf "%s\t%d\t%.3f\t%d\t%.3f\t%.3f\t%.3f\t%d\t%.3f\n",
       name, round, valid*60000000/elapsed, rss, p50/1000, p95/1000, p99/1000,
