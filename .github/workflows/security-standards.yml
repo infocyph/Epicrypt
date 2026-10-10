@@ -9,7 +9,16 @@ on:
     branches: [ "main", "master", "develop", "development" ]
 
 jobs:
+  release:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+    uses: infocyph/phpforge/.github/workflows/release.yml@main
+    permissions:
+      contents: write
+    secrets:
+      COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
+
   phpforge:
+    if: github.event_name != 'push' || !startsWith(github.ref, 'refs/tags/')
     uses: infocyph/phpforge/.github/workflows/security-standards.yml@main
     with:
       fail_on_skipped_tests: true
@@ -22,6 +31,7 @@ jobs:
       contents: read
 
   jose-interoperability:
+    if: github.event_name != 'push' || !startsWith(github.ref, 'refs/tags/')
     name: "Independent JOSE interoperability"
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -54,6 +64,7 @@ jobs:
           php tests/Interop/epicrypt.php consume "${{ runner.temp }}/epicrypt-jose.json" "${{ runner.temp }}/independent-jose.json"
 
   auth-interoperability:
+    if: github.event_name != 'push' || !startsWith(github.ref, 'refs/tags/')
     name: "Independent OAuth OIDC interoperability"
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -86,6 +97,7 @@ jobs:
           php tests/Interop/auth-epicrypt.php consume "${{ runner.temp }}/epicrypt-auth.json" "${{ runner.temp }}/independent-auth.json"
 
   auth-performance:
+    if: github.event_name != 'push' || !startsWith(github.ref, 'refs/tags/')
     name: "Authentication performance and memory evidence"
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -110,6 +122,7 @@ jobs:
           php -r '$e=json_decode(file_get_contents($argv[1]), true, 32, JSON_THROW_ON_ERROR); $required=["access_token_issue_verify","authorization_code_jwe","refresh_token_jwe","dpop_issue_verify","oidc_id_token_issue_verify","pat_store_validation","fallback_key_verification"]; foreach ($required as $name) { if (!isset($e["measurements"][$name]["us_per_operation"])) { fwrite(STDERR, "Missing evidence: $name\n"); exit(1); } } if (($e["persistent_worker_memory"]["growth_bytes"] ?? PHP_INT_MAX) > ($e["persistent_worker_memory"]["max_growth_bytes"] ?? -1)) { exit(1); }' "${{ runner.temp }}/authentication-evidence.json"
 
   windows-file-publication:
+    if: github.event_name != 'push' || !startsWith(github.ref, 'refs/tags/')
     name: "Windows atomic file publication"
     runs-on: windows-latest
     timeout-minutes: 10
@@ -141,6 +154,7 @@ jobs:
         run: php vendor/bin/pest --configuration "$env:RUNNER_TEMP/pest-windows.xml" tests/DataProtection/FilePublicationSafetyTest.php --fail-on-skipped
 
   aegis-modern-libsodium:
+    if: github.event_name != 'push' || !startsWith(github.ref, 'refs/tags/')
     name: "AEGIS on libsodium 1.0.22"
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -182,6 +196,7 @@ jobs:
           --fail-on-skipped
 
   mutation-security-critical:
+    if: github.event_name != 'push' || !startsWith(github.ref, 'refs/tags/')
     name: "Security-critical mutation testing (${{ matrix.shard }})"
     runs-on: ubuntu-latest
     timeout-minutes: 10
