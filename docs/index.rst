@@ -6,7 +6,8 @@ security, integrity primitives, certificate tooling, and a transport-neutral
 OAuth 2.1/OpenID Connect/personal-token core for PHP 8.4 and later.
 
 Upgrading from Epicrypt 2.x? Start with :doc:`migration-3.0` for dependency,
-API, persisted-format and deployment changes.
+API, persisted-format and deployment changes. See :doc:`release-notes-3.2.0`
+for the security, cache and optional Runwire changes in this candidate.
 
 Complete-path examples
 ----------------------
@@ -50,6 +51,7 @@ integration example.
 
    getting-started
    migration-3.0
+   release-notes-3.2.0
    architecture
    security-recommendations
    certificate
