@@ -162,6 +162,7 @@ final readonly class RemoteJwks
 
         return $normalized;
     }
+
     /**
      * @param array{keys: list<array<string, mixed>>} $jwks
      * @param array{maxAge: int|null, noStore: bool, noCache: bool} $cachePolicy
