@@ -18,6 +18,12 @@ it('rejects non-public destinations including multicast and mapped forms', funct
     'ipv6 multicast' => ['ff02::1'],
     'mapped private' => ['::ffff:10.0.0.1'],
     'mapped multicast' => ['::ffff:224.0.0.1'],
+    'mapped documentation' => ['::ffff:192.0.2.1'],
+    'link-local' => ['169.254.169.254'],
+    'reserved upper IPv4' => ['240.0.0.1'],
+    'limited broadcast' => ['255.255.255.255'],
+    'ipv4 unspecified' => ['0.0.0.0'],
+    'ipv6 unique local' => ['fc00::1'],
     'unspecified' => ['::'],
 ]);
 
