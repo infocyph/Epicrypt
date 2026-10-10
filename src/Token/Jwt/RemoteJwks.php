@@ -56,7 +56,11 @@ final readonly class RemoteJwks
     /** @return array{keys: list<array<string, mixed>>} */
     public function load(bool $forceRefresh = false): array
     {
-        $cached = $this->cached();
+        try {
+            $cached = $forceRefresh ? null : $this->cached();
+        } catch (Throwable $exception) {
+            throw new KeyResolutionException('Remote JWKS cache lookup failed.', 0, $exception);
+        }
         $now = $this->clock->now()->getTimestamp();
         if (!$forceRefresh && $cached !== null && $cached['freshUntil'] > $now) {
             return $cached['jwks'];
@@ -64,6 +68,18 @@ final readonly class RemoteJwks
 
         try {
             [$jwks, $cachePolicy] = $this->fetch();
+        } catch (Throwable $exception) {
+            if (!$forceRefresh && $cached !== null && $cached['staleUntil'] > $now) {
+                return $cached['jwks'];
+            }
+            if ($exception instanceof KeyResolutionException) {
+                throw $exception;
+            }
+
+            throw new KeyResolutionException('Remote JWKS resolution failed.', 0, $exception);
+        }
+
+        try {
             if ($cachePolicy['noStore']) {
                 $this->cache?->delete($this->cacheKey);
 
@@ -86,14 +102,7 @@ final readonly class RemoteJwks
 
             return $jwks;
         } catch (Throwable $exception) {
-            if (!$forceRefresh && $cached !== null && $cached['staleUntil'] > $now) {
-                return $cached['jwks'];
-            }
-            if ($exception instanceof KeyResolutionException) {
-                throw $exception;
-            }
-
-            throw new KeyResolutionException('Remote JWKS resolution failed.', 0, $exception);
+            throw new KeyResolutionException('Remote JWKS cache operation failed.', 0, $exception);
         }
     }
 
