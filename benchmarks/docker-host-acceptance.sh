@@ -7,7 +7,7 @@ mkdir -p "$report"
 report="$(cd "$report" && pwd)"
 scratch=$(mktemp -d)
 prefix="epicrypt-release-$$"
-php_image=${HOST_PHP_IMAGE:-php:8.4-fpm-alpine@sha256:78cd8de9970a9cd6ff4d98860a94eb5bf37dd2d5776b4785562dbfad01c29d5a}
+php_image=${HOST_PHP_IMAGE:-php:8.4.26-fpm-alpine3.24}
 tools_image=${HOST_TOOLS_IMAGE:-"$prefix-tools"}
 sampler=''
 cleanup() {
@@ -64,7 +64,7 @@ opcache.memory_consumption=128
 opcache.jit=off
 INI
 if [[ -z ${HOST_TOOLS_IMAGE:-} ]]; then
-  printf '%s\n' 'FROM nginx:stable-alpine@sha256:0985e772fb9f729e6fa0980da05fca5d9c468e870eed43071545afa9d2e27d94' 'RUN apk add --no-cache bash curl wrk procps coreutils' > "$scratch/Dockerfile"
+  printf '%s\n' 'FROM nginx:1.30.5-alpine3.24' 'RUN apk add --no-cache bash curl wrk procps coreutils' > "$scratch/Dockerfile"
   docker build -t "$tools_image" "$scratch" > "$report/tools-build.log" 2>&1
 fi
 docker network create "$prefix" >/dev/null
@@ -125,7 +125,7 @@ for mode in unbound borrowed; do
         -s /benchmarks/host-rpm-validate.lua "http://$prefix-proxy:$port/?scenario=mixed&bound=$bound" > "$report/warm-$mode-c$concurrency-$port.log"
     done
     docker exec -e HOST_BASE_PID="$base_pid" -e HOST_CANDIDATE_PID="$candidate_pid" \
-      -e HOST_ROUNDS="${HOST_ROUNDS:-3}" -e HOST_DURATION="${HOST_DURATION:-20s}" \
+      -e HOST_ROUNDS="${HOST_ROUNDS:-3}" -e HOST_DURATION="${HOST_DURATION:-60s}" \
       -e HOST_THREADS=1 -e HOST_CONNECTIONS="$concurrency" -e HOST_EXPECTED_BODY=release-health-ok \
       -e HOST_MAX_RSS_KIB="${HOST_MAX_RSS_KIB:-262144}" -e HOST_REPORT="/report/$mode-c$concurrency.tsv" \
       "$prefix-client" bash /benchmarks/host-rpm-compare.sh \

@@ -58,7 +58,7 @@ See the maintained [Runwire guide](../runwire-integration.rst), [remote JOSE gui
 
 ## Final deployment certification
 
-All release Docker images use Alpine: digest-pinned PHP 8.4 FPM for HTTP and the persistent process, Nginx Alpine plus Bash/curl/wrk/procps/coreutils for measurement, and the existing pinned Alpine AEGIS runtime. CI runner operating systems remain separate from container images.
+All release Docker images use explicit version tags without digest pins: `php:8.4.26-fpm-alpine3.24` for HTTP and the persistent process, `nginx:1.30.5-alpine3.24` plus Bash/curl/wrk/procps/coreutils for measurement, and `php:8.4.26-cli-alpine3.24` for AEGIS. CI runner operating systems remain separate from container images. Record the resolved image identities in each measurement report.
 
 Run `benchmarks/docker-host-acceptance.sh` on the user-authorized Docker host. The script records source identities/patch, runtime and image metadata, production lockfile, shared public EC/JWKS fixtures, CPU affinity, FPM/OPcache/proxy configuration, raw trials and live resource samples in `var/docker-host-acceptance/`. Independent exact-head CI uploads the equivalent `docker-host-acceptance` artifact.
 
@@ -68,7 +68,7 @@ Required profile and unchanged budgets:
 - Separate FPM/proxy/client CPU sets; record actual affinities. Only the fresh CI runner pins its Docker daemon/controller threads; local host daemon configuration is untouched.
 - Readiness and 60-second warmup before each comparison. Three alternating trials at concurrency **1, 4, 8**, comparing unbound calls with `3.1` and borrowed calls with pre-review `1b034ec`.
 - Each mixed response independently verifies file encryption round trip/integrity, JWT, JWKS miss/hit and borrowed cancellation/ownership. Zero incorrect responses, socket errors or timeouts.
-- Reject **>2% median successful RPM loss**, **>5% trial spread**, or **>256 MiB process-tree RSS**. Retain p50/p95/p99 and CPU/memory samples. CI uses 60-second measured trials; local default is 20 seconds.
+- Reject **>2% median successful RPM loss**, **>5% trial spread**, or **>256 MiB process-tree RSS**. Retain p50/p95/p99 and CPU/memory samples. Local and CI defaults use 60-second measured trials to reduce the noise observed in shorter windows.
 - A **300-second** persistent process checks alternating tenant/request state, cancellation, 20,000 discarded scoped bindings and **2 MiB heap-growth** guards. Sample live RSS continuously and verify real FPM replacement with a changed host PID and correct response.
 
 **Historical evidence:** The pre-clock-fence Debian profile passed all six comparisons (unbound -1.604%, -0.503%, +0.940%; borrowed -0.147%, +1.103%, +0.723%), with 643,401 correct responses, zero errors, peak RSS 110,208 KiB and a successful 300-second soak/replacement. Subsequent runs rejected unstable trials; the final-clock local Debian attempt rejected a stable -3.250% unbound concurrency-1 regression. These results are retained as diagnostic history and do not certify Alpine or the final revision. No guard is relaxed by changing images.

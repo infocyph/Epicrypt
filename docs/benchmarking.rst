@@ -133,8 +133,9 @@ For a Docker-equivalent deployment, run the matched FPM fixture:
    HOST_DOCKER_REPORT=var/docker-host-acceptance \
      bash benchmarks/docker-host-acceptance.sh
 
-All fixture containers use Alpine: digest-pinned PHP 8.4 FPM for the HTTP
-variants and persistent process, and digest-pinned Nginx Alpine with Bash,
+All fixture containers use versioned Alpine images: PHP 8.4.26 FPM on
+Alpine 3.24 for the HTTP variants and persistent process, and Nginx 1.30.5
+on Alpine 3.24 with Bash,
 curl, wrk, procps and coreutils for the proxy and measurement client.
 The procps implementation supplies numeric process-tree RSS in KiB;
 BusyBox memory units are unsuitable for the RSS guard. Image identities
@@ -143,7 +144,7 @@ and runtime configuration are retained with every report.
 The fixture installs one identical production dependency set, including
 host-owned Runwire 2.1.1 and Nyholm PSR-7. It deploys four static FPM workers
 per variant with identical OPcache settings, warms each variant for 60 seconds, then runs
-three alternating 20-second trials at concurrency 1, 4 and 8. CPU affinity
+three alternating 60-second trials at concurrency 1, 4 and 8. CPU affinity
 separates FPM (cores 2,3), the proxy (core 0) and the load generator (core 1);
 override ``HOST_FPM_CPUS``, ``HOST_PROXY_CPUS`` and ``HOST_CLIENT_CPUS`` for
 the host's available CPU set. ``HOST_PHP_IMAGE`` selects an alternative FPM

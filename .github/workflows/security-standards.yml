@@ -335,7 +335,7 @@ jobs:
     permissions:
       contents: read
     env:
-      AEGIS_RUNTIME: "php:8.4-cli-alpine@sha256:26e3f1de7f6aa3e8ea15584d803c5e088c57df89ff02a3ecf2dc855a4282d8d7"
+      AEGIS_RUNTIME: "php:8.4.26-cli-alpine3.24"
     steps:
       - uses: actions/checkout@v7
       - uses: shivammathur/setup-php@v2
