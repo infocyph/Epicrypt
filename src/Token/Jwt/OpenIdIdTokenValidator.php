@@ -164,7 +164,6 @@ final readonly class OpenIdIdTokenValidator
             && (!is_int($authTime) || ($now - $authTime) > $maximumAuthenticationAge)) {
             throw new InvalidClaimException('OIDC ID token auth_time violates maximum age.');
         }
-
     }
 
     private function validateConfiguration(
