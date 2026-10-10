@@ -15,9 +15,7 @@ final readonly class FileHasher
 {
     private const int STREAM_CHUNK_SIZE = 64 * 1024;
 
-    public function __construct(private IntegrityAlgorithm $algorithm = IntegrityAlgorithm::SHA256)
-    {
-    }
+    public function __construct(private IntegrityAlgorithm $algorithm = IntegrityAlgorithm::SHA256) {}
 
     public function hash(string $path, bool $binary = false, ?int $length = null, ?RunwireExecutionContext $context = null): string
     {
