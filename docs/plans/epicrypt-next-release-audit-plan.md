@@ -2,7 +2,7 @@
 
 Updated 2026-10-10. One **3.2.0** release contains all security fixes, quality remediation, optional Runwire integration and documentation changes. No identified change requires a major release.
 
-Status: **Implementation and local PHP QA complete; final Alpine deployment and exact-head CI certification pending.** [Draft PR #32](https://github.com/infocyph/Epicrypt/pull/32) remains unmerged and untagged. Merge, tag and publication are user-managed. Historical green runs never certify later changes.
+Status: **Implementation and local PHP QA complete.** Final Alpine deployment acceptance is determined by fresh execution reports and [checks on the current PR head](https://github.com/infocyph/Epicrypt/pull/32/checks). [Draft PR #32](https://github.com/infocyph/Epicrypt/pull/32) remains unmerged and untagged. Merge, tag and publication are user-managed. Historical green runs never certify later changes.
 
 ## Governing rules
 
@@ -81,8 +81,8 @@ Generated graphs, superseded raw local attempts and the verbose historical track
 - [x] PHPForge processors/detailed QA/release guard and production-minimal smoke pass for the current production source tree `5d0286488c5d60223bc24df0448bc3dac8c6919c`.
 - [x] Regenerated Node lockfile, clean npm install/audit and both bidirectional interop checks pass with the upgraded tools; npm reports zero vulnerabilities.
 - [x] Cross-checked documentation, complete-example syntax/runtime checks and strict Sphinx pass after cleanup; PHPForge CI and comparator positive/six negative cases pass.
-- [ ] Fresh authorized Alpine host passes all six RPM comparisons, 300-second soak and worker replacement.
-- [ ] Latest committed PR head passes **all** Security & Standards and Documentation checks, including independent Alpine acceptance, PHP 8.4/8.5 stable/lowest, PHPForge acceptance, production smoke, mutation floors, Windows, AEGIS, interoperability/npm audit and benchmarks.
-- [ ] User-managed merge/tag/publication after the blocking gates pass; verify actual tag release dispatch separately.
+- Require a fresh authorized Alpine host report passing all six RPM comparisons, 300-second soak and worker replacement.
+- Require **all** Security & Standards and Documentation checks to pass on the latest committed PR head, including independent Alpine acceptance, PHP 8.4/8.5 stable/lowest, PHPForge acceptance, production smoke, mutation floors, Windows, AEGIS, interoperability/npm audit and benchmarks.
+- Leave merge/tag/publication to the user after the blocking gates pass; verify actual tag release dispatch separately.
 
 Completion is determined by successful final execution records, not this document's historical checkpoints. Report local validation, host deployment, exact-head hosted CI and publication state separately.
