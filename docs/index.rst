@@ -1,4 +1,4 @@
-Epicrypt 3.0
+Epicrypt 3.2
 ============
 
 Epicrypt provides authenticated data protection, token security, password

@@ -6,7 +6,7 @@ use Infocyph\Epicrypt\DataProtection\FileProtector;
 use Infocyph\Epicrypt\DataProtection\ProtectionOptions;
 use Infocyph\Pathwise\Storage\StorageContext;
 
-it('interoperates with independent Pathwise 4.1 storage contexts through explicit streams', function () {
+it('interoperates with independent Pathwise 4.2 storage contexts through explicit streams', function () {
     $base = sys_get_temp_dir() . '/epicrypt-pathwise4-' . bin2hex(random_bytes(6));
     $rootA = $base . '/a';
     $rootB = $base . '/b';
@@ -46,8 +46,8 @@ it('interoperates with independent Pathwise 4.1 storage contexts through explici
         ->and($contextB->filesystem()->read('plain.txt'))->toBe('context-b');
 });
 
-it('uses Pathwise 4.1 containment-checked local paths with Epicrypt local file APIs', function () {
-    $base = sys_get_temp_dir() . '/epicrypt-pathwise41-local-' . bin2hex(random_bytes(6));
+it('uses Pathwise 4.2 containment-checked local paths with Epicrypt local file APIs', function () {
+    $base = sys_get_temp_dir() . '/epicrypt-pathwise42-local-' . bin2hex(random_bytes(6));
     $root = $base . '/storage';
     $outside = $base . '/outside';
     mkdir($root, 0700, true);
@@ -58,7 +58,7 @@ it('uses Pathwise 4.1 containment-checked local paths with Epicrypt local file A
 
     $key = sodium_bin2base64(random_bytes(32), SODIUM_BASE64_VARIANT_URLSAFE_NO_PADDING);
     $protector = new FileProtector();
-    $options = new ProtectionOptions('pathwise41-local-interop');
+    $options = new ProtectionOptions('pathwise42-local-interop');
 
     $input = $context->localPath('plain.txt');
     $protected = $context->localPath('protected.ep2');

@@ -5,6 +5,7 @@ on:
     - cron: "0 0 * * 0"
   push:
     branches: [ "main", "master" ]
+    tags: [ "*" ]
   pull_request:
     branches: [ "main", "master", "develop", "development" ]
 

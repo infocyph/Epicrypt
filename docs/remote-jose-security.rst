@@ -38,22 +38,27 @@ policy.
    use Infocyph\Epicrypt\Token\Jwt\RemoteJwks;
    use Infocyph\Epicrypt\Token\Jwt\RemoteJwksConfiguration;
 
-   final class ApplicationJoseResolver implements RemoteJoseHostResolverInterface
+   final readonly class ApplicationJoseResolver implements RemoteJoseHostResolverInterface
    {
+       public function __construct(private \Closure $resolveWithTransportPolicy) {}
+
        public function resolve(string $hostname): array
        {
-           // Resolve through the same controlled network policy used by the
-           // application's HTTP transport and return only concrete IP strings.
-           return $this->networkPolicy->resolvePublicAddresses($hostname);
+           return ($this->resolveWithTransportPolicy)($hostname);
        }
    }
+
+   // The host supplies a Closure backed by its configured HTTP transport's
+   // DNS lookup/pinning policy. It must return all candidate A/AAAA addresses
+   // as strings, not a selected public subset.
+   // $resolveWithTransportPolicy is provided by the host.
 
    $remote = new RemoteJwks(
        $psr18Client,
        $psr17RequestFactory,
        new RemoteJwksConfiguration('https://issuer.example'),
        $psr16Cache,
-       hostResolver: new ApplicationJoseResolver(),
+       hostResolver: new ApplicationJoseResolver($resolveWithTransportPolicy),
    );
 
 PSR-18 transport boundary
