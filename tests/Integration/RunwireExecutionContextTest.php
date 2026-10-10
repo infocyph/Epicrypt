@@ -214,6 +214,70 @@ it('checks liveness and yields only inside a live borrowed host coroutine scope'
     expect(fn () => $borrowed->checkpoint())->toThrow(LogicException::class);
 });
 
+it('rejects a borrowed scope from an unrelated task', function () {
+    $runtime = RuntimeContext::fromCapabilities(
+        new RuntimeCapabilities(RuntimeDriver::NATIVE, supportsRunwireCoroutines: true),
+        'epicrypt-wrong-task',
+    );
+    $borrowed = null;
+    $outcome = null;
+
+    (new CoroutineRuntime())->run(function (CoroutineScope $scope) use ($runtime, &$borrowed, &$outcome): void {
+        $sibling = $scope->spawn(static function () use (&$borrowed, &$outcome): void {
+            try {
+                $borrowed->checkpoint();
+            } catch (LogicException) {
+                $outcome = 'rejected';
+            }
+        });
+        $borrowed = new RunwireExecutionContext($runtime, RequestContext::create($runtime), $scope);
+        $sibling->await();
+    });
+
+    expect($outcome)->toBe('rejected');
+});
+
+it('rejects cancellation after a staged write and before atomic publication', function () {
+    $runtime = RuntimeContext::standalone();
+    $request = RequestContext::create($runtime);
+    $context = new RunwireExecutionContext($runtime, $request);
+    $directory = sys_get_temp_dir() . '/epicrypt-publication-' . bin2hex(random_bytes(8));
+    mkdir($directory, 0700);
+    $target = $directory . '/existing.txt';
+    file_put_contents($target, 'previous-content');
+
+    try {
+        expect(fn() => \\Infocyph\\Epicrypt\\Internal\\StreamIO::withAtomicLocalOutput(
+            $target,
+            static function ($stream) use ($request): void {
+                fwrite($stream, 'new-content');
+                $request->cancel(CancellationReason::HOST_CANCELLED);
+            },
+            static fn() => $context->assertActive(),
+        ))->toThrow(CancelledException::class);
+        expect(file_get_contents($target))->toBe('previous-content')
+            ->and(glob($directory . '/.epicrypt-*') ?: [])->toBe([]);
+    } finally {
+        unlink($target);
+        rmdir($directory);
+    }
+});
+
+it('does not bypass cancelled contexts when a supplied digest is malformed', function () {
+    $runtime = RuntimeContext::standalone();
+    $request = RequestContext::create($runtime);
+    $context = new RunwireExecutionContext($runtime, $request);
+    $stream = fopen('php://temp', 'w+b');
+    $request->cancel(CancellationReason::HOST_CANCELLED);
+
+    try {
+        expect(fn() => (new FileHasher())->verifyStream($stream, 'bad-digest', context: $context))
+            ->toThrow(CancelledException::class);
+    } finally {
+        fclose($stream);
+    }
+});
+
 it('preserves separate borrowed request cancellation across interleaved host tasks', function () {
     $runtime = RuntimeContext::fromCapabilities(
         new RuntimeCapabilities(RuntimeDriver::NATIVE, supportsRunwireCoroutines: true),
