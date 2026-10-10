@@ -15,7 +15,9 @@ final readonly class FileHasher
 {
     private const int STREAM_CHUNK_SIZE = 64 * 1024;
 
-    public function __construct(private IntegrityAlgorithm $algorithm = IntegrityAlgorithm::SHA256) {}
+    public function __construct(private IntegrityAlgorithm $algorithm = IntegrityAlgorithm::SHA256)
+    {
+    }
 
     public function hash(string $path, bool $binary = false, ?int $length = null, ?RunwireExecutionContext $context = null): string
     {
@@ -56,6 +58,7 @@ final readonly class FileHasher
         ?int $length = null,
         ?RunwireExecutionContext $context = null,
     ): bool {
+        $context?->assertActive();
         if (!$this->digestIsWellFormed($digest, $binary, $length)) {
             return false;
         }
@@ -76,6 +79,7 @@ final readonly class FileHasher
         ?int $length = null,
         ?RunwireExecutionContext $context = null,
     ): bool {
+        $context?->assertActive();
         if (!$this->digestIsWellFormed($digest, $binary, $length)) {
             return false;
         }
@@ -117,7 +121,7 @@ final readonly class FileHasher
 
         try {
             while (($chunk = StreamIO::readChunk($stream, self::STREAM_CHUNK_SIZE)) !== null) {
-            $context?->checkpoint();
+                $context?->checkpoint();
                 sodium_crypto_generichash_update($state, $chunk);
             }
             $digest = sodium_crypto_generichash_final($state, $outputLength);
