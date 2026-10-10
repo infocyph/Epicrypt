@@ -469,3 +469,115 @@ it('fails closed when a remote JOSE stream makes no read progress', function () 
     expect(fn () => $remote->load())->toThrow(KeyResolutionException::class, 'Remote JOSE response stream made no progress.');
     expect($reads)->toBe(1);
 });
+
+function remoteJwksStrictCache(): CacheInterface
+{
+    return new class implements CacheInterface {
+        /** @var array<string, mixed> */
+        private array $values = [];
+
+        private function assertKey(string $key): void
+        {
+            if (strlen($key) > 64 || preg_match('/\A[A-Za-z0-9_.]+\z/D', $key) !== 1) {
+                throw new InvalidArgumentException('Invalid PSR-16 key.');
+            }
+        }
+
+        public function get(string $key, mixed $default = null): mixed
+        {
+            $this->assertKey($key);
+
+            return $this->values[$key] ?? $default;
+        }
+
+        public function set(string $key, mixed $value, DateInterval|int|null $ttl = null): bool
+        {
+            unset($ttl);
+            $this->assertKey($key);
+            $this->values[$key] = $value;
+
+            return true;
+        }
+
+        public function delete(string $key): bool
+        {
+            $this->assertKey($key);
+            unset($this->values[$key]);
+
+            return true;
+        }
+
+        public function clear(): bool
+        {
+            $this->values = [];
+
+            return true;
+        }
+
+        public function getMultiple(iterable $keys, mixed $default = null): iterable
+        {
+            foreach ($keys as $key) {
+                yield $key => $this->get($key, $default);
+            }
+        }
+
+        public function setMultiple(iterable $values, DateInterval|int|null $ttl = null): bool
+        {
+            foreach ($values as $key => $value) {
+                $this->set((string) $key, $value, $ttl);
+            }
+
+            return true;
+        }
+
+        public function deleteMultiple(iterable $keys): bool
+        {
+            foreach ($keys as $key) {
+                $this->delete($key);
+            }
+
+            return true;
+        }
+
+        public function has(string $key): bool
+        {
+            $this->assertKey($key);
+
+            return array_key_exists($key, $this->values);
+        }
+    };
+}
+
+it('uses PSR-16-compatible cache keys and isolates different JWKS policies', function () {
+    $factory = new Psr17Factory();
+    $cache = remoteJwksStrictCache();
+    $clock = remoteJwksClock(1000);
+    $issuer = 'https://issuer.example';
+    $url = 'https://keys.example/jwks';
+    $hosts = ['keys.example', 'cdn.example'];
+    $baseline = new RemoteJwksConfiguration($issuer, $url, minimumTtl: 1, maximumTtl: 3600, allowedJwksHosts: $hosts);
+    $client = new Client($factory);
+    $client->addResponse(new Response(200, ['Content-Type' => 'application/jwk-set+json'], '{"keys":[]}'));
+    $remote = new RemoteJwks($client, $factory, $baseline, $cache, $clock, remoteJwksResolver());
+    expect($remote->load())->toBe(['keys' => []]);
+
+    $equivalent = new RemoteJwksConfiguration(
+        $issuer,
+        $url,
+        minimumTtl: 1,
+        maximumTtl: 3600,
+        allowedJwksHosts: array_reverse($hosts),
+    );
+    $cacheHitClient = new Client($factory);
+    expect((new RemoteJwks($cacheHitClient, $factory, $equivalent, $cache, $clock, remoteJwksResolver()))->load())
+        ->toBe(['keys' => []])
+        ->and($cacheHitClient->getRequests())->toHaveCount(0);
+
+    $clock->timestamp = 1100;
+    $strict = new RemoteJwksConfiguration($issuer, $url, minimumTtl: 1, maximumTtl: 5, staleTtl: 0, allowedJwksHosts: $hosts);
+    $strictClient = new Client($factory);
+    $strictClient->addResponse(new Response(200, ['Content-Type' => 'application/jwk-set+json'], '{"keys":[]}'));
+    expect((new RemoteJwks($strictClient, $factory, $strict, $cache, $clock, remoteJwksResolver()))->load())
+        ->toBe(['keys' => []])
+        ->and($strictClient->getRequests())->toHaveCount(1);
+});
