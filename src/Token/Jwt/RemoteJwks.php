@@ -79,6 +79,29 @@ final readonly class RemoteJwks
             throw new KeyResolutionException('Remote JWKS resolution failed.', 0, $exception);
         }
 
+        return $this->cacheFetched($jwks, $cachePolicy, $now);
+    }
+
+    public function resolve(string $kid, AsymmetricJwtAlgorithm $algorithm): string
+    {
+        $jwks = $this->load(false);
+
+        try {
+            return new Jwks()->resolvePublicKeyByKid($jwks, $kid, $algorithm);
+        } catch (KeyResolutionException) {
+            $jwks = $this->load(true);
+
+            return new Jwks()->resolvePublicKeyByKid($jwks, $kid, $algorithm);
+        }
+    }
+
+    /**
+     * @param array{keys: list<array<string, mixed>>} $jwks
+     * @param array{maxAge: int|null, noStore: bool, noCache: bool} $cachePolicy
+     * @return array{keys: list<array<string, mixed>>}
+     */
+    private function cacheFetched(array $jwks, array $cachePolicy, int $now): array
+    {
         try {
             if ($cachePolicy['noStore']) {
                 if ($this->cache?->delete($this->cacheKey) === false) {
@@ -107,19 +130,6 @@ final readonly class RemoteJwks
             return $jwks;
         } catch (Throwable $exception) {
             throw new KeyResolutionException('Remote JWKS cache operation failed.', 0, $exception);
-        }
-    }
-
-    public function resolve(string $kid, AsymmetricJwtAlgorithm $algorithm): string
-    {
-        $jwks = $this->load(false);
-
-        try {
-            return new Jwks()->resolvePublicKeyByKid($jwks, $kid, $algorithm);
-        } catch (KeyResolutionException) {
-            $jwks = $this->load(true);
-
-            return new Jwks()->resolvePublicKeyByKid($jwks, $kid, $algorithm);
         }
     }
 

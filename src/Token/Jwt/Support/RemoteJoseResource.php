@@ -9,6 +9,7 @@ use Infocyph\Epicrypt\Token\Jwt\RemoteJoseHostResolverInterface;
 use Psr\Http\Client\ClientExceptionInterface;
 use Psr\Http\Client\ClientInterface;
 use Psr\Http\Message\RequestFactoryInterface;
+use Psr\Http\Message\StreamInterface;
 use Throwable;
 
 /** @internal Bounded PSR-18 JSON resource boundary. */
@@ -42,7 +43,20 @@ final readonly class RemoteJoseResource
         if (!in_array($contentType, $allowedMediaTypes, true)) {
             throw new KeyResolutionException('Remote JOSE endpoint returned a non-JSON content type.');
         }
-        $body = $response->getBody();
+        $json = $this->readBoundedBody($response->getBody());
+
+        $maximumMembers = $jwks
+            ? 1 + ($this->maximumKeys * (JosePolicy::MAX_JWK_MEMBERS + 1))
+            : JosePolicy::MAX_DOCUMENT_MEMBERS;
+
+        return [
+            JwtToken::decodeJsonObject($json, 'remote JOSE document', $this->maximumBytes, $maximumMembers),
+            $this->cachePolicy($response->getHeaderLine('Cache-Control')),
+        ];
+    }
+
+    private function readBoundedBody(StreamInterface $body): string
+    {
         if (($size = $body->getSize()) !== null && $size > $this->maximumBytes) {
             throw new KeyResolutionException('Remote JOSE response exceeds the configured size bound.');
         }
@@ -58,14 +72,7 @@ final readonly class RemoteJoseResource
             }
         }
 
-        $maximumMembers = $jwks
-            ? 1 + ($this->maximumKeys * (JosePolicy::MAX_JWK_MEMBERS + 1))
-            : JosePolicy::MAX_DOCUMENT_MEMBERS;
-
-        return [
-            JwtToken::decodeJsonObject($json, 'remote JOSE document', $this->maximumBytes, $maximumMembers),
-            $this->cachePolicy($response->getHeaderLine('Cache-Control')),
-        ];
+        return $json;
     }
 
     private function assertPublicTarget(string $uri): void
