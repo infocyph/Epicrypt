@@ -21,8 +21,8 @@ Security and correctness
   Cache backends with strict key validation are supported.
 * Remote JOSE responses reject stalled body streams instead of reading
   indefinitely; existing byte and JSON complexity bounds remain enforced.
-* Stale JWKS fallback checks expiry after a failed fetch. HTTP and cache
-  cancellation retain the host's cancellation exception.
+* Stale JWKS fallback checks expiry after a failed fetch. HTTP, cache and
+  caller-supplied clock cancellation retain the host's cancellation exception.
 * Integrity hashing rejects cancellation during the final EOF read.
   Borrowed coroutine bindings use weak task-local snapshots to prevent
   accumulation in long-lived tasks while preserving sibling isolation.

@@ -1,10 +1,10 @@
 # Epicrypt audit and next-release plan
 
-Date: 2026-10-10, Asia/Dhaka. Status: implementation, local QA and authorized Docker host acceptance complete. Final committed-revision certification is tracked by the required checks on draft PR #32.
+Date: 2026-10-10, Asia/Dhaka. Status: implementation and local QA complete, including clock-provider cancellation fencing. Deployment acceptance and final committed-revision certification are recorded by fresh host reports and required checks on draft PR #32.
 
 ## Implementation tracker
 
-Status: **Implementation and Docker host acceptance complete**. Draft PR: [#32](https://github.com/infocyph/Epicrypt/pull/32). Final publication requires successful Security & Standards and Documentation checks on the current PR head, including independent Docker acceptance. Their live results are the final-commit certification record; historical runs never substitute for them. Merge, tag and publication remain user-managed.
+Status: **Implementation and local QA complete**. Draft PR: [#32](https://github.com/infocyph/Epicrypt/pull/32). Final publication requires successful Security & Standards and Documentation checks on the current PR head, including independent Docker acceptance, and successful renewed host acceptance for the final source. Their execution reports are the certification record; historical runs never substitute for them. Merge, tag and publication remain user-managed.
 
 **Post-review remediation:** The review of `1b034ec` identified four additional medium-severity boundaries. All four are corrected without changing public call forms or host ownership:
 
@@ -12,10 +12,11 @@ Status: **Implementation and Docker host acceptance complete**. Draft PR: [#32](
 - SHA-256 and BLAKE2b hashing/verification recheck borrowed liveness after the final EOF read.
 - Failed remote refreshes recheck the clock before stale fallback, including the exact expiry boundary.
 - JWKS cache lookup/write/invalidation preserve cancellation, and HTTP cancellation cannot return stale keys.
+- Caller-supplied clock reads recheck liveness on both successful and failing returns, before fresh/stale keys or provider failures escape. Six regressions cover fresh, stale and expired cache evaluation with returning or throwing clock providers; the original clock probes reproduced returned keys and masked cancellation.
 
-Ten meaningful pre-fix failures reproduced these four findings. The updated suite passes 381 tests / 1,752 assertions, including direct cancellation from a separate request in each cache operation. PHPForge processing and the release guard pass, strict Sphinx passes, and refreshed no-dev `php -n` smoke passes without Runwire, Pathwise or Ctype. Composer reports zero advisories; the already-excluded development-only Doctrine abandonment remains non-blocking.
+Ten meaningful pre-fix failures reproduced the four initial findings; six further clock boundary failures cover returned data and masked cancellation. The updated suite passes 387 tests / 1,770 assertions, including direct cancellation from a separate request in each cache operation. PHPForge processing, detailed QA and the release guard pass, strict Sphinx passes, and refreshed no-dev `php -n` smoke passes without Runwire, Pathwise or Ctype. Composer reports zero advisories; the already-excluded development-only Doctrine abandonment remains non-blocking.
 
-The Docker-equivalent host is explicitly authorized by the user. `benchmarks/docker-host-acceptance.sh` compares matched four-worker FPM deployments with identical production dependencies, OPcache and CPU affinity; validates every mixed file/JWT/JWKS/cancellation response; monitors live RSS; rejects a >2% median RPM regression or >5% trial spread; and checks a 300-second persistent process plus worker replacement. The measured acceptance below closes the local deployment gate. Existing historical checkpoints do not certify these new fixes.
+The Docker-equivalent host is explicitly authorized by the user. `benchmarks/docker-host-acceptance.sh` compares matched four-worker FPM deployments with identical production dependencies, OPcache and CPU affinity; validates every mixed file/JWT/JWKS/cancellation response; monitors live RSS; rejects a >2% median RPM regression or >5% trial spread; and checks a 300-second persistent process plus worker replacement. Initial measured acceptance is retained below; final production tree `5d0286488c5d60223bc24df0448bc3dac8c6919c` requires a successful fresh report in `var/docker-host-final-clock/` and independent hosted confirmation. The final CI job uploads source identities, trials and configuration as its `docker-host-acceptance` artifact. These execution records determine current deployment acceptance. Existing historical checkpoints do not certify this final tree.
 
 **Measurement integrity:** Early Docker attempts are not certification: a BusyBox `ps` reported non-KiB units, and later runs exceeded the 5% stability bound. The comparator now rejects nonnumeric RSS and unstable trials with permanent negative regressions. The final profile uses matched bounded tmpfs staging, disabled access logs, explicit CPU affinity and 60-second warmup. A separate hosted Docker job validates the exact PR source and uploads raw measurements; budgets remain unchanged.
 
@@ -23,11 +24,11 @@ The Docker-equivalent host is explicitly authorized by the user. `benchmarks/doc
 
 **Independent measurement correction:** The initial native ARM runs (`d9ad7b7`, `507600f`) passed all 35 non-Docker jobs and strict Documentation, but rejected >5% trial spread at borrowed concurrency 4 and unbound concurrency 8 respectively. Completed RPM comparisons stayed within 2%. Controller shells and Docker daemons had unrestricted CPU affinity and could overlap the FPM cores. CI now pins those controller processes to CPUs 0,1, preserves FPM CPUs 2,3, records actual affinities and uses 60-second trials. This isolation applies only to the fresh hosted runner; the local Docker host is unchanged. No RPM, spread, memory, response or error guard is relaxed. The production tree remains frozen.
 
-### Authorized Docker host acceptance
+### Initial authorized Docker host acceptance (before final clock fence)
 
 Local deployment completed successfully using PHP 8.4.26 FPM (`php:8.4-fpm-bookworm`, manifest digest `sha256:6bfef8e416977aa41f48e3e42a40c1e08050d24e4a938c6edb421400bff24601`), four static workers, production Composer autoloading, OPcache 128 MiB/JIT off, bounded 128 MiB tmpfs staging and disabled access logs. Host: AMD Ryzen AI 9 HX 370; FPM CPUs 10,11; proxy 0; client 1; soak 6. Each deployment used the same host production dependency lock, including Runwire 2.1.1. Warmup was 60 seconds per variant; three alternating 20-second measured trials ran at each concurrency. Fixed concurrency bounds outstanding work to eight connections.
 
-Measured candidate source: `63577d2`; production tree `cd1a0983c9a9a2f2ec5cadd16c14ea46d86a2d25`, unchanged in `d9ad7b7` and this evidence-only update. Unbound baseline: tag 3.1 (`5d10b40527b3e235cf418333bc67e7d12bc02841`). Borrowed baseline: `1b034ecafb7d2c9daf1f4ea1205ef5d34126a98a`.
+Measured candidate source: `63577d2`; production tree `cd1a0983c9a9a2f2ec5cadd16c14ea46d86a2d25`, unchanged through `0f693e9`. The final clock fence changes that tree and requires renewed measurement; this initial record does not certify it. Unbound baseline: tag 3.1 (`5d10b40527b3e235cf418333bc67e7d12bc02841`). Borrowed baseline: `1b034ecafb7d2c9daf1f4ea1205ef5d34126a98a`.
 
 | Calls | Concurrency | Baseline median RPM | Candidate median RPM | Delta | Candidate peak RSS (KiB) | Maximum candidate p99 (ms) |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -294,19 +295,16 @@ Review explicit password-cost policy documentation and runnable remote-resolver 
 5. Implement optional Runwire support and Pathwise 4.2 baseline/docs in that candidate; complete all integration acceptance cases.
 6. Certify the complete final committed revision against every applicable gate, then prepare the single 3.2.0 release; report implementation, local validation, hosted validation and published tag/release separately.
 
-Required final gates:
+Completed local implementation validation:
 
 - [x] Every S1-S7 regression fails before its fix and passes afterward; Q1 static/refactor gates are clean. Four post-review boundaries now have additional adversarial coverage.
 - [x] `composer ic:process`, `composer ic:tests:details` and final `composer ic:release:guard`, following installed PHPForge agent workflow. No gate weakening or vendor edits.
-- [x] PHP 8.4/8.5 stable/lowest hosted QA matrices validate the frozen production tree on `d9ad7b7`; the abandoned development-only `doctrine/annotations` warning remains non-blocking. Final committed-revision enforcement is defined below.
 - [x] Fresh production-only installation exercises valid/invalid integrity and JWT/JOSE paths without dev packages, Pathwise or Runwire, using only declared required extensions.
-- [x] Strict Sphinx build, runnable affected examples, independent Node JOSE/OAuth interoperability and npm audit pass for the frozen production tree.
-- [x] Existing Windows publication, AEGIS-positive and mutation-floor lanes pass on `d9ad7b7`; preserve skip policy and all existing thresholds.
-- [x] Hosted authentication and PHPBench evidence pass on PHP 8.4/8.5; the existing 2 MiB repeated-PAT heap guard remains active. Deployment-matched runtime/dependency/OPcache metadata and RPM comparison remain in the production-host gate.
-- [x] Authorized Docker PHP-FPM and native persistent-host acceptance covers unbound/bound calls, streams, cancellation, remote hit/miss paths, correctness, successful RPM, latency, errors/timeouts and live process-tree memory. All six stable comparisons pass the 2% median successful-RPM regression budget; the 300-second soak and real FPM replacement pass.
-- [x] Focused Runwire long-lived host CLI repetition tests 2,000 request operations after warmup, two isolated tenant payloads, cancellation, completed contexts, two distinct PHP worker processes, and bounded heap growth on PHP 8.4/8.5. Deployment-specific PHP-FPM/persistent-server lifecycle and process-tree memory still belong to the production-equivalent host gate.
+- [x] Strict local Sphinx build passes; release documentation covers direct and intermediary context forwarding and final clock-provider cancellation behavior.
 - [x] Release notes explain security acceptance changes, cache cold-start/namespace transition, supported PHP/Pathwise/Runwire contracts and remaining host responsibilities. No tag until all applicable blocking gates are closed.
 
 Completion means confirmed defects are fixed and their regressions/gates pass. A green baseline suite or zero Composer advisories does not close these findings.
+
+**Mandatory final deployment certification:** Fresh authorized Docker PHP-FPM/native persistent-host reports must validate production tree `5d0286488c5d60223bc24df0448bc3dac8c6919c`, including all six unbound/bound concurrency comparisons, correct responses, zero transport errors/timeouts, p50/p95/p99, continuous process-tree RSS, matched runtime/dependency/OPcache/CPU metadata, the 300-second tenant/cancellation/20,000-binding soak and real FPM replacement. Preserve the 2% median RPM, 5% spread, 256 MiB RSS and 2 MiB heap budgets. The initial deployment table is historical; successful final execution reports close this gate.
 
 **Mandatory final-commit certification:** Before release, the latest committed head of [PR #32](https://github.com/infocyph/Epicrypt/pull/32/checks) must have successful Security & Standards and Documentation runs. This includes PHP 8.4/8.5 stable/lowest, full PHPForge processors/detailed tests/release guard, production-only smoke, all mutation floors, Windows/AEGIS, independent JOSE/OAuth/npm audit, benchmarks, and the independent Docker RPM/300-second lifecycle job. The live checks and their uploaded artifacts record this changing commit-level gate; no historical checkpoint or documentation-only change waives it. A green final head establishes pre-publication readiness. Actual merge/tag/release dispatch is a separate user-managed action.

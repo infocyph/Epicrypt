@@ -60,7 +60,7 @@ The host's cancellation state is checked again after a staged write and before
 atomic replacement, so cancellation does not publish a completed staging file.
 When cancelled, an existing destination remains intact. Caller-owned
 output streams may contain partial data: the host owns their publication.
-Remote JWKS cancellation from HTTP or cache operations is propagated and
+Remote JWKS cancellation from HTTP, cache or caller-supplied clock operations is propagated and
 is not converted into a stale cached key result. Stale expiry is checked
 after a failed refresh, including time spent waiting for the transport.
 Regular file and PSR-18 network I/O remain synchronous; caller-owned

@@ -66,7 +66,7 @@ final readonly class RemoteJwks
             $this->throwCacheFailure('Remote JWKS cache lookup failed.', $exception, $context);
         }
         $context?->assertActive();
-        $now = $this->clock->now()->getTimestamp();
+        $now = $this->currentTimestamp($context);
         if ($cached !== null && $cached['freshUntil'] > $now) {
             return $cached['jwks'];
         }
@@ -78,7 +78,7 @@ final readonly class RemoteJwks
             if ($exception instanceof CancelledException) {
                 throw $exception;
             }
-            if ($cached !== null && $cached['staleUntil'] > $this->clock->now()->getTimestamp()) {
+            if ($cached !== null && $cached['staleUntil'] > $this->currentTimestamp($context)) {
                 return $cached['jwks'];
             }
             if ($exception instanceof KeyResolutionException) {
@@ -122,6 +122,15 @@ final readonly class RemoteJwks
         }
 
         return ['jwks' => ['keys' => $keys], 'freshUntil' => $entry['freshUntil'], 'staleUntil' => $entry['staleUntil']];
+    }
+
+    private function currentTimestamp(?RunwireExecutionContext $context): int
+    {
+        try {
+            return $this->clock->now()->getTimestamp();
+        } finally {
+            $context?->assertActive();
+        }
     }
 
     /** @return array{array{keys: list<array<string, mixed>>}, array{maxAge: int|null, noStore: bool, noCache: bool}} */

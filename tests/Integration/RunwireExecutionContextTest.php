@@ -468,3 +468,54 @@ it('preserves borrowed cancellation from every JWKS cache operation', function (
     'child set' => ['set', false],
     'child delete' => ['delete', false],
 ]);
+
+it('preserves cancellation during clock reads before returning cached JWKS', function (bool $fresh, int $timestamp, bool $clockFails) {
+    $runtime = RuntimeContext::standalone();
+    $request = RequestContext::create($runtime);
+    $context = new RunwireExecutionContext($runtime, $request);
+    $cache = $this->createMock(CacheInterface::class);
+    $cache->method('get')->willReturn([
+        'jwks' => ['keys' => []],
+        'freshUntil' => $fresh ? 1100 : 999,
+        'staleUntil' => 1200,
+    ]);
+    $client = $this->createMock(ClientInterface::class);
+    $client->expects($fresh ? $this->never() : $this->once())->method('sendRequest')
+        ->willThrowException(new RuntimeException('Unavailable JWKS endpoint.'));
+    $resolver = new class implements RemoteJoseHostResolverInterface {
+        public function resolve(string $hostname): array
+        {
+            unset($hostname);
+
+            return ['8.8.8.8'];
+        }
+    };
+    $clock = new class($request, $fresh ? 1 : 2, $timestamp, $clockFails) implements ClockInterface {
+        private int $reads = 0;
+
+        public function __construct(private RequestContext $request, private int $cancelOnRead, private int $timestamp, private bool $clockFails) {}
+
+        public function now(): DateTimeImmutable
+        {
+            if (++$this->reads === $this->cancelOnRead) {
+                $this->request->cancel(CancellationReason::HOST_CANCELLED);
+                if ($this->clockFails) {
+                    throw new RuntimeException('Clock provider failed after cancellation.');
+                }
+            }
+
+            return new DateTimeImmutable('@' . ($this->reads === $this->cancelOnRead ? $this->timestamp : 1000));
+        }
+    };
+    $remote = new RemoteJwks($client, new Psr17Factory(), new RemoteJwksConfiguration('https://issuer.example', 'https://issuer.example/jwks'), $cache, $clock, $resolver);
+
+    expect(fn () => $remote->load(context: $context))->toThrow(CancelledException::class);
+    expect($request->completed())->toBeFalse();
+})->with([
+    'fresh cached keys' => [true, 1000, false],
+    'stale fallback keys' => [false, 1000, false],
+    'expired stale keys' => [false, 1200, false],
+    'fresh clock failure' => [true, 1000, true],
+    'stale clock failure' => [false, 1000, true],
+    'expired clock failure' => [false, 1200, true],
+]);
