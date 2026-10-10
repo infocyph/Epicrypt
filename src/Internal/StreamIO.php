@@ -80,11 +80,9 @@ final class StreamIO
             }
 
             if ($chunk === '') {
-                if (feof($stream)) {
-                    break;
-                }
+                self::requireReadEof($stream);
 
-                throw new FileAccessException('Input stream made no progress before EOF.');
+                break;
             }
             $buffer .= $chunk;
         }
@@ -288,5 +286,13 @@ final class StreamIO
         }
 
         throw new FileAccessException('Unable to finalize output file: ' . $outputPath);
+    }
+
+    /** @param resource $stream */
+    private static function requireReadEof(mixed $stream): void
+    {
+        if (!feof($stream)) {
+            throw new FileAccessException('Input stream made no progress before EOF.');
+        }
     }
 }
