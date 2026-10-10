@@ -8,8 +8,8 @@ use Infocyph\Epicrypt\Exception\ConfigurationException;
 use Infocyph\Epicrypt\Exception\Crypto\DecryptionException;
 use Infocyph\Epicrypt\Exception\Crypto\EncryptionException;
 use Infocyph\Epicrypt\Exception\Crypto\InvalidKeyException;
-use Infocyph\Epicrypt\Internal\StreamIO;
 use Infocyph\Epicrypt\Integration\Runwire\RunwireExecutionContext;
+use Infocyph\Epicrypt\Internal\StreamIO;
 use Infocyph\Runwire\Exception\CancelledException;
 use LogicException;
 use RuntimeException;
@@ -41,7 +41,6 @@ final readonly class SecretStream
         int $chunkSize = self::DEFAULT_CHUNK_SIZE,
         ?RunwireExecutionContext $context = null,
     ): void {
-        $context?->assertActive();
         $context?->assertActive();
         StreamIO::assertDistinctLocalPaths($inputPath, $outputPath);
         $this->assertValidChunkSize($chunkSize);
@@ -76,9 +75,7 @@ final readonly class SecretStream
             $context?->assertActive();
             $this->decryptFrames($input, $output, $chunkSize, $context);
             $context?->assertActive();
-        } catch (CancelledException|LogicException $exception) {
-            throw $exception;
-        } catch (DecryptionException $exception) {
+        } catch (CancelledException|LogicException|DecryptionException $exception) {
             throw $exception;
         } catch (Throwable $exception) {
             throw new DecryptionException('SecretStream decryption failed.', 0, $exception);
@@ -91,6 +88,7 @@ final readonly class SecretStream
         int $chunkSize = self::DEFAULT_CHUNK_SIZE,
         ?RunwireExecutionContext $context = null,
     ): int {
+        $context?->assertActive();
         StreamIO::assertDistinctLocalPaths($inputPath, $outputPath);
         $this->assertValidChunkSize($chunkSize);
 
@@ -126,9 +124,7 @@ final readonly class SecretStream
             $context?->assertActive();
 
             return $result;
-        } catch (CancelledException|LogicException $exception) {
-            throw $exception;
-        } catch (EncryptionException $exception) {
+        } catch (CancelledException|LogicException|EncryptionException $exception) {
             throw $exception;
         } catch (Throwable $exception) {
             throw new EncryptionException('SecretStream encryption failed.', 0, $exception);

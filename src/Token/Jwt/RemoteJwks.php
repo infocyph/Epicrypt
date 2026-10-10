@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace Infocyph\Epicrypt\Token\Jwt;
 
 use Infocyph\Epicrypt\Exception\Token\KeyResolutionException;
-use Infocyph\Epicrypt\Internal\Clock\SystemClock;
 use Infocyph\Epicrypt\Integration\Runwire\RunwireExecutionContext;
+use Infocyph\Epicrypt\Internal\Clock\SystemClock;
 use Infocyph\Epicrypt\Token\Jwt\Enum\AsymmetricJwtAlgorithm;
 use Infocyph\Epicrypt\Token\Jwt\Support\JosePolicy;
 use Infocyph\Epicrypt\Token\Jwt\Support\NativeRemoteJoseHostResolver;
@@ -58,6 +58,7 @@ final readonly class RemoteJwks
     public function load(bool $forceRefresh = false, ?RunwireExecutionContext $context = null): array
     {
         $context?->assertActive();
+
         try {
             $cached = $forceRefresh ? null : $this->cached();
         } catch (Throwable $exception) {

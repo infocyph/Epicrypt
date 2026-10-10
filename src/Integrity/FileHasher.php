@@ -6,8 +6,8 @@ namespace Infocyph\Epicrypt\Integrity;
 
 use Infocyph\Epicrypt\Exception\FileAccessException;
 use Infocyph\Epicrypt\Exception\Integrity\HashingException;
-use Infocyph\Epicrypt\Internal\StreamIO;
 use Infocyph\Epicrypt\Integration\Runwire\RunwireExecutionContext;
+use Infocyph\Epicrypt\Internal\StreamIO;
 use Infocyph\Runwire\Exception\CancelledException;
 use LogicException;
 
@@ -20,14 +20,13 @@ final readonly class FileHasher
     public function hash(string $path, bool $binary = false, ?int $length = null, ?RunwireExecutionContext $context = null): string
     {
         $context?->assertActive();
+
         try {
             return StreamIO::withReadableLocalFile(
                 $path,
                 fn($stream): string => $this->hashStream($stream, $binary, $length, $context),
             );
-        } catch (CancelledException|LogicException $exception) {
-            throw $exception;
-        } catch (HashingException|FileAccessException $exception) {
+        } catch (CancelledException|LogicException|HashingException|FileAccessException $exception) {
             throw $exception;
         } catch (\Throwable $exception) {
             throw new FileAccessException('Unable to hash file: ' . $path, 0, $exception);

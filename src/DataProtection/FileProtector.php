@@ -9,8 +9,8 @@ use Infocyph\Epicrypt\Exception\Crypto\DecryptionException;
 use Infocyph\Epicrypt\Internal\Base64Url;
 use Infocyph\Epicrypt\Internal\Clock\SystemClock;
 use Infocyph\Epicrypt\Internal\Json;
-use Infocyph\Epicrypt\Internal\StreamIO;
 use Infocyph\Epicrypt\Integration\Runwire\RunwireExecutionContext;
+use Infocyph\Epicrypt\Internal\StreamIO;
 use Infocyph\Epicrypt\Security\KeyPurpose;
 use Infocyph\Epicrypt\Security\KeyRing;
 use Infocyph\Epicrypt\Security\KeyStatus;
@@ -36,6 +36,7 @@ final readonly class FileProtector
         ?RunwireExecutionContext $context = null,
     ): ProtectionResult {
         $context?->assertActive();
+
         return $this->protectWithBinaryKey(
             $inputPath,
             $outputPath,
@@ -63,6 +64,7 @@ final readonly class FileProtector
         ?RunwireExecutionContext $context = null,
     ): ProtectionMetadata {
         $context?->assertActive();
+
         return $this->protectStreamWithBinaryKey(
             $input,
             $output,
@@ -203,6 +205,7 @@ final readonly class FileProtector
         ?RunwireExecutionContext $context = null,
     ): ProtectionResult {
         $context?->assertActive();
+
         return $this->unprotectWithBinaryKey(
             $inputPath,
             $outputPath,
@@ -230,6 +233,7 @@ final readonly class FileProtector
         ?RunwireExecutionContext $context = null,
     ): ProtectionMetadata {
         $context?->assertActive();
+
         return $this->unprotectStreamWithBinaryKey(
             $input,
             $output,
