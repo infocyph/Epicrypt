@@ -96,6 +96,7 @@ final class OpenSslExtensionConfig
 
         return $entries;
     }
+
     /**
      * @param array<array-key, mixed> $distinguishedName
      * @return array<string, string>
@@ -110,6 +111,7 @@ final class OpenSslExtensionConfig
             self::assertConfigValue($value, 'distinguished name');
             $validatedDistinguishedName[$key] = $value;
         }
+
         return $validatedDistinguishedName;
     }
 
