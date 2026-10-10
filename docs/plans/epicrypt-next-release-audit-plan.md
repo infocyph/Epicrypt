@@ -10,8 +10,8 @@ Status: **In progress**. Draft PR: [#32](https://github.com/infocyph/Epicrypt/pu
 | --- | --- | --- | --- | --- |
 | 1 | S1–S3 JWT/DPoP replay and remote JOSE address security | Complete: source, boundary regressions, security docs | Focused QA passed on `816287e`: Pest/Pint/PHPCS, all mutation shards incl. JWT and remote JOSE, JOSE/OAuth interoperability, AEGIS/Windows. Q1 static/Rector failures remain tracked in Batch 3; baseline probes documented below | `284da9a`–`816287e`; [security QA run](https://github.com/infocyph/Epicrypt/actions/runs/38026345942) |
 | 2 | S4–S7 integrity, PSR-16 cache, remote reads | Complete: Ctype-free integrity/JSON verification, policy-aware PSR-16 JWKS, bounded PSR-7 reads, strict-cache and production smoke regressions | Focused QA passed: Pest/Pint/PHPCS, strict-cache and stalled-stream tests, mutation security and protocol interoperability on `2b50ccf`; original 20 PHPStan Q1 issues remain, no new complexity. Isolated production `php -n` acceptance remains in final release gate | `47da2d1`–`2b50ccf`; [Batch 2 QA](https://github.com/infocyph/Epicrypt/actions/runs/38027365638) |
-| 3 | Q1 complexity and Rector remediation | In progress: Rector `JwtPolicy`, targeted cohesion refactors across JWT/JWS, OIDC, OAuth keys, SignedUrl options, OpenSSL, StreamIO, JWK codecs | Pending: remeasure active PHPStan diagnostics on latest SHA; Rector dry-run, functional QA, mutation gates; remaining class-level hotspots not yet closed | `342e9d4`–`d956862` |
-| 4 | Optional Runwire 2.1.1 integration | Pending | Pending | — |
+| 3 | Q1 complexity and Rector remediation | Complete: all original 20 function/class complexity findings eliminated by focused owner refactors and JWS/JWK/query collaborators; Rector `JwtPolicy` rule applied | PHPStan and Psalm analysis, Pest, Pint, PHPCS, Rector, reference/architecture checks, mutation shards, JOSE/OAuth interoperability and Windows/AEGIS lanes passed for `463fdf6`; 8.4/8.5 benchmark jobs tracked separately under final release gates | `342e9d4`–`463fdf6`; [Batch 3 QA](https://github.com/infocyph/Epicrypt/actions/runs/38029335803) |
+| 4 | Optional Runwire 2.1.1 integration | Next: implement borrowed context, owner forwarding and cancellation checkpoints with exact released 2.1.1 | Pending | — |
 | 5 | Pathwise 4.2/docs/release automation R1 | Pending | Pending | — |
 | 6 | Final QA, interoperability, performance and release guard | Pending | Pending | — |
 
@@ -19,7 +19,7 @@ Status: **In progress**. Draft PR: [#32](https://github.com/infocyph/Epicrypt/pu
 
 **Batch 2 QA note:** The two temporary new complexity diagnostics for `RemoteJwks::load()` and `RemoteJoseResource::fetch()` were resolved with private cohesive helpers before concluding Batch 2. The release is still blocked by the original 20 Q1 complexity findings and the Rector change, with no standards relaxed.
 
-**Batch 3 evidence:** Current refactors preserve existing public call signatures and key policies; they have not yet been signed off by fresh latest-SHA PHPForge analysis. Do not mark Q1 complete until class/function complexity checks and Rector both pass.
+**Batch 3 evidence:** QA run `38029335803` on `463fdf6` has clean PHPStan for PHP 8.4/8.5 (zero function/class complexity or static diagnostics), Rector, Pest, Pint, PHPCS, release dependency checks, all security-critical mutation shards, JOSE/OAuth interoperability, AEGIS and Windows publication. Q1 is complete. Representative end-to-end host RPM acceptance remains a distinct final-release gate; a microbenchmark is not host-throughput certification.
 
 **Q2 disposition:** Abandoned `doctrine/annotations` is a non-blocking development-toolchain warning; explicitly excluded from Epicrypt 3.2 remediation. No Composer/PHPForge/PHPBench changes planned for it.
 
