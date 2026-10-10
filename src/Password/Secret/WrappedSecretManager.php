@@ -284,30 +284,7 @@ final class WrappedSecretManager
         bool $binary,
     ): UnwrappedSecretResult {
         if ($masterSecrets instanceof KeyRing) {
-            $payload = $this->parseWrappedPayload($wrappedSecret);
-            if ($payload['key_id'] === null) {
-                throw new SecretProtectionException('Wrapped secret key id is required for KeyRing decryption.');
-            }
-            $entry = $masterSecrets->resolveForRead($payload['key_id'], KeyPurpose::SECRET_WRAPPING, self::ALGORITHM_ID);
-            if ($entry === null) {
-                throw new SecretProtectionException(sprintf('Master secret key id "%s" was not found in the key ring.', $payload['key_id']));
-            }
-
-            try {
-                return new UnwrappedSecretResult(
-                    $binary
-                        ? $this->unwrapWithBinaryKey($wrappedSecret, $entry->key)
-                        : $this->unwrap($wrappedSecret, $entry->key),
-                    $payload['key_id'],
-                    $entry->status === KeyStatus::FALLBACK,
-                );
-            } catch (SecretProtectionException $e) {
-                throw new SecretProtectionException(
-                    sprintf('Secret unwrap failed for key id "%s".', $payload['key_id']),
-                    0,
-                    $e,
-                );
-            }
+            return $this->unwrapKeyRingCandidate($wrappedSecret, $masterSecrets, $binary);
         }
 
         $lastException = null;
@@ -326,5 +303,36 @@ final class WrappedSecretManager
         }
 
         throw new SecretProtectionException('Secret unwrap failed for every supplied master secret.', 0, $lastException);
+    }
+
+    private function unwrapKeyRingCandidate(
+        #[\SensitiveParameter] string $wrappedSecret,
+        #[\SensitiveParameter] KeyRing $masterSecrets,
+        bool $binary,
+    ): UnwrappedSecretResult {
+        $payload = $this->parseWrappedPayload($wrappedSecret);
+        if ($payload['key_id'] === null) {
+            throw new SecretProtectionException('Wrapped secret key id is required for KeyRing decryption.');
+        }
+        $entry = $masterSecrets->resolveForRead($payload['key_id'], KeyPurpose::SECRET_WRAPPING, self::ALGORITHM_ID);
+        if ($entry === null) {
+            throw new SecretProtectionException(sprintf('Master secret key id "%s" was not found in the key ring.', $payload['key_id']));
+        }
+
+        try {
+            return new UnwrappedSecretResult(
+                $binary
+                    ? $this->unwrapWithBinaryKey($wrappedSecret, $entry->key)
+                    : $this->unwrap($wrappedSecret, $entry->key),
+                $payload['key_id'],
+                $entry->status === KeyStatus::FALLBACK,
+            );
+        } catch (SecretProtectionException $e) {
+            throw new SecretProtectionException(
+                sprintf('Secret unwrap failed for key id "%s".', $payload['key_id']),
+                0,
+                $e,
+            );
+        }
     }
 }

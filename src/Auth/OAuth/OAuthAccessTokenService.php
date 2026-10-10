@@ -338,17 +338,7 @@ final readonly class OAuthAccessTokenService
             AuthProtocolPolicy::assertText($authorizationId, AuthProtocolPolicy::MAX_IDENTIFIER_BYTES, 'OAuth access-token authorization ID');
         }
 
-        $dpopJkt = null;
-        if (array_key_exists('cnf', $claims)) {
-            $cnf = $claims['cnf'];
-            if (!is_array($cnf)
-                || array_keys($cnf) !== ['jkt']
-                || !is_string($cnf['jkt'])
-                || !AuthProtocolPolicy::validSha256Base64Url($cnf['jkt'])) {
-                throw new ConfigurationException('OAuth access-token cnf claim is invalid.');
-            }
-            $dpopJkt = $cnf['jkt'];
-        }
+        $dpopJkt = self::validatedDpopJkt($claims);
 
         return [
             'token_id' => $tokenId,
@@ -360,5 +350,22 @@ final readonly class OAuthAccessTokenService
             'authorization_id' => $authorizationId,
             'dpop_jkt' => $dpopJkt,
         ];
+    }
+
+    /** @param array<string, mixed> $claims */
+    private static function validatedDpopJkt(array $claims): ?string
+    {
+        if (!array_key_exists('cnf', $claims)) {
+            return null;
+        }
+        $cnf = $claims['cnf'];
+        if (!is_array($cnf)
+            || array_keys($cnf) !== ['jkt']
+            || !is_string($cnf['jkt'])
+            || !AuthProtocolPolicy::validSha256Base64Url($cnf['jkt'])) {
+            throw new ConfigurationException('OAuth access-token cnf claim is invalid.');
+        }
+
+        return $cnf['jkt'];
     }
 }

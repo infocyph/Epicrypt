@@ -73,23 +73,7 @@ final class JwkOkpCodec
         }
         $public = $this->importPublic($publicJwk, $algorithm, $curve);
 
-        try {
-            $private = Base64Url::decode($jwk['d']);
-        } catch (\Throwable $exception) {
-            throw new KeyResolutionException('OKP JWK d is not valid Base64URL.', 0, $exception);
-        }
-        if ($curve === 'Ed25519' && strlen($private) === SODIUM_CRYPTO_SIGN_SEEDBYTES) {
-            $private = sodium_crypto_sign_secretkey(sodium_crypto_sign_seed_keypair($private));
-        }
-        $privateLength = $curve === 'Ed25519' ? SODIUM_CRYPTO_SIGN_SECRETKEYBYTES : SODIUM_CRYPTO_BOX_SECRETKEYBYTES;
-        $derived = strlen($private) === $privateLength
-            ? ($curve === 'Ed25519' ? sodium_crypto_sign_publickey_from_secretkey($private) : sodium_crypto_scalarmult_base($private))
-            : '';
-        if (!hash_equals($public, $derived)) {
-            throw new KeyResolutionException('OKP JWK private key does not match its public key.');
-        }
-
-        return $private;
+        return $this->decodeMatchingPrivate($jwk, $curve, $public);
     }
 
     /** @param array<string, mixed> $jwk */
@@ -124,5 +108,27 @@ final class JwkOkpCodec
         if (!$validPair || strlen($publicKey) !== 32) {
             throw new KeyResolutionException('OKP key must use an approved algorithm/curve pair and contain exactly 32 bytes.');
         }
+    }
+
+    /** @param array<string, mixed> $jwk */
+    private function decodeMatchingPrivate(#[\SensitiveParameter] array $jwk, string $curve, string $public): string
+    {
+        try {
+            $private = Base64Url::decode($jwk['d']);
+        } catch (\Throwable $exception) {
+            throw new KeyResolutionException('OKP JWK d is not valid Base64URL.', 0, $exception);
+        }
+        if ($curve === 'Ed25519' && strlen($private) === SODIUM_CRYPTO_SIGN_SEEDBYTES) {
+            $private = sodium_crypto_sign_secretkey(sodium_crypto_sign_seed_keypair($private));
+        }
+        $privateLength = $curve === 'Ed25519' ? SODIUM_CRYPTO_SIGN_SECRETKEYBYTES : SODIUM_CRYPTO_BOX_SECRETKEYBYTES;
+        $derived = strlen($private) === $privateLength
+            ? ($curve === 'Ed25519' ? sodium_crypto_sign_publickey_from_secretkey($private) : sodium_crypto_scalarmult_base($private))
+            : '';
+        if (!hash_equals($public, $derived)) {
+            throw new KeyResolutionException('OKP JWK private key does not match its public key.');
+        }
+
+        return $private;
     }
 }

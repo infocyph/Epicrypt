@@ -152,29 +152,10 @@ final readonly class OAuthTokenEndpoint
             return OAuthTokenResult::failure($dpop);
         }
 
-        $inspection = $this->refreshTokens->inspect($refreshToken);
-        $grant = $inspection->grant();
-        if (!$grant instanceof RefreshTokenGrant || !hash_equals($grant->clientId, $clientId)) {
-            return OAuthTokenResult::failure(OAuthErrorCode::INVALID_GRANT);
-        }
         $actualDpop = $dpop?->keyThumbprint;
-        if ($grant->dpopKeyThumbprint !== $actualDpop) {
-            return OAuthTokenResult::failure(OAuthErrorCode::INVALID_DPOP_PROOF);
-        }
-        if ($inspection->status === RefreshTokenInspectionStatus::CONSUMED) {
-            $this->refreshTokens->rotate($refreshToken, $clientId, $actualDpop);
-
-            return OAuthTokenResult::failure(OAuthErrorCode::INVALID_GRANT);
-        }
-        if (!$inspection->active()) {
-            return OAuthTokenResult::failure(OAuthErrorCode::INVALID_GRANT);
-        }
-
-        $authorization = $this->authorizations->find($grant->authorizationId);
-        if (!$authorization instanceof OAuthAuthorizationRecord
-            || !$authorization->isActive($this->clock->now()->getTimestamp())
-            || !$authorization->matchesRefreshGrant($grant)) {
-            return OAuthTokenResult::failure(OAuthErrorCode::INVALID_GRANT);
+        $grant = $this->validatedRefreshGrant($refreshToken, $clientId, $actualDpop);
+        if ($grant instanceof OAuthErrorCode) {
+            return OAuthTokenResult::failure($grant);
         }
 
         $scopes = $this->refreshScopes($client, $grant, $requestedScopes);
@@ -397,5 +378,38 @@ final readonly class OAuthTokenEndpoint
         return $authentication->authenticated
             && $authentication->client instanceof OAuthClient
             && hash_equals($client->clientId, $authentication->client->clientId);
+    }
+
+    private function validatedRefreshGrant(
+        #[\SensitiveParameter] string $refreshToken,
+        string $clientId,
+        ?string $actualDpop,
+    ): RefreshTokenGrant|OAuthErrorCode {
+        $inspection = $this->refreshTokens->inspect($refreshToken);
+        $grant = $inspection->grant();
+        if (!$grant instanceof RefreshTokenGrant || !hash_equals($grant->clientId, $clientId)) {
+            return OAuthErrorCode::INVALID_GRANT;
+        }
+        $actualDpop = $dpop?->keyThumbprint;
+        if ($grant->dpopKeyThumbprint !== $actualDpop) {
+            return OAuthErrorCode::INVALID_DPOP_PROOF;
+        }
+        if ($inspection->status === RefreshTokenInspectionStatus::CONSUMED) {
+            $this->refreshTokens->rotate($refreshToken, $clientId, $actualDpop);
+
+            return OAuthErrorCode::INVALID_GRANT;
+        }
+        if (!$inspection->active()) {
+            return OAuthErrorCode::INVALID_GRANT;
+        }
+
+        $authorization = $this->authorizations->find($grant->authorizationId);
+        if (!$authorization instanceof OAuthAuthorizationRecord
+            || !$authorization->isActive($this->clock->now()->getTimestamp())
+            || !$authorization->matchesRefreshGrant($grant)) {
+            return OAuthErrorCode::INVALID_GRANT;
+        }
+
+        return $grant;
     }
 }

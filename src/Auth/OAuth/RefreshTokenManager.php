@@ -111,6 +111,39 @@ final readonly class RefreshTokenManager
             return RefreshTokenRotationResult::failure(RefreshTokenRotationStatus::EXPIRED);
         }
 
+        return $this->rotateForCurrent($current, $successorGrant, $clientId, $dpopKeyThumbprint, $idleLifetimeSeconds);
+    }
+
+    private function assertDpopKeyThumbprint(?string $dpopKeyThumbprint): void
+    {
+        if ($dpopKeyThumbprint !== null && !RefreshTokenGrant::validDpopKeyThumbprint($dpopKeyThumbprint)) {
+            throw new ConfigurationException('Refresh-token DPoP key thumbprint must be a SHA-256 Base64URL value.');
+        }
+    }
+
+    /**
+     * @param null|array<array-key, mixed> $requestedScopes
+     */
+    private function successorGrant(RefreshTokenRecord $current, ?array $requestedScopes): ?RefreshTokenGrant
+    {
+        if ($requestedScopes === null) {
+            return $current->grant;
+        }
+
+        try {
+            return $current->grant->withScopes($requestedScopes);
+        } catch (ConfigurationException) {
+            return null;
+        }
+    }
+
+    private function rotateForCurrent(
+        RefreshTokenRecord $current,
+        RefreshTokenGrant $successorGrant,
+        string $clientId,
+        ?string $dpopKeyThumbprint,
+        int $idleLifetimeSeconds,
+    ): RefreshTokenRotationResult {
         for ($attempt = 0; $attempt < self::STORAGE_ATTEMPTS; $attempt++) {
             try {
                 $issue = $this->artifact->issue(
@@ -143,28 +176,5 @@ final readonly class RefreshTokenManager
         }
 
         return RefreshTokenRotationResult::failure(RefreshTokenRotationStatus::CONFLICT);
-    }
-
-    private function assertDpopKeyThumbprint(?string $dpopKeyThumbprint): void
-    {
-        if ($dpopKeyThumbprint !== null && !RefreshTokenGrant::validDpopKeyThumbprint($dpopKeyThumbprint)) {
-            throw new ConfigurationException('Refresh-token DPoP key thumbprint must be a SHA-256 Base64URL value.');
-        }
-    }
-
-    /**
-     * @param null|array<array-key, mixed> $requestedScopes
-     */
-    private function successorGrant(RefreshTokenRecord $current, ?array $requestedScopes): ?RefreshTokenGrant
-    {
-        if ($requestedScopes === null) {
-            return $current->grant;
-        }
-
-        try {
-            return $current->grant->withScopes($requestedScopes);
-        } catch (ConfigurationException) {
-            return null;
-        }
     }
 }
