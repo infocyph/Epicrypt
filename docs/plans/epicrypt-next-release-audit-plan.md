@@ -8,12 +8,14 @@ Status: **In progress**. Draft PR: [#32](https://github.com/infocyph/Epicrypt/pu
 
 | Batch | Scope | Implementation | Focused QA | Commit / evidence |
 | --- | --- | --- | --- | --- |
-| 1 | S1–S3 JWT/DPoP replay and remote JOSE address security | Pending | Pending | — |
+| 1 | S1–S3 JWT/DPoP replay and remote JOSE address security | In progress: fixes + initial regressions committed | Pending: current-SHA CI, pre-fix reproduction and complete edge-case coverage | `284da9a`, `1d829ad`, `40c5261` |
 | 2 | S4–S7 integrity, PSR-16 cache, remote reads | Pending | Pending | — |
 | 3 | Q1 complexity and Rector remediation | Pending | Pending | — |
 | 4 | Optional Runwire 2.1.1 integration | Pending | Pending | — |
 | 5 | Pathwise 4.2/docs/release automation R1 | Pending | Pending | — |
 | 6 | Final QA, interoperability, performance and release guard | Pending | Pending | — |
+
+**QA feedback (2026-10-10):** PR #32 is receiving workflow results. Earlier SHA `dbf76d4` failed its PHPForge analysis and several mutation-shard jobs, while other runs were cancelled as commits arrived. Reassess failures against final Batch 1 SHA and preserve thresholds. Local full Composer/PHPForge QA has not been executed in this editing environment. The baseline quality diagnostics remain open.
 
 **R1 — Release workflow trigger (blocking):** `.github/workflows/security-standards.yml` has a tag-only `release` job but its push trigger filters only branches. Explicitly enable `push.tags` without disabling branch/PR QA. Check workflow trigger behavior before tagging.
 
