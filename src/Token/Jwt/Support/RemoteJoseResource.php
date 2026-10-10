@@ -94,6 +94,7 @@ final readonly class RemoteJoseResource
             'noCache' => preg_match('/(?:^|,)\s*no-cache(?:\s*(?:,|$))/i', $cacheControl) === 1,
         ];
     }
+
     private function readBoundedBody(StreamInterface $body): string
     {
         if (($size = $body->getSize()) !== null && $size > $this->maximumBytes) {
