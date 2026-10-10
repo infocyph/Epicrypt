@@ -15,6 +15,7 @@ use Infocyph\Epicrypt\Token\Jwt\RemoteJwksConfiguration;
 use Nyholm\Psr7\Factory\Psr17Factory;
 use Nyholm\Psr7\Response;
 use Psr\Clock\ClockInterface;
+use Psr\Http\Message\StreamInterface;
 use Psr\SimpleCache\CacheInterface;
 
 function remoteJwksClock(int $timestamp): ClockInterface
@@ -440,3 +441,31 @@ it('accepts allowed public literal JOSE issuer addresses', function (string $url
     'global IPv6' => ['https://[2001:4860:4860::8888]'],
     'mapped public IPv4' => ['https://[::ffff:8.8.8.8]'],
 ]);
+
+it('fails closed when a remote JOSE stream makes no read progress', function () {
+    $factory = new Psr17Factory();
+    $client = new Client($factory);
+    $body = $this->createMock(StreamInterface::class);
+    $body->method('getSize')->willReturn(null);
+    $body->method('eof')->willReturn(false);
+    $reads = 0;
+    $body->method('read')->willReturnCallback(static function (int $size) use (&$reads): string {
+        unset($size);
+        if (++$reads > 4) {
+            throw new RuntimeException('Stalled-stream test guard.');
+        }
+
+        return '';
+    });
+    $client->addResponse((new Response(200, ['Content-Type' => 'application/jwk-set+json']))
+        ->withBody($body));
+    $remote = new RemoteJwks(
+        $client,
+        $factory,
+        new RemoteJwksConfiguration('https://issuer.example', 'https://issuer.example/jwks'),
+        hostResolver: remoteJwksResolver(),
+    );
+
+    expect(fn () => $remote->load())->toThrow(KeyResolutionException::class, 'Remote JOSE response stream made no progress.');
+    expect($reads)->toBe(1);
+});
