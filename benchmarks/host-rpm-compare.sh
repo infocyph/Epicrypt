@@ -35,11 +35,11 @@ for url in "$1" "$2"; do
 done
 rss_kib() {
   ps -eo pid=,ppid=,rss= | awk -v master="$1" '
-    {parent[$1]=$2; resident[$1]=$3; all[$1]=1}
+    {if ($3 !~ /^[0-9]+$/) bad=1; parent[$1]=$2; resident[$1]=$3; all[$1]=1}
     END {for(id in all) {p=id; for(n=0;n<256 && p in parent;n++) {
       if (p==master) {total+=resident[id]; break}
       p=parent[p]
-    }} print total+0}'
+    }} if(bad || total<=0) {print "Invalid or missing process-tree RSS in KiB" > "/dev/stderr"; exit 1} print total+0}'
 }
 sample() {
   local variant=$1 url=$2 master=$3 round=$4 log proc peak=0 current metrics
@@ -51,7 +51,7 @@ sample() {
   while kill -0 "$proc" 2>/dev/null; do
     current=$(rss_kib "$master")
     (( current > peak )) && peak=$current
-    sleep 1
+    sleep 0.25
   done
   if ! wait "$proc"; then cat "$log" >&2; rm -f "$log"; return 1; fi
   current=$(rss_kib "$master")
@@ -108,6 +108,8 @@ for ((i=1;i<=rounds;i++)); do
     sample baseline "$1" "$HOST_BASE_PID" "$i"
   fi
 done
+awk -F '\t' 'NR>1 { if (!($1 in low) || $3<low[$1]) low[$1]=$3; if ($3>high[$1]) high[$1]=$3 }
+  END { for (v in low) { if (low[v]<=0 || high[v]/low[v]>1.05) { print "FAIL: unstable trial spread (>5%):",v; exit 1 } } }' "$report"
 median() {
   awk -F '\t' -v kind="$1" 'NR>1 && $1==kind {print $3}' "$report" |
     sort -n | awk '{a[NR]=$1} END {if(NR%2) print a[(NR+1)/2]; else print (a[NR/2]+a[NR/2+1])/2}'

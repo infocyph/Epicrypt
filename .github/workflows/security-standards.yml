@@ -51,6 +51,7 @@ jobs:
       - name: Lint and test matched-host performance comparator
         run: |
           bash -n benchmarks/host-rpm-compare.sh
+          bash -n benchmarks/docker-host-acceptance.sh
           bash -n tests/Smoke/host-rpm-comparator-test.sh
           bash tests/Smoke/host-rpm-comparator-test.sh
       - name: Validate real wrk Lua response accounting
@@ -91,6 +92,38 @@ jobs:
         run: composer ic:tests:details
       - name: Run final PHPForge release guard
         run: composer ic:release:guard
+
+  docker-host-acceptance:
+    if: github.event_name == 'pull_request'
+    name: "Matched Docker FPM RPM and persistent-host acceptance"
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.4"
+          extensions: "hash, json, openssl, sodium"
+          coverage: none
+          tools: composer:v2
+      - name: Install fixture dependencies
+        run: composer install --no-interaction --no-progress --prefer-dist
+      - name: Measure matched deployments and sustained lifecycle
+        env:
+          HOST_SOAK_CPUS: "2"
+        run: bash benchmarks/docker-host-acceptance.sh
+      - name: Preserve raw measurements and deployment configuration
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: docker-host-acceptance
+          path: var/docker-host-acceptance/
+          if-no-files-found: error
 
   production-minimal:
     if: github.event_name == 'pull_request'

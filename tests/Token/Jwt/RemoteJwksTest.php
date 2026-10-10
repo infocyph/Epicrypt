@@ -15,6 +15,7 @@ use Infocyph\Epicrypt\Token\Jwt\RemoteJwksConfiguration;
 use Nyholm\Psr7\Factory\Psr17Factory;
 use Nyholm\Psr7\Response;
 use Psr\Clock\ClockInterface;
+use Psr\Http\Client\ClientInterface;
 use Psr\Http\Message\StreamInterface;
 use Psr\SimpleCache\CacheInterface;
 
@@ -391,6 +392,40 @@ it('uses stale JWKS only after an ordinary refresh failure and never for force r
     expect(fn () => $staleReader->load(true))->toThrow(KeyResolutionException::class)
         ->and($failingClient->getRequests())->toHaveCount(2);
 });
+
+it('checks stale expiry after a slow refresh failure', function (int $finishedAt, bool $allowed) {
+    $factory = new Psr17Factory();
+    $cache = remoteJwksCache();
+    $configuration = new RemoteJwksConfiguration(
+        'https://issuer.example',
+        'https://issuer.example/jwks',
+        minimumTtl: 1,
+        maximumTtl: 1,
+        staleTtl: 2,
+    );
+    $clock = remoteJwksClock(998);
+    $initialClient = new Client($factory);
+    $initialClient->addResponse(new Response(200, ['Content-Type' => 'application/jwk-set+json'], '{"keys":[]}'));
+    $initial = new RemoteJwks($initialClient, $factory, $configuration, $cache, $clock, remoteJwksResolver());
+    expect($initial->load())->toBe(['keys' => []]);
+    $clock->timestamp = 1000;
+    $failingClient = $this->createMock(ClientInterface::class);
+    $failingClient->method('sendRequest')->willReturnCallback(static function () use ($clock, $finishedAt): never {
+        $clock->timestamp = $finishedAt;
+        throw new RuntimeException('Transport failed after waiting.');
+    });
+    $remote = new RemoteJwks($failingClient, $factory, $configuration, $cache, $clock, remoteJwksResolver());
+
+    if ($allowed) {
+        expect($remote->load())->toBe(['keys' => []]);
+    } else {
+        expect(fn () => $remote->load())->toThrow(KeyResolutionException::class);
+    }
+})->with([
+    'before stale expiry' => [1000, true],
+    'at stale expiry' => [1001, false],
+    'after stale expiry' => [1002, false],
+]);
 
 it('honors max-age no-cache and no-store using the injected clock', function (string $cacheControl, int $expectedRequests) {
     $factory = new Psr17Factory();

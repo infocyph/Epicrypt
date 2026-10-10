@@ -6,14 +6,25 @@ use Infocyph\Epicrypt\Crypto\SecretStream;
 use Infocyph\Epicrypt\Integrity\FileHasher;
 use Infocyph\Epicrypt\Integration\Runwire\RunwireExecutionContext;
 use Infocyph\Runwire\Exception\CancelledException;
+use Infocyph\Runwire\Coroutine\CoroutineRuntime;
+use Infocyph\Runwire\Coroutine\CoroutineScope;
 use Infocyph\Runwire\RequestContext;
 use Infocyph\Runwire\Runtime\Enum\CancellationReason;
 use Infocyph\Runwire\RuntimeContext;
+use Infocyph\Runwire\RuntimeCapabilities;
+use Infocyph\Runwire\Runtime\Enum\RuntimeDriver;
 
 require dirname(__DIR__, 2) . '/vendor/autoload.php';
 
 const ITERATIONS = 2_000;
 const MAX_GROWTH_BYTES = 2_097_152;
+
+$soakSeconds = filter_var(getenv('EPICRYPT_HOST_SOAK_SECONDS') ?: '0', FILTER_VALIDATE_INT, [
+    'options' => ['min_range' => 0, 'max_range' => 3600],
+]);
+if ($soakSeconds === false) {
+    throw new InvalidArgumentException('EPICRYPT_HOST_SOAK_SECONDS must be an integer between 0 and 3600.');
+}
 
 $runtime = RuntimeContext::standalone();
 $hasher = new FileHasher();
@@ -69,7 +80,9 @@ for ($i = 0; $i < 100; $i++) {
 gc_collect_cycles();
 $before = memory_get_usage(false);
 $peakBefore = memory_get_peak_usage(true);
-for ($i = 0; $i < ITERATIONS; $i++) {
+$started = hrtime(true);
+$until = $started + $soakSeconds * 1_000_000_000;
+for ($i = 0; $i < ITERATIONS || hrtime(true) < $until; $i++) {
     $serve($i % 2 === 0 ? 'tenant-a' : 'tenant-b');
     if ($i % 100 === 0) {
         $a = RequestContext::create($runtime);
@@ -93,16 +106,44 @@ if ($growth > MAX_GROWTH_BYTES || getmypid() !== $startPid) {
     throw new RuntimeException('Persistent host process integrity or memory-growth guard failed.');
 }
 
+$scopedRuntime = RuntimeContext::fromCapabilities(
+    new RuntimeCapabilities(RuntimeDriver::NATIVE, supportsRunwireCoroutines: true),
+    'epicrypt-scoped-host',
+);
+$scopedGrowth = (new CoroutineRuntime())->run(static function (CoroutineScope $scope) use ($scopedRuntime): int {
+    $request = RequestContext::create($scopedRuntime);
+    $warm = new RunwireExecutionContext($scopedRuntime, $request, $scope);
+    unset($warm);
+    gc_collect_cycles();
+    $before = memory_get_usage(false);
+    for ($binding = 0; $binding < 20_000; $binding++) {
+        $context = new RunwireExecutionContext($scopedRuntime, $request, $scope, checkpointEvery: 1);
+        $context->checkpoint();
+        unset($context);
+    }
+    gc_collect_cycles();
+    $growth = max(0, memory_get_usage(false) - $before);
+    if ($growth > MAX_GROWTH_BYTES || $request->completed()) {
+        throw new RuntimeException('Scoped binding retention or host ownership guard failed.');
+    }
+    $request->complete();
+
+    return $growth;
+});
+
 fwrite(STDOUT, json_encode([
     'php' => PHP_VERSION,
     'mode' => 'long-lived host process / borrowed standalone Runwire',
     'pid' => $startPid,
     'verified' => $verified,
-    'isolated_requests' => ITERATIONS,
-    'cancelled_request_checks' => intdiv(ITERATIONS - 1, 100) + 1,
+    'isolated_requests' => $i,
+    'elapsed_seconds' => (hrtime(true) - $started) / 1_000_000_000,
+    'cancelled_request_checks' => intdiv($i - 1, 100) + 1,
     'heap_before_bytes' => $before,
     'heap_after_bytes' => $after,
     'heap_growth_bytes' => $growth,
     'peak_allocated_bytes' => max($peakBefore, memory_get_peak_usage(true)),
     'growth_limit_bytes' => MAX_GROWTH_BYTES,
+    'scoped_discarded_bindings' => 20_000,
+    'scoped_heap_growth_bytes' => $scopedGrowth,
 ], JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR) . PHP_EOL);

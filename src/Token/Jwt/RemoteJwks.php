@@ -11,6 +11,7 @@ use Infocyph\Epicrypt\Token\Jwt\Enum\AsymmetricJwtAlgorithm;
 use Infocyph\Epicrypt\Token\Jwt\Support\JosePolicy;
 use Infocyph\Epicrypt\Token\Jwt\Support\NativeRemoteJoseHostResolver;
 use Infocyph\Epicrypt\Token\Jwt\Support\RemoteJoseResource;
+use Infocyph\Runwire\Exception\CancelledException;
 use Psr\Clock\ClockInterface;
 use Psr\Http\Client\ClientInterface;
 use Psr\Http\Message\RequestFactoryInterface;
@@ -62,11 +63,11 @@ final readonly class RemoteJwks
         try {
             $cached = $forceRefresh ? null : $this->cached();
         } catch (Throwable $exception) {
-            throw new KeyResolutionException('Remote JWKS cache lookup failed.', 0, $exception);
+            $this->throwCacheFailure('Remote JWKS cache lookup failed.', $exception, $context);
         }
         $context?->assertActive();
         $now = $this->clock->now()->getTimestamp();
-        if (!$forceRefresh && $cached !== null && $cached['freshUntil'] > $now) {
+        if ($cached !== null && $cached['freshUntil'] > $now) {
             return $cached['jwks'];
         }
 
@@ -74,7 +75,10 @@ final readonly class RemoteJwks
             [$jwks, $cachePolicy] = $this->fetch($context);
         } catch (Throwable $exception) {
             $context?->assertActive();
-            if (!$forceRefresh && $cached !== null && $cached['staleUntil'] > $now) {
+            if ($exception instanceof CancelledException) {
+                throw $exception;
+            }
+            if ($cached !== null && $cached['staleUntil'] > $this->clock->now()->getTimestamp()) {
                 return $cached['jwks'];
             }
             if ($exception instanceof KeyResolutionException) {
@@ -85,7 +89,7 @@ final readonly class RemoteJwks
         }
 
         $context?->assertActive();
-        $result = $this->storeFetched($jwks, $cachePolicy, $now);
+        $result = $this->storeFetched($jwks, $cachePolicy, $now, $context);
         $context?->assertActive();
 
         return $result;
@@ -177,7 +181,7 @@ final readonly class RemoteJwks
      * @param array{maxAge: int|null, noStore: bool, noCache: bool} $cachePolicy
      * @return array{keys: list<array<string, mixed>>}
      */
-    private function storeFetched(array $jwks, array $cachePolicy, int $now): array
+    private function storeFetched(array $jwks, array $cachePolicy, int $now, ?RunwireExecutionContext $context): array
     {
         try {
             if ($cachePolicy['noStore']) {
@@ -206,7 +210,17 @@ final readonly class RemoteJwks
 
             return $jwks;
         } catch (Throwable $exception) {
-            throw new KeyResolutionException('Remote JWKS cache operation failed.', 0, $exception);
+            $this->throwCacheFailure('Remote JWKS cache operation failed.', $exception, $context);
         }
+    }
+
+    private function throwCacheFailure(string $message, Throwable $exception, ?RunwireExecutionContext $context): never
+    {
+        $context?->assertActive();
+        if ($exception instanceof CancelledException) {
+            throw $exception;
+        }
+
+        throw new KeyResolutionException($message, 0, $exception);
     }
 }

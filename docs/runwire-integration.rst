@@ -47,6 +47,9 @@ request cancellation/deadline and a task-local binding to the live host scope.
 Construct the binding inside the owning scope/task, then forward it only
 within that task or intentionally inherited child work; unrelated or previously
 started sibling tasks must not reuse the binding.
+Task-local binding snapshots hold weak references, so discarding contexts
+does not accumulate markers inside a long-lived task. Creating a new binding
+copies the snapshot without changing bindings visible to existing siblings.
 checkpointEvery defaults to 256 and is bounded to 1-1000000. A live
 CoroutineScope and the RUNWIRE_COROUTINES capability are both necessary
 for cooperative yieldNow; capability alone does not create a scheduler.
@@ -57,7 +60,9 @@ The host's cancellation state is checked again after a staged write and before
 atomic replacement, so cancellation does not publish a completed staging file.
 When cancelled, an existing destination remains intact. Caller-owned
 output streams may contain partial data: the host owns their publication.
-Remote JWKS cancellation is not converted into a stale cached key result.
+Remote JWKS cancellation from HTTP or cache operations is propagated and
+is not converted into a stale cached key result. Stale expiry is checked
+after a failed refresh, including time spent waiting for the transport.
 Regular file and PSR-18 network I/O remain synchronous; caller-owned
 HTTP transports must still set suitable timeouts and enforce DNS pinning.
 

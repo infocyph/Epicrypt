@@ -1,10 +1,23 @@
 # Epicrypt audit and next-release plan
 
-Date: 2026-10-10, Asia/Dhaka. Status: implementation complete on draft PR #32; production-equivalent host acceptance and publication are not yet verified.
+Date: 2026-10-10, Asia/Dhaka. Status: post-review boundary fixes implemented; final Docker host acceptance and exact-revision CI are in progress on draft PR #32.
 
 ## Implementation tracker
 
-Status: **Repository implementation and QA complete; production-host and user-owned publication acceptance outstanding**. Draft PR: [#32](https://github.com/infocyph/Epicrypt/pull/32). Update each row only after a committed change and recorded QA evidence. Never treat the audited baseline as final release certification.
+Status: **Post-review implementation and local QA complete; Docker host and final CI acceptance in progress**. Draft PR: [#32](https://github.com/infocyph/Epicrypt/pull/32). Update each row only after a committed change and recorded QA evidence. Never treat the audited baseline as final release certification.
+
+**Post-review remediation:** The review of `1b034ec` identified four additional medium-severity boundaries. All four are corrected without changing public call forms or host ownership:
+
+- Scoped contexts use one immutable task-local lookup key and copied weak binding maps. Discarded contexts no longer accumulate keys, and earlier sibling tasks do not gain access to later bindings. A 20,000-binding probe dropped from 10,755,104 bytes retained to 71,640 bytes; the permanent scoped smoke measures 4,496 bytes after warmup against the existing 2 MiB budget.
+- SHA-256 and BLAKE2b hashing/verification recheck borrowed liveness after the final EOF read.
+- Failed remote refreshes recheck the clock before stale fallback, including the exact expiry boundary.
+- JWKS cache lookup/write/invalidation preserve cancellation, and HTTP cancellation cannot return stale keys.
+
+Ten meaningful pre-fix failures reproduced these four findings. The updated suite passes 381 tests / 1,752 assertions, including direct cancellation from a separate request in each cache operation. PHPForge processing and the release guard pass, strict Sphinx passes, and refreshed no-dev `php -n` smoke passes without Runwire, Pathwise or Ctype. Composer reports zero advisories; the already-excluded development-only Doctrine abandonment remains non-blocking.
+
+The Docker-equivalent host is explicitly authorized by the user. `benchmarks/docker-host-acceptance.sh` compares matched four-worker FPM deployments with identical production dependencies, OPcache and CPU affinity; validates every mixed file/JWT/JWKS/cancellation response; monitors live RSS; rejects a >2% median RPM regression or >5% trial spread; and checks a 300-second persistent process plus worker replacement. CPU, image, dependency, response and latency evidence must be recorded before closing this gate. Existing historical checkpoints below do not certify these new fixes.
+
+**Measurement integrity:** Early Docker attempts are not certification: a BusyBox `ps` reported non-KiB units, and later runs exceeded the 5% stability bound. The comparator now rejects nonnumeric RSS and unstable trials with permanent negative regressions. The final profile uses matched bounded tmpfs staging, disabled access logs, explicit CPU affinity and 60-second warmup. A separate hosted Docker job validates the exact PR source and uploads raw measurements; budgets remain unchanged.
 
 | Batch | Scope | Implementation | Focused QA | Commit / evidence |
 | --- | --- | --- | --- | --- |
@@ -254,16 +267,16 @@ Review explicit password-cost policy documentation and runnable remote-resolver 
 
 Required final gates:
 
-- [ ] Every S1-S7 regression fails before its fix and passes afterward; Q1 static/refactor gates are clean.
+- [x] Every S1-S7 regression fails before its fix and passes afterward; Q1 static/refactor gates are clean. Four post-review boundaries now have additional adversarial coverage.
 - [x] `composer ic:process`, `composer ic:tests:details` and final `composer ic:release:guard`, following installed PHPForge agent workflow. No gate weakening or vendor edits.
-- [x] PHP 8.4/8.5 stable/lowest hosted QA matrices validate the final implementation source; platform differences and the abandoned development-only `doctrine/annotations` warning have been assessed (non-blocking).
+- [ ] PHP 8.4/8.5 stable/lowest hosted QA matrices validate the final committed revision on PR #32; the abandoned development-only `doctrine/annotations` warning remains non-blocking.
 - [x] Fresh production-only installation exercises valid/invalid integrity and JWT/JOSE paths without dev packages, Pathwise or Runwire, using only declared required extensions.
 - [ ] Strict Sphinx build, runnable affected examples, independent Node JOSE/OAuth interoperability and npm audit pass.
-- [x] Existing Windows publication, AEGIS-positive and mutation-floor lanes pass on the final source SHA; preserve skip policy and all existing thresholds.
+- [ ] Existing Windows publication, AEGIS-positive and mutation-floor lanes pass on the final source SHA; preserve skip policy and all existing thresholds.
 - [x] Hosted authentication and PHPBench evidence pass on PHP 8.4/8.5; the existing 2 MiB repeated-PAT heap guard remains active. Deployment-matched runtime/dependency/OPcache metadata and RPM comparison remain in the production-host gate.
 - [ ] For Runwire or material request-path changes, measure repeated production-equivalent PHP-FPM and supported persistent-host scenarios, including unbound/bound calls, stream work, cancellation and remote hit/miss paths. Record correctness, successful RPM, latency, errors/timeouts and live process-tree memory. Apply the engineering-principles default 2% median successful-RPM regression budget only on matched stable environments; current microbenchmarks cannot certify it.
 - [x] Focused Runwire long-lived host CLI repetition tests 2,000 request operations after warmup, two isolated tenant payloads, cancellation, completed contexts, two distinct PHP worker processes, and bounded heap growth on PHP 8.4/8.5. Deployment-specific PHP-FPM/persistent-server lifecycle and process-tree memory still belong to the production-equivalent host gate.
-- [x] A fresh exact-source-SHA hosted run (`42b104f`) passed all 29 applicable jobs plus strict Documentation after the last code/workflow change. The tracker-only commit that records this evidence has no runtime changes; it must not imply a host-RPM measurement.
+- [ ] Fresh hosted checks on PR #32 validate the commit containing these post-review fixes, including independent Docker acceptance and strict Documentation. Historical `42b104f` evidence does not certify this revision.
 - [x] Release notes explain security acceptance changes, cache cold-start/namespace transition, supported PHP/Pathwise/Runwire contracts and remaining host responsibilities. No tag until all applicable blocking gates are closed.
 
 Completion means confirmed defects are fixed and their regressions/gates pass. A green baseline suite or zero Composer advisories does not close these findings.

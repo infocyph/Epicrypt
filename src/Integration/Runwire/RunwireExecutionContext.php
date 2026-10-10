@@ -11,6 +11,7 @@ use Infocyph\Runwire\Runtime\Enum\RuntimeCapability;
 use Infocyph\Runwire\RuntimeContext;
 use InvalidArgumentException;
 use LogicException;
+use WeakMap;
 
 /**
  * Borrows caller-owned Runwire 2.1.1 execution state.
@@ -20,6 +21,8 @@ use LogicException;
 final class RunwireExecutionContext
 {
     private const int MAX_CHECKPOINT_INTERVAL = 1_000_000;
+
+    private static ?TaskLocal $scopeBindingKey = null;
 
     private readonly ?TaskLocal $scopeProbe;
 
@@ -35,9 +38,13 @@ final class RunwireExecutionContext
             throw new InvalidArgumentException('Runwire checkpoint interval must be between 1 and 1000000.');
         }
 
-        $this->scopeProbe = $scope === null ? null : new TaskLocal();
+        $this->scopeProbe = $scope === null ? null : self::$scopeBindingKey ??= new TaskLocal();
         if ($scope !== null && $this->scopeProbe !== null) {
-            $scope->setLocal($this->scopeProbe, true);
+            $inherited = $scope->local($this->scopeProbe);
+            // Copy the snapshot so new bindings never appear in earlier sibling tasks.
+            $bindings = $inherited instanceof WeakMap ? clone $inherited : new WeakMap();
+            $bindings[$this] = true;
+            $scope->setLocal($this->scopeProbe, $bindings);
         }
         $this->assertActive();
     }
@@ -54,7 +61,8 @@ final class RunwireExecutionContext
             $this->request->cancellation->throwIfCancelled();
         }
         if ($this->scope !== null && $this->scopeProbe !== null) {
-            if (!$this->scope->hasLocal($this->scopeProbe)) {
+            $bindings = $this->scope->local($this->scopeProbe);
+            if (!$bindings instanceof WeakMap || !isset($bindings[$this])) {
                 throw new LogicException('Runwire scope is not borrowed by the current task.');
             }
             $this->scope->cancellation()->throwIfCancelled();

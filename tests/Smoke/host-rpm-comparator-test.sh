@@ -17,14 +17,30 @@ case " $* " in
       wrong_body) echo 'EPICRYPT_WRK 99 1 100 0 0 0 0 1000000 1000 1500 2000' ;;
       socket_error) echo 'EPICRYPT_WRK 100 0 100 0 1 0 0 1000000 1000 1500 2000' ;;
       missing_validation) echo 'Requests/sec: 1000.00' ;;
+      unstable)
+        count=$(cat "$HOST_MOCK_COUNTER" 2>/dev/null || printf 0)
+        ((count+=1))
+        printf '%d' "$count" > "$HOST_MOCK_COUNTER"
+        elapsed=1000000
+        if ((count==3)); then elapsed=1100000; fi
+        echo "EPICRYPT_WRK 100 0 100 0 0 0 0 $elapsed 1000 1500 2000" ;;
       *) echo 'EPICRYPT_WRK 100 0 100 0 0 0 0 1000000 1000 1500 2000' ;;
     esac ;;
   *) echo 'EPICRYPT_WRK 100 0 100 0 0 0 0 1000000 1000 1500 2000' ;;
 esac
 STUB
-chmod +x "$scratch/curl" "$scratch/wrk"
+cat > "$scratch/ps" <<'STUB'
+#!/usr/bin/env bash
+if [[ ${HOST_MOCK_SCENARIO:-pass} == memory_units ]]; then
+  printf '%s 0 10m\n' "$HOST_BASE_PID"
+else
+  exec /bin/ps "$@"
+fi
+STUB
+chmod +x "$scratch/curl" "$scratch/wrk" "$scratch/ps"
 execute() {
   HOST_MOCK_SCENARIO="$1" HOST_EXPECTED_BODY=release-health-ok \
+  HOST_MOCK_COUNTER="$scratch/counter" \
   HOST_BASE_PID=$$ HOST_CANDIDATE_PID=$$ \
   HOST_ROUNDS=3 HOST_DURATION=1s HOST_REPORT="$scratch/compare.tsv" \
   PATH="$scratch:$PATH" bash "$root/benchmarks/host-rpm-compare.sh" \
@@ -32,10 +48,10 @@ execute() {
 }
 execute pass || { cat "$scratch/output" >&2; exit 1; }
 grep -Fq 'PASS: <=2% median successful-RPM regression' "$scratch/output"
-for scenario in regression wrong_body socket_error missing_validation; do
+for scenario in regression wrong_body socket_error missing_validation memory_units unstable; do
   if execute "$scenario"; then
     echo "Comparator incorrectly accepted failure: $scenario" >&2
     exit 1
   fi
 done
-echo 'Matched-host comparator positive and four negative cases passed.'
+echo 'Matched-host comparator positive and six negative cases passed.'

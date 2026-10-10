@@ -122,6 +122,7 @@ final readonly class FileHasher
                 $context?->checkpoint();
                 sodium_crypto_generichash_update($state, $chunk);
             }
+            $context?->assertActive();
             $digest = sodium_crypto_generichash_final($state, $outputLength);
             $finalized = true;
 
@@ -145,6 +146,7 @@ final readonly class FileHasher
             $context?->checkpoint();
             hash_update($hashContext, $chunk);
         }
+        $context?->assertActive();
 
         return hash_final($hashContext, $binary);
     }
