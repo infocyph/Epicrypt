@@ -99,12 +99,22 @@ for process-tree resident-memory sampling:
 
 Run the comparison separately for unbound and borrowed Runwire calls, file
 streams, cancellation, remote JOSE cache hits/misses and any relevant
-application-layer route. Each comparison alternates baseline/candidate order
-and checks a 2% median HTTP-success RPM regression budget; failed HTTP
-statuses and socket errors fail the run. The harness records a per-sample
-p99 latency and peak summed process-tree RSS. The correctness preflight checks
-one response before the load; host-specific response validation and sustained
-resource monitoring must also be performed for actual release certification.
+application-layer route. Each comparison alternates baseline/candidate order and checks a 2%
+median **correct-response** RPM regression budget. Supply a fixed,
+independently verified ``HOST_EXPECTED_BODY``: the wrk Lua
+``host-rpm-validate.lua`` callback checks **every** measured response
+for exact HTTP 200 status and matching body. Missing/mismatched responses,
+redirects, connection errors and timeouts fail the comparison. The harness
+records p50/p95/p99 latency and peak summed process-tree RSS per sample.
+
+The endpoint must return the *same correct deterministic response* for each
+request. For dynamic OAuth/JOSE application paths, expose a representative
+deterministic validation route or use a workload-specific validator that
+performs equivalent verification; never silently accept successful status
+alone. Full production release certification still requires matched deployed
+hosts, independent workload correctness validation and sustained resource
+monitoring. The comparator also has four fail-closed parser regression cases
+exercised in the Security & Standards workflow.
 
 Record the host profile, full PHP/Composer/OPcache versions and configuration,
 CPU/memory headroom, worker counts, concurrency, elapsed test duration,
