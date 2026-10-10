@@ -55,26 +55,6 @@ final readonly class RemoteJoseResource
         ];
     }
 
-    private function readBoundedBody(StreamInterface $body): string
-    {
-        if (($size = $body->getSize()) !== null && $size > $this->maximumBytes) {
-            throw new KeyResolutionException('Remote JOSE response exceeds the configured size bound.');
-        }
-        $json = '';
-        while (!$body->eof()) {
-            $chunk = $body->read(min(8192, ($this->maximumBytes + 1) - strlen($json)));
-            if ($chunk === '') {
-                throw new KeyResolutionException('Remote JOSE response stream made no progress.');
-            }
-            $json .= $chunk;
-            if (strlen($json) > $this->maximumBytes) {
-                throw new KeyResolutionException('Remote JOSE response exceeds the configured size bound.');
-            }
-        }
-
-        return $json;
-    }
-
     private function assertPublicTarget(string $uri): void
     {
         $host = parse_url($uri, PHP_URL_HOST);
@@ -113,5 +93,24 @@ final readonly class RemoteJoseResource
             'noStore' => preg_match('/(?:^|,)\s*no-store(?:\s*(?:,|$))/i', $cacheControl) === 1,
             'noCache' => preg_match('/(?:^|,)\s*no-cache(?:\s*(?:,|$))/i', $cacheControl) === 1,
         ];
+    }
+    private function readBoundedBody(StreamInterface $body): string
+    {
+        if (($size = $body->getSize()) !== null && $size > $this->maximumBytes) {
+            throw new KeyResolutionException('Remote JOSE response exceeds the configured size bound.');
+        }
+        $json = '';
+        while (!$body->eof()) {
+            $chunk = $body->read(min(8192, ($this->maximumBytes + 1) - strlen($json)));
+            if ($chunk === '') {
+                throw new KeyResolutionException('Remote JOSE response stream made no progress.');
+            }
+            $json .= $chunk;
+            if (strlen($json) > $this->maximumBytes) {
+                throw new KeyResolutionException('Remote JOSE response exceeds the configured size bound.');
+            }
+        }
+
+        return $json;
     }
 }
