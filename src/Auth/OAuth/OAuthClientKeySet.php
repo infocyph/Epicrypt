@@ -32,24 +32,9 @@ final readonly class OAuthClientKeySet
         $seen = [];
         $normalized = [];
         foreach ($keys as $key) {
-            if (!is_array($key) || array_is_list($key)) {
-                throw new ConfigurationException('OAuth client JWKS entries must be objects.');
-            }
-            $candidate = self::stringKeyArray($key);
-            self::assertPublicSigningKey($candidate);
-            $kid = $candidate['kid'] ?? null;
-            if (!is_string($kid) || !JosePolicy::isKeyId($kid) || isset($seen[$kid])) {
+            [$candidate, $kid] = self::validatedKey($key);
+            if (isset($seen[$kid])) {
                 throw new ConfigurationException('OAuth client JWKS requires unique Base64URL-safe kid values.');
-            }
-            $algorithm = $candidate['alg'] ?? null;
-            if (!is_string($algorithm) || AsymmetricJwtAlgorithm::tryFrom($algorithm) === null) {
-                throw new ConfigurationException('OAuth client JWK requires an explicitly supported asymmetric alg.');
-            }
-
-            try {
-                self::importPublicKey($candidate, AsymmetricJwtAlgorithm::from($algorithm));
-            } catch (KeyResolutionException $exception) {
-                throw new ConfigurationException('OAuth client JWK is not a usable public signing key.', 0, $exception);
             }
 
             $seen[$kid] = true;
@@ -152,5 +137,31 @@ final readonly class OAuthClientKeySet
         }
 
         return $result;
+    }
+
+    /** @return array{array<string, mixed>, string} */
+    private static function validatedKey(mixed $key): array
+    {
+        if (!is_array($key) || array_is_list($key)) {
+            throw new ConfigurationException('OAuth client JWKS entries must be objects.');
+        }
+        $candidate = self::stringKeyArray($key);
+        self::assertPublicSigningKey($candidate);
+        $kid = $candidate['kid'] ?? null;
+        if (!is_string($kid) || !JosePolicy::isKeyId($kid)) {
+            throw new ConfigurationException('OAuth client JWKS requires unique Base64URL-safe kid values.');
+        }
+        $algorithm = $candidate['alg'] ?? null;
+        if (!is_string($algorithm) || AsymmetricJwtAlgorithm::tryFrom($algorithm) === null) {
+            throw new ConfigurationException('OAuth client JWK requires an explicitly supported asymmetric alg.');
+        }
+
+        try {
+            self::importPublicKey($candidate, AsymmetricJwtAlgorithm::from($algorithm));
+        } catch (KeyResolutionException $exception) {
+            throw new ConfigurationException('OAuth client JWK is not a usable public signing key.', 0, $exception);
+        }
+
+        return [$candidate, $kid];
     }
 }
