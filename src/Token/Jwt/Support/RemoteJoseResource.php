@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Infocyph\Epicrypt\Token\Jwt\Support;
 
 use Infocyph\Epicrypt\Exception\Token\KeyResolutionException;
+use Infocyph\Epicrypt\Integration\Runwire\RunwireExecutionContext;
 use Infocyph\Epicrypt\Token\Jwt\RemoteJoseHostResolverInterface;
 use Psr\Http\Client\ClientExceptionInterface;
 use Psr\Http\Client\ClientInterface;
@@ -24,9 +25,11 @@ final readonly class RemoteJoseResource
     ) {}
 
     /** @return array{array<string, mixed>, array{maxAge: int|null, noStore: bool, noCache: bool}} */
-    public function fetch(string $uri, bool $jwks = false): array
+    public function fetch(string $uri, bool $jwks = false, ?RunwireExecutionContext $context = null): array
     {
+        $context?->assertActive();
         $this->assertPublicTarget($uri);
+        $context?->assertActive();
 
         try {
             $request = $this->requestFactory->createRequest('GET', $uri)
@@ -35,6 +38,7 @@ final readonly class RemoteJoseResource
         } catch (ClientExceptionInterface $exception) {
             throw new KeyResolutionException('Remote JOSE request failed.', 0, $exception);
         }
+        $context?->assertActive();
         if ($response->getStatusCode() !== 200) {
             throw new KeyResolutionException(sprintf('Remote JOSE endpoint returned HTTP %d.', $response->getStatusCode()));
         }
@@ -43,11 +47,13 @@ final readonly class RemoteJoseResource
         if (!in_array($contentType, $allowedMediaTypes, true)) {
             throw new KeyResolutionException('Remote JOSE endpoint returned a non-JSON content type.');
         }
-        $json = $this->readBoundedBody($response->getBody());
+        $json = $this->readBoundedBody($response->getBody(), $context);
 
         $maximumMembers = $jwks
             ? 1 + ($this->maximumKeys * (JosePolicy::MAX_JWK_MEMBERS + 1))
             : JosePolicy::MAX_DOCUMENT_MEMBERS;
+
+        $context?->assertActive();
 
         return [
             JwtToken::decodeJsonObject($json, 'remote JOSE document', $this->maximumBytes, $maximumMembers),
@@ -95,13 +101,14 @@ final readonly class RemoteJoseResource
         ];
     }
 
-    private function readBoundedBody(StreamInterface $body): string
+    private function readBoundedBody(StreamInterface $body, ?RunwireExecutionContext $context): string
     {
         if (($size = $body->getSize()) !== null && $size > $this->maximumBytes) {
             throw new KeyResolutionException('Remote JOSE response exceeds the configured size bound.');
         }
         $json = '';
         while (!$body->eof()) {
+            $context?->checkpoint();
             $chunk = $body->read(min(8192, ($this->maximumBytes + 1) - strlen($json)));
             if ($chunk === '') {
                 throw new KeyResolutionException('Remote JOSE response stream made no progress.');
@@ -111,6 +118,8 @@ final readonly class RemoteJoseResource
                 throw new KeyResolutionException('Remote JOSE response exceeds the configured size bound.');
             }
         }
+
+        $context?->assertActive();
 
         return $json;
     }

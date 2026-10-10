@@ -6,6 +6,7 @@ namespace Infocyph\Epicrypt\Token\Jwt;
 
 use Infocyph\Epicrypt\Exception\Token\KeyResolutionException;
 use Infocyph\Epicrypt\Internal\Clock\SystemClock;
+use Infocyph\Epicrypt\Integration\Runwire\RunwireExecutionContext;
 use Infocyph\Epicrypt\Token\Jwt\Enum\AsymmetricJwtAlgorithm;
 use Infocyph\Epicrypt\Token\Jwt\Support\JosePolicy;
 use Infocyph\Epicrypt\Token\Jwt\Support\NativeRemoteJoseHostResolver;
@@ -54,21 +55,24 @@ final readonly class RemoteJwks
     }
 
     /** @return array{keys: list<array<string, mixed>>} */
-    public function load(bool $forceRefresh = false): array
+    public function load(bool $forceRefresh = false, ?RunwireExecutionContext $context = null): array
     {
+        $context?->assertActive();
         try {
             $cached = $forceRefresh ? null : $this->cached();
         } catch (Throwable $exception) {
             throw new KeyResolutionException('Remote JWKS cache lookup failed.', 0, $exception);
         }
+        $context?->assertActive();
         $now = $this->clock->now()->getTimestamp();
         if (!$forceRefresh && $cached !== null && $cached['freshUntil'] > $now) {
             return $cached['jwks'];
         }
 
         try {
-            [$jwks, $cachePolicy] = $this->fetch();
+            [$jwks, $cachePolicy] = $this->fetch($context);
         } catch (Throwable $exception) {
+            $context?->assertActive();
             if (!$forceRefresh && $cached !== null && $cached['staleUntil'] > $now) {
                 return $cached['jwks'];
             }
@@ -79,17 +83,21 @@ final readonly class RemoteJwks
             throw new KeyResolutionException('Remote JWKS resolution failed.', 0, $exception);
         }
 
-        return $this->storeFetched($jwks, $cachePolicy, $now);
+        $context?->assertActive();
+        $result = $this->storeFetched($jwks, $cachePolicy, $now);
+        $context?->assertActive();
+
+        return $result;
     }
 
-    public function resolve(string $kid, AsymmetricJwtAlgorithm $algorithm): string
+    public function resolve(string $kid, AsymmetricJwtAlgorithm $algorithm, ?RunwireExecutionContext $context = null): string
     {
-        $jwks = $this->load(false);
+        $jwks = $this->load(false, $context);
 
         try {
             return new Jwks()->resolvePublicKeyByKid($jwks, $kid, $algorithm);
         } catch (KeyResolutionException) {
-            $jwks = $this->load(true);
+            $jwks = $this->load(true, $context);
 
             return new Jwks()->resolvePublicKeyByKid($jwks, $kid, $algorithm);
         }
@@ -112,18 +120,18 @@ final readonly class RemoteJwks
     }
 
     /** @return array{array{keys: list<array<string, mixed>>}, array{maxAge: int|null, noStore: bool, noCache: bool}} */
-    private function fetch(): array
+    private function fetch(?RunwireExecutionContext $context): array
     {
         $uri = $this->configuration->jwksUri;
         if ($uri === null) {
-            [$metadata] = $this->resource->fetch($this->configuration->discoveryUri());
+            [$metadata] = $this->resource->fetch($this->configuration->discoveryUri(), context: $context);
             if (($metadata['issuer'] ?? null) !== $this->configuration->issuer || !is_string($metadata['jwks_uri'] ?? null)) {
                 throw new KeyResolutionException('OpenID discovery metadata does not match the configured issuer.');
             }
             $uri = $metadata['jwks_uri'];
             $this->configuration->validateJwksUrl($uri);
         }
-        [$document, $cachePolicy] = $this->resource->fetch($uri, jwks: true);
+        [$document, $cachePolicy] = $this->resource->fetch($uri, jwks: true, context: $context);
         $keys = $this->normalizeKeys($document['keys'] ?? null);
         if ($keys === null) {
             throw new KeyResolutionException('Remote JWKS keys collection is invalid or exceeds its bound.');
