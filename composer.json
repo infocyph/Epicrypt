@@ -28,8 +28,12 @@
     "require-dev": {
         "infocyph/pathwise": "^4.2",
         "infocyph/phpforge": "dev-main@dev",
+        "infocyph/runwire": "2.1.1",
         "nyholm/psr7": "^1.8",
         "php-http/mock-client": "^1.6"
+    },
+    "suggest": {
+        "infocyph/runwire": "2.1.1: Optional borrowed runtime cancellation and coroutine checkpoints for stream and remote JOSE operations."
     },
     "minimum-stability": "stable",
     "prefer-stable": true,
