@@ -34,6 +34,7 @@ Complete-path examples
   subject tokens.
 - :doc:`authentication-standards`: review the exact OAuth 2.1, OIDC Core and
   Discovery standards profile, supported behavior and explicit 3.0 exclusions.
+- :doc:`runwire-integration`: borrow host-owned Runwire 2.1.1 request/scopes for optional stream cancellation.
 - :doc:`remote-jose-security`: deploy Remote JWKS/OpenID discovery with explicit
   DNS, redirect, timeout, cache, and SSRF boundaries.
 - :doc:`token-storage`: implement durable atomic authorization-code, refresh,
@@ -63,6 +64,7 @@ integration example.
    oauth-lifecycle
    personal-access-tokens
    authentication-standards
+   runwire-integration
    remote-jose-security
    token-storage
    error-handling

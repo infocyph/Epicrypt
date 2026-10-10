@@ -35,6 +35,9 @@
     "suggest": {
         "infocyph/runwire": "2.1.1: Optional borrowed runtime cancellation and coroutine checkpoints for stream and remote JOSE operations."
     },
+    "conflict": {
+        "infocyph/runwire": "<2.1.1 || >=2.2.0"
+    },
     "minimum-stability": "stable",
     "prefer-stable": true,
     "autoload": {
