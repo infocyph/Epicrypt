@@ -79,6 +79,23 @@ final readonly class JwsSignature
         return openssl_verify($input, $signature, $this->opensslKey(), $this->algorithm->opensslAlgorithm()) === 1;
     }
 
+    /** @param array<string, mixed> $details */
+    private function assertOpenSslAlgorithmDetails(AsymmetricJwtAlgorithm $algorithm, array $details): void
+    {
+        if ($algorithm->isRsa()) {
+            if (($details['type'] ?? null) !== OPENSSL_KEYTYPE_RSA || !is_int($details['bits'] ?? null) || $details['bits'] < 2048) {
+                throw new ConfigurationException('RSA JWS keys must contain at least 2048 bits.');
+            }
+        } elseif ($algorithm->isEc()) {
+            if (($details['type'] ?? null) !== OPENSSL_KEYTYPE_EC) {
+                throw new ConfigurationException('ECDSA JWS requires an EC key.');
+            }
+        } else {
+            throw new ConfigurationException('Unsupported JWS key family.');
+        }
+
+    }
+
     private function configuredPss(
         #[\SensitiveParameter]
         RsaPrivateKey|RsaPublicKey $key,
@@ -117,17 +134,7 @@ final readonly class JwsSignature
         if (!is_array($details)) {
             throw new ConfigurationException('Unable to inspect JWS key material.');
         }
-        if ($this->algorithm->isRsa()) {
-            if (($details['type'] ?? null) !== OPENSSL_KEYTYPE_RSA || !is_int($details['bits'] ?? null) || $details['bits'] < 2048) {
-                throw new ConfigurationException('RSA JWS keys must contain at least 2048 bits.');
-            }
-        } elseif ($this->algorithm->isEc()) {
-            if (($details['type'] ?? null) !== OPENSSL_KEYTYPE_EC) {
-                throw new ConfigurationException('ECDSA JWS requires an EC key.');
-            }
-        } else {
-            throw new ConfigurationException('Unsupported JWS key family.');
-        }
+        $this->assertOpenSslAlgorithmDetails($this->algorithm, $details);
 
         return $key;
     }
