@@ -19,8 +19,8 @@ Immediately before every outbound discovery or JWKS request, Epicrypt resolves
 the destination hostname and rejects the request unless every returned address
 is a syntactically valid public IP address. Empty answers, malformed answers,
 non-public addresses (including multicast), IPv4-mapped non-public IPv6
-addresses, and mixed public/non-public answer sets all fail closed. A later refresh resolves the host
-again; a previous public answer is never treated as authority for a future
+addresses, and mixed public/non-public answer sets all fail closed.
+A later refresh resolves the host again; a previous public answer is never treated as authority for a future
 request.
 
 The default resolver uses native A and AAAA DNS lookup. Applications with a
@@ -85,7 +85,8 @@ Response and parser bounds
 Remote responses are streamed through a configured byte ceiling before JSON is
 accepted. JOSE JSON also has a bounded nesting depth and member count. JWKS has
 a configured maximum key count plus a per-JWK structural member ceiling. These
-bounds are applied before key import or signature work.
+bounds are applied before key import or signature work. A body that returns
+empty reads without reaching EOF is rejected rather than looping forever.
 
 Discovery must return the exact configured issuer. JWKS accepts only
 ``application/jwk-set+json`` or ``application/json``; discovery accepts only
@@ -104,6 +105,13 @@ its configured stale window is still active. An explicit/forced refresh never
 falls back to stale data. Unknown ``kid`` resolution performs at most one forced
 refresh.
 
-The cache key is derived from both the configured issuer and the configured
-JWKS/discovery mode, preventing unrelated issuer configurations from sharing a
-cache entry.
+The versioned JWKS cache key is a PSR-16-compatible 64-character SHA-256 hex
+digest of the issuer, explicit URI/discovery mode, normalized allowed hosts,
+HTTP policy, TTL/stale policy and response/key limits. Upgrading invalidates
+the previous key namespace; expect a cold fetch on the first load.
+
+Share a cache namespace only between deployments with equivalent resolver and
+transport trust guarantees; otherwise isolate the caller-provided cache. Cache
+lookup, write and invalidation failures propagate as key-resolution errors,
+not successful stale JWKS decisions. Stale fallback is limited to fetch failures
+within the configured stale window.

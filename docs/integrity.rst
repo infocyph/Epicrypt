@@ -107,3 +107,7 @@ production Pathwise dependency or global mount/path registry.
 
 ``StringHasher`` and ``FileHasher`` accept BLAKE2b output lengths from 16
 through 64 bytes; malformed digests return ``false`` from ``verify()``.
+
+Digest verification accepts only complete ASCII hex or correctly sized binary
+values. It does not require the optional Ctype extension; validate this in a
+production-only installation with only the declared required PHP extensions.

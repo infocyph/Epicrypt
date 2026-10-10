@@ -8,14 +8,14 @@ Status: **In progress**. Draft PR: [#32](https://github.com/infocyph/Epicrypt/pu
 
 | Batch | Scope | Implementation | Focused QA | Commit / evidence |
 | --- | --- | --- | --- | --- |
-| 1 | S1–S3 JWT/DPoP replay and remote JOSE address security | Implementation and edge-case regressions committed; docs updated | Pending: fresh final-SHA QA and verified pre-fix test evidence | `284da9a`, `1d829ad`, `40c5261`, `a7f6424`, `c128dcb`, `958a5e6`, `69025d4`, `fc49402`, `3b10f2b` |
-| 2 | S4–S7 integrity, PSR-16 cache, remote reads | Pending | Pending | — |
+| 1 | S1–S3 JWT/DPoP replay and remote JOSE address security | Complete: source, boundary regressions, security docs | Focused QA passed on `816287e`: Pest/Pint/PHPCS, all mutation shards incl. JWT and remote JOSE, JOSE/OAuth interoperability, AEGIS/Windows. Q1 static/Rector failures remain tracked in Batch 3; baseline probes documented below | `284da9a`–`816287e`; [security QA run](https://github.com/infocyph/Epicrypt/actions/runs/38026345942) |
+| 2 | S4–S7 integrity, PSR-16 cache, remote reads | In progress: native hex/JSON whitespace, cache key/policy isolation, bounded read progress, production smoke + regressions | Pending: final-SHA CI on PHP 8.4/8.5, strict cache and stalled-stream regressions, isolated no-dev/php -n smoke | `47da2d1`–`c9527f4` |
 | 3 | Q1 complexity and Rector remediation | Pending | Pending | — |
 | 4 | Optional Runwire 2.1.1 integration | Pending | Pending | — |
 | 5 | Pathwise 4.2/docs/release automation R1 | Pending | Pending | — |
 | 6 | Final QA, interoperability, performance and release guard | Pending | Pending | — |
 
-**QA feedback (2026-10-10):** PR #32 is receiving workflow results. Earlier SHA `dbf76d4` failed PHPForge analysis and mutation shards. GitHub job logs traced the widespread mutation failures to a Pathwise `^4.1` test expectation against the already-changed `^4.2` declaration; corrected in `3b10f2b`. Subsequent QA also reported Pint/PHPCS issues addressed in the same commit. The 20 planned Q1 complexity diagnostics and one Rector dry-run change remain open by design. Reassess failures against final Batch 1 SHA and preserve thresholds. Local full Composer/PHPForge QA has not been executed in this editing environment. The baseline quality diagnostics remain open.
+**QA feedback (2026-10-10):** PR #32 is receiving workflow results. Earlier SHA `dbf76d4` failed PHPForge analysis and mutation shards. GitHub job logs traced the widespread mutation failures to a Pathwise `^4.1` test expectation against the already-changed `^4.2` declaration; corrected in `3b10f2b`. Subsequent QA also reported Pint/PHPCS issues addressed in the same commit. The 20 planned Q1 complexity diagnostics and one Rector dry-run change remain open by design. Batch 1 committed security regression code and focused QA are complete; do not confuse the known Q1 static/Rector failures with a new security regression. Preserve thresholds. Local full Composer/PHPForge QA has not been executed in this editing environment. The baseline quality diagnostics remain open.
 
 **Q2 disposition:** Abandoned `doctrine/annotations` is a non-blocking development-toolchain warning; explicitly excluded from Epicrypt 3.2 remediation. No Composer/PHPForge/PHPBench changes planned for it.
 
@@ -178,7 +178,7 @@ Simplify guards/branching first; use private methods for cohesive steps. A class
 
 `composer why doctrine/annotations` identifies `phpbench/phpbench 1.7.0 -> doctrine/annotations ^2.0`, obtained through PHPForge's development toolchain. Production is unaffected. The installed PHPForge auditor intentionally reports abandoned packages as non-blocking, while plain Composer audit exits 1.
 
-Coordinate removal/upgrade in the shared PHPForge/PHPBench owner once a compatible supported solution exists. Do not edit vendor, fake a Composer replacement or weaken audit policy. Report this warning accurately while fixing the blocking application and quality findings.
+Non-blocking and expressly out of Epicrypt's release work. No changes, remediation ticket or dependency maintenance work is required for this warning. Do not edit vendor, fake replacements or weaken audit policy.
 
 ## Optional Runwire 2.1.1 integration for 3.2.0
 
