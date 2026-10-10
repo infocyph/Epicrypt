@@ -53,6 +53,29 @@ jobs:
           bash -n benchmarks/host-rpm-compare.sh
           bash -n tests/Smoke/host-rpm-comparator-test.sh
           bash tests/Smoke/host-rpm-comparator-test.sh
+      - name: Validate real wrk Lua response accounting
+        shell: bash
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq wrk
+          root=$(mktemp -d)
+          printf '%s\n' '<?php echo "release-health-ok";' > "$root/index.php"
+          php -S 127.0.0.1:19019 -t "$root" > "$root/php-server.log" 2>&1 &
+          server=$!
+          trap 'kill "$server" 2>/dev/null || :; rm -rf "$root"' EXIT
+          for attempt in {1..30}; do
+            if curl -fsS http://127.0.0.1:19019/ >/dev/null; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:19019/ | grep -Fxq 'release-health-ok'
+          HOST_EXPECTED_BODY=release-health-ok wrk -t1 -c2 -d2s \
+            -s benchmarks/host-rpm-validate.lua http://127.0.0.1:19019/ \
+            | tee "$root/accepted.log"
+          awk '/^EPICRYPT_WRK / { if ($2 > 0 && $3 == 0 && $2 == $4) accepted=1 } END {exit !accepted}' "$root/accepted.log"
+          HOST_EXPECTED_BODY=incorrect wrk -t1 -c2 -d2s \
+            -s benchmarks/host-rpm-validate.lua http://127.0.0.1:19019/ \
+            | tee "$root/rejected.log"
+          awk '/^EPICRYPT_WRK / { if ($2 == 0 && $3 > 0 && $3 == $4) rejected=1 } END {exit !rejected}' "$root/rejected.log"
       - name: Verify tag-only release routing without creating a tag
         run: |
           grep -Fq '    tags: [ "*" ]' .github/workflows/security-standards.yml
