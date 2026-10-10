@@ -48,6 +48,8 @@ jobs:
           tools: composer:v2
         env:
           fail-fast: true
+      - name: Lint reproducible host RPM comparison harness
+        run: bash -n benchmarks/host-rpm-compare.sh
       - name: Verify tag-only release routing without creating a tag
         run: |
           grep -Fq '    tags: [ "*" ]' .github/workflows/security-standards.yml

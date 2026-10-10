@@ -69,3 +69,53 @@ Typical Workflow
    # after changes
    composer ic:bench:quick
    php benchmarks/authentication.php
+
+Representative host RPM acceptance
+----------------------------------
+
+The CI PHPBench jobs are *component evidence*, not production-equivalent
+throughput certification. For 3.2, use a matched PHP-FPM (or an explicitly
+supported persistent-host) deployment of baseline and candidate on the same
+class of hardware with the same concurrency, routes, service topology,
+Composer dependency versions, PHP version, OPcache configuration and warm-up.
+The endpoints must run identical request workloads and return independently
+validated correct responses. Do not compare unmatched or changing hosts.
+
+The version-controlled ``benchmarks/host-rpm-compare.sh`` harness requires
+``wrk``, ``curl``, Bash, Awk, Sort and Ps. Its two positional arguments
+are the identical baseline/candidate endpoint URLs, and the mandatory PID
+environment variables identify the respective PHP-FPM/server master processes
+for process-tree resident-memory sampling:
+
+.. code-block:: bash
+
+   HOST_BASE_PID=1234 HOST_CANDIDATE_PID=5678 \
+     HOST_EXPECTED_BODY=ok HOST_ROUNDS=5 \
+     HOST_CONNECTIONS=16 HOST_DURATION=20s \
+     HOST_REPORT=host-performance.tsv \
+     bash benchmarks/host-rpm-compare.sh \
+       http://127.0.0.1:8101/representative \
+       http://127.0.0.1:8102/representative
+
+Run the comparison separately for unbound and borrowed Runwire calls, file
+streams, cancellation, remote JOSE cache hits/misses and any relevant
+application-layer route. Each comparison alternates baseline/candidate order
+and checks a 2% median HTTP-success RPM regression budget; failed HTTP
+statuses and socket errors fail the run. The harness records a per-sample
+p99 latency and peak summed process-tree RSS. The correctness preflight checks
+one response before the load; host-specific response validation and sustained
+resource monitoring must also be performed for actual release certification.
+
+Record the host profile, full PHP/Composer/OPcache versions and configuration,
+CPU/memory headroom, worker counts, concurrency, elapsed test duration,
+timeouts, errors, p50/p95/p99, live process-tree memory, request validation,
+variation across runs, and the complete ``host-performance.tsv`` for
+each scenario. Results on shared GitHub Actions runners or from CLI-only
+microbenchmarks are not substitutes for production-equivalent host evidence.
+
+Persistent Runwire host acceptance also runs in CI on PHP 8.4 and 8.5:
+``tests/Smoke/persistent-runwire-host.php`` validates 2,000 long-lived
+request operations per process after warmup, alternating isolated tenants,
+cancelled sibling requests, closed request reuse, heap-growth bounds, and a
+fresh-process replacement. That test does not claim to implement a deployed
+Swoole server or prove PHP-FPM deployment semantics.
