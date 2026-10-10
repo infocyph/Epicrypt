@@ -247,7 +247,7 @@ it('rejects cancellation after a staged write and before atomic publication', fu
     file_put_contents($target, 'previous-content');
 
     try {
-        expect(fn() => \\Infocyph\\Epicrypt\\Internal\\StreamIO::withAtomicLocalOutput(
+        expect(fn() => \Infocyph\Epicrypt\Internal\StreamIO::withAtomicLocalOutput(
             $target,
             static function ($stream) use ($request): void {
                 fwrite($stream, 'new-content');
