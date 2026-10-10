@@ -207,6 +207,6 @@ final readonly class OAuthClientAssertionValidator
             || !is_int($claims['iat'])
             || !is_string($claims['jti'])
             || !AuthProtocolPolicy::validText($claims['jti'], self::MAX_JTI_BYTES)
-            || !$this->audienceMatches($claims['aud'], $audience)));
+            || !$this->audienceMatches($claims['aud'], $audience));
     }
 }
