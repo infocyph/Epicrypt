@@ -1,6 +1,6 @@
 # Epicrypt audit and next-release plan
 
-Date: 2026-10-10, Asia/Dhaka. Status: audit complete; remediation and optional integration are planned, not implemented.
+Date: 2026-10-10, Asia/Dhaka. Status: remediation in progress on draft PR #32; integration remains planned.
 
 ## Implementation tracker
 
@@ -8,14 +8,16 @@ Status: **In progress**. Draft PR: [#32](https://github.com/infocyph/Epicrypt/pu
 
 | Batch | Scope | Implementation | Focused QA | Commit / evidence |
 | --- | --- | --- | --- | --- |
-| 1 | S1–S3 JWT/DPoP replay and remote JOSE address security | In progress: fixes + initial regressions committed | Pending: current-SHA CI, pre-fix reproduction and complete edge-case coverage | `284da9a`, `1d829ad`, `40c5261` |
+| 1 | S1–S3 JWT/DPoP replay and remote JOSE address security | Implementation and edge-case regressions committed; docs updated | Pending: fresh final-SHA QA and verified pre-fix test evidence | `284da9a`, `1d829ad`, `40c5261`, `a7f6424`, `c128dcb`, `958a5e6`, `69025d4`, `fc49402`, `3b10f2b` |
 | 2 | S4–S7 integrity, PSR-16 cache, remote reads | Pending | Pending | — |
 | 3 | Q1 complexity and Rector remediation | Pending | Pending | — |
 | 4 | Optional Runwire 2.1.1 integration | Pending | Pending | — |
 | 5 | Pathwise 4.2/docs/release automation R1 | Pending | Pending | — |
 | 6 | Final QA, interoperability, performance and release guard | Pending | Pending | — |
 
-**QA feedback (2026-10-10):** PR #32 is receiving workflow results. Earlier SHA `dbf76d4` failed its PHPForge analysis and several mutation-shard jobs, while other runs were cancelled as commits arrived. Reassess failures against final Batch 1 SHA and preserve thresholds. Local full Composer/PHPForge QA has not been executed in this editing environment. The baseline quality diagnostics remain open.
+**QA feedback (2026-10-10):** PR #32 is receiving workflow results. Earlier SHA `dbf76d4` failed PHPForge analysis and mutation shards. GitHub job logs traced the widespread mutation failures to a Pathwise `^4.1` test expectation against the already-changed `^4.2` declaration; corrected in `3b10f2b`. Subsequent QA also reported Pint/PHPCS issues addressed in the same commit. The 20 planned Q1 complexity diagnostics and one Rector dry-run change remain open by design. Reassess failures against final Batch 1 SHA and preserve thresholds. Local full Composer/PHPForge QA has not been executed in this editing environment. The baseline quality diagnostics remain open.
+
+**Q2 disposition:** Abandoned `doctrine/annotations` is a non-blocking development-toolchain warning; explicitly excluded from Epicrypt 3.2 remediation. No Composer/PHPForge/PHPBench changes planned for it.
 
 **R1 — Release workflow trigger (blocking):** `.github/workflows/security-standards.yml` has a tag-only `release` job but its push trigger filters only branches. Explicitly enable `push.tags` without disabling branch/PR QA. Check workflow trigger behavior before tagging.
 

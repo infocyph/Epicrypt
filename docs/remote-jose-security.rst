@@ -9,16 +9,17 @@ Destination policy
 ------------------
 
 ``RemoteJwksConfiguration`` is HTTPS-only by default. URLs containing
-credentials or fragments are rejected. Literal private, loopback, link-local
-and reserved IPv4/IPv6 destinations are rejected. A JWKS host must equal the
+credentials or fragments are rejected. Literal private, loopback, link-local,
+shared, benchmark, documentation, reserved and multicast IPv4/IPv6
+destinations are rejected. A JWKS host must equal the
 configured issuer host unless the application explicitly lists the DNS hostname
 in ``allowedJwksHosts``.
 
 Immediately before every outbound discovery or JWKS request, Epicrypt resolves
 the destination hostname and rejects the request unless every returned address
 is a syntactically valid public IP address. Empty answers, malformed answers,
-private/reserved addresses, IPv4-mapped private IPv6 addresses, and mixed
-public/private answer sets all fail closed. A later refresh resolves the host
+non-public addresses (including multicast), IPv4-mapped non-public IPv6
+addresses, and mixed public/non-public answer sets all fail closed. A later refresh resolves the host
 again; a previous public answer is never treated as authority for a future
 request.
 
