@@ -121,22 +121,6 @@ final readonly class RefreshTokenManager
         }
     }
 
-    /**
-     * @param null|array<array-key, mixed> $requestedScopes
-     */
-    private function successorGrant(RefreshTokenRecord $current, ?array $requestedScopes): ?RefreshTokenGrant
-    {
-        if ($requestedScopes === null) {
-            return $current->grant;
-        }
-
-        try {
-            return $current->grant->withScopes($requestedScopes);
-        } catch (ConfigurationException) {
-            return null;
-        }
-    }
-
     private function rotateForCurrent(
         RefreshTokenRecord $current,
         RefreshTokenGrant $successorGrant,
@@ -177,4 +161,21 @@ final readonly class RefreshTokenManager
 
         return RefreshTokenRotationResult::failure(RefreshTokenRotationStatus::CONFLICT);
     }
+
+    /**
+     * @param null|array<array-key, mixed> $requestedScopes
+     */
+    private function successorGrant(RefreshTokenRecord $current, ?array $requestedScopes): ?RefreshTokenGrant
+    {
+        if ($requestedScopes === null) {
+            return $current->grant;
+        }
+
+        try {
+            return $current->grant->withScopes($requestedScopes);
+        } catch (ConfigurationException) {
+            return null;
+        }
+    }
+
 }

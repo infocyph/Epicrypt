@@ -306,7 +306,8 @@ final class WrappedSecretManager
     }
 
     private function unwrapKeyRingCandidate(
-        #[\SensitiveParameter] string $wrappedSecret,
+        #[\SensitiveParameter]
+        string $wrappedSecret,
         #[\SensitiveParameter] KeyRing $masterSecrets,
         bool $binary,
     ): UnwrappedSecretResult {

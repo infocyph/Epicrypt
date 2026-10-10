@@ -381,7 +381,8 @@ final readonly class OAuthTokenEndpoint
     }
 
     private function validatedRefreshGrant(
-        #[\SensitiveParameter] string $refreshToken,
+        #[\SensitiveParameter]
+        string $refreshToken,
         string $clientId,
         ?string $actualDpop,
     ): RefreshTokenGrant|OAuthErrorCode {
