@@ -407,3 +407,23 @@ it('honors max-age no-cache and no-store using the injected clock', function (st
     'no-cache forces retrieval' => ['no-cache, max-age=120', 2],
     'no-store prevents persistence' => ['no-store, max-age=120', 2],
 ]);
+
+it('rejects non-public literal JOSE issuer addresses during configuration', function (string $url) {
+    expect(fn () => new RemoteJwksConfiguration($url))->toThrow(ConfigurationException::class);
+})->with([
+    'shared IPv4' => ['https://100.64.0.1'],
+    'benchmark IPv4' => ['https://198.18.0.1'],
+    'documentation IPv4' => ['https://192.0.2.1'],
+    'multicast IPv4' => ['https://224.0.0.1'],
+    'documentation IPv6' => ['https://[2001:db8::1]'],
+    'multicast IPv6' => ['https://[ff02::1]'],
+    'mapped multicast' => ['https://[::ffff:224.0.0.1]'],
+]);
+
+it('accepts allowed public literal JOSE issuer addresses', function (string $url) {
+    expect(new RemoteJwksConfiguration($url))->toBeInstanceOf(RemoteJwksConfiguration::class);
+})->with([
+    'global IPv4' => ['https://8.8.8.8'],
+    'global IPv6' => ['https://[2001:4860:4860::8888]'],
+    'mapped public IPv4' => ['https://[::ffff:8.8.8.8]'],
+]);
