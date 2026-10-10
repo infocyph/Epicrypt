@@ -36,6 +36,9 @@ final class RunwireExecutionContext
         }
 
         $this->scopeProbe = $scope === null ? null : new TaskLocal();
+        if ($scope !== null && $this->scopeProbe !== null) {
+            $scope->setLocal($this->scopeProbe, true);
+        }
         $this->assertActive();
     }
 
@@ -51,7 +54,9 @@ final class RunwireExecutionContext
             $this->request->cancellation->throwIfCancelled();
         }
         if ($this->scope !== null && $this->scopeProbe !== null) {
-            $this->scope->hasLocal($this->scopeProbe);
+            if (!$this->scope->hasLocal($this->scopeProbe)) {
+                throw new LogicException('Runwire scope is not borrowed by the current task.');
+            }
             $this->scope->cancellation()->throwIfCancelled();
         }
     }
