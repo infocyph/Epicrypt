@@ -92,27 +92,6 @@ final class JwtToken
         return [$encodedHeader, $encodedPayload, $signature, $header, $payload];
     }
 
-    /**
-     * @param list<array<string, true>> $objects
-     */
-    private static function recordObjectKey(array &$objects, #[\SensitiveParameter] string $json, int $start, int $end): void
-    {
-        $key = json_decode(substr($json, $start, ($end - $start) + 1), true, 2, JSON_THROW_ON_ERROR);
-        if (!is_string($key)) {
-            throw new JsonException('JSON object key must be a string.');
-        }
-        $objectIndex = count($objects) - 1;
-        if ($objectIndex < 0) {
-            throw new JsonException('JSON object key is outside an object.');
-        }
-        $object = $objects[$objectIndex];
-        if (isset($object[$key])) {
-            throw new JsonException('Duplicate JSON object key.');
-        }
-        $object[$key] = true;
-        $objects[$objectIndex] = $object;
-    }
-
     /** @return array<string, mixed> */
     private static function decodeSegment(
         #[\SensitiveParameter]
@@ -156,6 +135,27 @@ final class JwtToken
         $offset += strspn($json, " \t\r\n", $offset);
 
         return $insideObject && $offset < $length && $json[$offset] === ':';
+    }
+
+    /**
+     * @param list<array<string, true>> $objects
+     */
+    private static function recordObjectKey(array &$objects, #[\SensitiveParameter] string $json, int $start, int $end): void
+    {
+        $key = json_decode(substr($json, $start, ($end - $start) + 1), true, 2, JSON_THROW_ON_ERROR);
+        if (!is_string($key)) {
+            throw new JsonException('JSON object key must be a string.');
+        }
+        $objectIndex = count($objects) - 1;
+        if ($objectIndex < 0) {
+            throw new JsonException('JSON object key is outside an object.');
+        }
+        $object = $objects[$objectIndex];
+        if (isset($object[$key])) {
+            throw new JsonException('Duplicate JSON object key.');
+        }
+        $object[$key] = true;
+        $objects[$objectIndex] = $object;
     }
 
     private static function rejectDuplicateObjectKeys(#[\SensitiveParameter] string $json): void

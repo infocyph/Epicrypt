@@ -140,7 +140,7 @@ final readonly class OAuthClientKeySet
     }
 
     /** @return array{array<string, mixed>, string} */
-    private static function validatedKey(mixed $key): array
+    private static function validatedKey(#[\SensitiveParameter] mixed $key): array
     {
         if (!is_array($key) || array_is_list($key)) {
             throw new ConfigurationException('OAuth client JWKS entries must be objects.');
