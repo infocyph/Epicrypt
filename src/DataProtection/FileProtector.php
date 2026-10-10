@@ -24,7 +24,9 @@ final readonly class FileProtector
 
     private const int MAX_PREFIX_SIZE = 32 * 1024;
 
-    public function __construct(private ClockInterface $clock = new SystemClock()) {}
+    public function __construct(private ClockInterface $clock = new SystemClock())
+    {
+    }
 
     public function protect(
         string $inputPath,
@@ -160,6 +162,7 @@ final readonly class FileProtector
                     $chunkSize,
                     $context,
                 ),
+                $context === null ? null : static fn() => $context->assertActive(),
             ),
         );
 
@@ -189,6 +192,7 @@ final readonly class FileProtector
                     $chunkSize,
                     $context,
                 ),
+                $context === null ? null : static fn() => $context->assertActive(),
             ),
         );
 
@@ -333,6 +337,7 @@ final readonly class FileProtector
                     $chunkSize,
                     $context,
                 ),
+                $context === null ? null : static fn() => $context->assertActive(),
             ),
         );
 
@@ -362,6 +367,7 @@ final readonly class FileProtector
                     $chunkSize,
                     $context,
                 ),
+                $context === null ? null : static fn() => $context->assertActive(),
             ),
         );
 
