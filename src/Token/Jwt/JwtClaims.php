@@ -97,6 +97,21 @@ final readonly class JwtClaims
         ] + $this->custom;
     }
 
+    private static function normalizeClaimValue(string $name, mixed $value): mixed
+    {
+        return match ($name) {
+            'scope' => implode(' ', self::normalizeStringList($value, 'scope')),
+            'roles' => self::normalizeStringList($value, 'roles', false),
+            'email' => is_string($value) && strlen($value) <= 254 && filter_var($value, FILTER_VALIDATE_EMAIL) !== false
+                ? $value
+                : throw new ConfigurationException('JWT email claim is invalid.'),
+            'name', 'preferred_username' => is_string($value) && $value !== '' && strlen($value) <= 255
+                ? $value
+                : throw new ConfigurationException(sprintf('JWT %s claim is invalid.', $name)),
+            default => self::validatedJsonValue($value),
+        };
+    }
+
     /**
      * @param array<string, mixed> $custom
      * @return array<string, mixed>
@@ -111,17 +126,7 @@ final readonly class JwtClaims
             if (isset(self::REGISTERED[$name]) || isset(self::HEADER_NAMES[$name])) {
                 throw new ConfigurationException(sprintf('Custom claim "%s" is reserved.', $name));
             }
-            $value = match ($name) {
-                'scope' => implode(' ', self::normalizeStringList($value, 'scope')),
-                'roles' => self::normalizeStringList($value, 'roles', false),
-                'email' => is_string($value) && strlen($value) <= 254 && filter_var($value, FILTER_VALIDATE_EMAIL) !== false
-                    ? $value
-                    : throw new ConfigurationException('JWT email claim is invalid.'),
-                'name', 'preferred_username' => is_string($value) && $value !== '' && strlen($value) <= 255
-                    ? $value
-                    : throw new ConfigurationException(sprintf('JWT %s claim is invalid.', $name)),
-                default => self::validatedJsonValue($value),
-            };
+            $value = self::normalizeClaimValue($name, $value);
         }
         unset($value);
 
