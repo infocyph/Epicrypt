@@ -81,7 +81,9 @@ final readonly class RemoteJwks
 
         try {
             if ($cachePolicy['noStore']) {
-                $this->cache?->delete($this->cacheKey);
+                if ($this->cache?->delete($this->cacheKey) === false) {
+                    throw new KeyResolutionException('Remote JWKS cache invalidation failed.');
+                }
 
                 return $jwks;
             }
@@ -98,7 +100,9 @@ final readonly class RemoteJwks
                 'freshUntil' => $now + $ttl,
                 'staleUntil' => $now + $ttl + $staleTtl,
             ];
-            $this->cache?->set($this->cacheKey, $entry, max(1, $ttl + $staleTtl));
+            if ($this->cache?->set($this->cacheKey, $entry, max(1, $ttl + $staleTtl)) === false) {
+                throw new KeyResolutionException('Remote JWKS cache write failed.');
+            }
 
             return $jwks;
         } catch (Throwable $exception) {
