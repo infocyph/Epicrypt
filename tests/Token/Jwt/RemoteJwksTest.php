@@ -114,9 +114,22 @@ function remoteJwksResolver(array $answers = []): RemoteJoseHostResolverInterfac
     };
 }
 
-function remoteJwksCacheKey(string $issuer, ?string $jwksUri): string
+function remoteJwksCacheKey(RemoteJwksConfiguration $configuration): string
 {
-    return 'epicrypt:jwks:' . hash('sha256', $issuer . "\0" . ($jwksUri ?? 'discovery'));
+    $hosts = array_values(array_unique($configuration->allowedJwksHosts));
+    sort($hosts, SORT_STRING);
+
+    return hash('sha256', "epicrypt\0jwks\0v2\0" . json_encode([
+        $configuration->issuer,
+        $configuration->jwksUri,
+        $configuration->minimumTtl,
+        $configuration->maximumTtl,
+        $configuration->staleTtl,
+        $configuration->maximumResponseBytes,
+        $configuration->maximumKeys,
+        $configuration->allowHttp,
+        $hosts,
+    ], JSON_THROW_ON_ERROR));
 }
 
 it('uses one forced refresh to resolve a rolled over remote key', function () {
@@ -317,7 +330,7 @@ it('discards malformed cached JWKS and retrieves a fresh bounded document', func
     for ($index = 0; $index < 33; $index++) {
         $oversizedJwk['field_' . $index] = 'x';
     }
-    $cache->set(remoteJwksCacheKey($issuer, $jwksUri), [
+    $cache->set(remoteJwksCacheKey(new RemoteJwksConfiguration($issuer, $jwksUri, maximumKeys: 1)), [
         'jwks' => ['keys' => [$oversizedJwk]],
         'freshUntil' => 1_700_000_100,
         'staleUntil' => 1_700_000_200,
