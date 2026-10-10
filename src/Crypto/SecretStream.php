@@ -50,7 +50,9 @@ final readonly class SecretStream
             fn($input) => StreamIO::withAtomicLocalOutput(
                 $outputPath,
                 fn($output) => $this->decryptStream($input, $output, $chunkSize, $context),
-                $context === null ? null : static fn() => $context->assertActive(),
+                $context === null ? null : static function () use ($context): void {
+                    $context->assertActive();
+                },
             ),
         );
     }
@@ -98,7 +100,9 @@ final readonly class SecretStream
             fn($input): int => StreamIO::withAtomicLocalOutput(
                 $outputPath,
                 fn($output): int => $this->encryptStream($input, $output, $chunkSize, $context),
-                $context === null ? null : static fn() => $context->assertActive(),
+                $context === null ? null : static function () use ($context): void {
+                    $context->assertActive();
+                },
             ),
         );
     }
