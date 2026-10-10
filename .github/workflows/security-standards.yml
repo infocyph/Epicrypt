@@ -97,7 +97,7 @@ jobs:
     if: github.event_name == 'pull_request'
     name: "Matched Docker FPM RPM and persistent-host acceptance"
     runs-on: ubuntu-24.04-arm
-    timeout-minutes: 60
+    timeout-minutes: 80
     permissions:
       contents: read
     steps:
@@ -113,11 +113,21 @@ jobs:
           tools: composer:v2
       - name: Install fixture dependencies
         run: composer install --no-interaction --no-progress --prefer-dist
+      - name: Isolate benchmark controllers from FPM CPUs
+        shell: bash
+        run: |
+          mkdir -p var/docker-host-acceptance
+          for daemon in dockerd containerd; do
+            pids=$(pgrep -x "$daemon")
+            for daemon_pid in $pids; do
+              sudo taskset -apc 0,1 "$daemon_pid"
+            done
+          done > var/docker-host-acceptance/controller-affinity.txt
       - name: Measure matched deployments and sustained lifecycle
         env:
           HOST_SOAK_CPUS: "2"
-          HOST_DURATION: "30s"
-        run: bash benchmarks/docker-host-acceptance.sh
+          HOST_DURATION: "60s"
+        run: taskset -c 0,1 bash benchmarks/docker-host-acceptance.sh
       - name: Preserve raw measurements and deployment configuration
         if: always()
         uses: actions/upload-artifact@v6

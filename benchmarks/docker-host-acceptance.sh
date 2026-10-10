@@ -91,6 +91,11 @@ printf 'FPM_CPUS=%s\nPROXY_CPUS=%s\nCLIENT_CPUS=%s\nSOAK_CPUS=%s\nWARMUP=%s\n' \
   "${HOST_FPM_CPUS:-2,3}" "${HOST_PROXY_CPUS:-0}" "${HOST_CLIENT_CPUS:-1}" "${HOST_SOAK_CPUS:-6}" \
   "${HOST_WARMUP_DURATION:-60s}" > "$report/deployment-profile.txt"
 lscpu >> "$report/deployment-profile.txt"
+taskset -pc $$ >> "$report/deployment-profile.txt"
+for variant in baseline previous candidate; do
+  printf '%s FPM master affinity: ' "$variant" >> "$report/deployment-profile.txt"
+  docker exec "$prefix-$variant" sh -c 'grep "^Cpus_allowed_list:" /proc/1/status' >> "$report/deployment-profile.txt"
+done
 cp "$scratch/fpm.conf" "$scratch/opcache.ini" "$scratch/nginx.conf" "$report/"
 docker top "$prefix-candidate" > "$report/initial-workers.txt"
 for port in 8081 8082 8083; do

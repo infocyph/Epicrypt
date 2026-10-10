@@ -159,7 +159,10 @@ The same fixture runs independently in CI and preserves its raw evidence as
 an artifact; the Docker-authorized host remains the production-equivalent
 acceptance environment.
 The independent CI deployment uses native ARM, four static FPM workers and
-30-second measured trials with the same budgets. Interpret each deployment's
+60-second measured trials with the same budgets. CI pins benchmark controllers
+and Docker daemon threads to CPUs 0,1, separating them from FPM CPUs 2,3.
+This changes only the ephemeral CI runner; the local script never changes host
+daemon affinity. Interpret each deployment's
 baseline/candidate comparison within its recorded architecture and CPU profile.
 
 For a sustained persistent-process check, set
