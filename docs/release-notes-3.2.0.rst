@@ -1,5 +1,5 @@
 Epicrypt 3.2.0 release notes
-===========================
+============================
 
 These notes describe the Epicrypt 3.2.0 release candidate against the
 immediately preceding ``3.1`` tag. They do not indicate that a GitHub release
