@@ -73,7 +73,7 @@ final class JwkOkpCodec
         }
         $public = $this->importPublic($publicJwk, $algorithm, $curve);
 
-        return $this->decodeMatchingPrivate($jwk, $curve, $public);
+        return $this->decodeMatchingPrivate($jwk['d'], $curve, $public);
     }
 
     /** @param array<string, mixed> $jwk */
@@ -110,11 +110,10 @@ final class JwkOkpCodec
         }
     }
 
-    /** @param array<string, mixed> $jwk */
-    private function decodeMatchingPrivate(#[\SensitiveParameter] array $jwk, string $curve, string $public): string
+    private function decodeMatchingPrivate(#[\SensitiveParameter] string $encodedPrivate, string $curve, string $public): string
     {
         try {
-            $private = Base64Url::decode($jwk['d']);
+            $private = Base64Url::decode($encodedPrivate);
         } catch (\Throwable $exception) {
             throw new KeyResolutionException('OKP JWK d is not valid Base64URL.', 0, $exception);
         }

@@ -94,7 +94,7 @@ final class SignedUrlGuard
         $normalized = [];
 
         foreach ($query as $key => $value) {
-            if (!is_string($key) || preg_match('/\A[A-Za-z0-9_-]+\z/D', $key) !== 1) {
+            if (!self::isValidQueryKey($key)) {
                 return null;
             }
 
@@ -204,6 +204,11 @@ final class SignedUrlGuard
         }
 
         return true;
+    }
+
+    private static function isValidQueryKey(mixed $key): bool
+    {
+        return is_string($key) && preg_match('/\A[A-Za-z0-9_-]+\z/D', $key) === 1;
     }
 
     /**

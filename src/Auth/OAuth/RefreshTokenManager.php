@@ -177,5 +177,4 @@ final readonly class RefreshTokenManager
             return null;
         }
     }
-
 }

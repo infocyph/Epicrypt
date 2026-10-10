@@ -153,7 +153,7 @@ final readonly class OAuthTokenEndpoint
         }
 
         $actualDpop = $dpop?->keyThumbprint;
-        $grant = $this->validatedRefreshGrant($refreshToken, $clientId, $actualDpop);
+        $grant = $this->verifyRefreshGrant($refreshToken, $clientId, $actualDpop);
         if ($grant instanceof OAuthErrorCode) {
             return OAuthTokenResult::failure($grant);
         }
@@ -380,7 +380,7 @@ final readonly class OAuthTokenEndpoint
             && hash_equals($client->clientId, $authentication->client->clientId);
     }
 
-    private function validatedRefreshGrant(
+    private function verifyRefreshGrant(
         #[\SensitiveParameter]
         string $refreshToken,
         string $clientId,

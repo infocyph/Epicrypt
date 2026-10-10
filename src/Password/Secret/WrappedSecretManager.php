@@ -308,7 +308,8 @@ final class WrappedSecretManager
     private function unwrapKeyRingCandidate(
         #[\SensitiveParameter]
         string $wrappedSecret,
-        #[\SensitiveParameter] KeyRing $masterSecrets,
+        #[\SensitiveParameter]
+        KeyRing $masterSecrets,
         bool $binary,
     ): UnwrappedSecretResult {
         $payload = $this->parseWrappedPayload($wrappedSecret);

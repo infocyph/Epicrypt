@@ -79,6 +79,7 @@ final readonly class JwsSignature
         return openssl_verify($input, $signature, $this->opensslKey(), $this->algorithm->opensslAlgorithm()) === 1;
     }
 
+    /** @param array<array-key, mixed> $details */
     private function assertOpenSslAlgorithmDetails(AsymmetricJwtAlgorithm $algorithm, array $details): void
     {
         if ($algorithm->isRsa()) {

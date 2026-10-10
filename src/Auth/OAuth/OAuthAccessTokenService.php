@@ -368,5 +368,4 @@ final readonly class OAuthAccessTokenService
             'dpop_jkt' => $dpopJkt,
         ];
     }
-
 }
