@@ -86,6 +86,46 @@ final class SignedUrlGuard
     }
 
     /**
+     * @param array<array-key, mixed> $query
+     * @return QueryMap|null
+     */
+    public static function normalizeQuery(array $query, bool $allowArrays): ?array
+    {
+        $normalized = [];
+
+        foreach ($query as $key => $value) {
+            if (!is_string($key) || preg_match('/\A[A-Za-z0-9_-]+\z/D', $key) !== 1) {
+                return null;
+            }
+
+            if (is_scalar($value)) {
+                $normalized[$key] = $value;
+
+                continue;
+            }
+
+            if ($value === null) {
+                continue;
+            }
+
+            if (!$allowArrays || !is_array($value)) {
+                return null;
+            }
+
+            $normalizedArray = self::normalizeArrayValue($value);
+            if ($normalizedArray === null) {
+                return null;
+            }
+
+            $normalized[$key] = $normalizedArray;
+        }
+
+        ksort($normalized);
+
+        return $normalized;
+    }
+
+    /**
      * @param QueryMap $query
      */
     public static function validateExpirationFromQuery(array $query, string $expiresParam, int $now, ?int $version): ?SignedUrlVerificationResult
@@ -164,6 +204,28 @@ final class SignedUrlGuard
         }
 
         return true;
+    }
+
+    /**
+     * @param array<array-key, mixed> $value
+     * @return array<array-key, scalar>|null
+     */
+    private static function normalizeArrayValue(array $value): ?array
+    {
+        $normalized = [];
+        foreach ($value as $key => $item) {
+            if (is_scalar($item)) {
+                $normalized[$key] = $item;
+
+                continue;
+            }
+
+            return null;
+        }
+
+        ksort($normalized);
+
+        return $normalized;
     }
 
     private static function parseTimestamp(mixed $value): ?int

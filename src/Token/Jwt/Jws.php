@@ -10,6 +10,7 @@ use Infocyph\Epicrypt\Internal\Json;
 use Infocyph\Epicrypt\Token\Jwt\Enum\AsymmetricJwtAlgorithm;
 use Infocyph\Epicrypt\Token\Jwt\Enum\SymmetricJwtAlgorithm;
 use Infocyph\Epicrypt\Token\Jwt\Support\JosePolicy;
+use Infocyph\Epicrypt\Token\Jwt\Support\JwsGeneralDocument;
 use Infocyph\Epicrypt\Token\Jwt\Support\JwsSignature;
 use Infocyph\Epicrypt\Token\Jwt\Support\JwtToken;
 use Throwable;
@@ -100,7 +101,7 @@ final readonly class Jws
         }
 
         try {
-            $document = self::decodeGeneralDocument($jws);
+            $document = JwsGeneralDocument::decode($jws);
             $signatures = $document['signatures'];
             if ($requiredSignatures > count($signatures)) {
                 return false;
@@ -209,52 +210,6 @@ final readonly class Jws
         } catch (Throwable) {
             return false;
         }
-    }
-
-    /** @return array{signatures: non-empty-list<array<string, mixed>>, payload?: mixed} */
-    private static function decodeGeneralDocument(#[\SensitiveParameter] string $jws): array
-    {
-        $document = JwtToken::decodeJsonObject(
-            $jws,
-            'general JWS JSON serialization',
-            JosePolicy::MAX_COMPACT_TOKEN_BYTES,
-            JosePolicy::MAX_DOCUMENT_MEMBERS,
-        );
-        $signatures = $document['signatures'] ?? null;
-        if (!is_array($signatures) || $signatures === [] || !array_is_list($signatures)) {
-            throw new ConfigurationException('General JWS must contain a non-empty signatures list.');
-        }
-        if (count($signatures) > JosePolicy::MAX_PARTICIPANTS) {
-            throw new ConfigurationException('General JWS contains too many signatures.');
-        }
-        $normalized = [];
-        foreach ($signatures as $signature) {
-            if (!is_array($signature)) {
-                throw new ConfigurationException('General JWS signatures must be objects.');
-            }
-            $normalized[] = self::stringKeyArray($signature);
-        }
-        if (array_key_exists('payload', $document)) {
-            return ['signatures' => $normalized, 'payload' => $document['payload']];
-        }
-
-        return ['signatures' => $normalized];
-    }
-
-    /**
-     * @param array<mixed, mixed> $input
-     * @return array<string, mixed>
-     */
-    private static function stringKeyArray(array $input): array
-    {
-        $normalized = [];
-        foreach ($input as $key => $value) {
-            if (is_string($key)) {
-                $normalized[$key] = $value;
-            }
-        }
-
-        return $normalized;
     }
 
     /**
@@ -436,7 +391,7 @@ final readonly class Jws
             $protected,
             is_string($payload) ? $payload : '',
             $signature,
-            self::stringKeyArray($unprotected),
+            JwsGeneralDocument::stringKeyArray($unprotected),
             $hasEmbeddedPayload ? null : $detachedPayload,
         );
     }
