@@ -206,9 +206,9 @@ final class SignedUrlGuard
         return true;
     }
 
-    private static function isValidQueryKey(mixed $key): bool
+    private static function isValidQueryKey(mixed $queryName): bool
     {
-        return is_string($key) && preg_match('/\A[A-Za-z0-9_-]+\z/D', $key) === 1;
+        return is_string($queryName) && preg_match('/\A[A-Za-z0-9_-]+\z/D', $queryName) === 1;
     }
 
     /**
