@@ -171,3 +171,35 @@ it('does not consume replay state for rejected JWT signatures or claims', functi
     expect($verifier->verify($valid))->toBeTrue()
         ->and($store->attempts)->toBe(1);
 });
+
+it('saturates single-use retention at the maximum integer expiry', function () {
+    $clock = replayBoundaryClock(1000);
+    $store = new class implements JwtReplayStoreInterface {
+        public ?int $deadline = null;
+
+        public function consume(string $namespace, string $tokenId, int $expiresAt): bool
+        {
+            $this->deadline = $expiresAt;
+
+            return true;
+        }
+
+        public function isRevoked(string $namespace, string $tokenId, int $expiresAt): bool
+        {
+            return false;
+        }
+    };
+    $policy = new JwtPolicy(
+        'issuer',
+        'web',
+        'password-reset+jwt',
+        maximumLifetimeSeconds: PHP_INT_MAX,
+        leewaySeconds: PHP_INT_MAX,
+        replayMode: JwtReplayMode::SINGLE_USE,
+    );
+    $key = random_bytes(64);
+    $claims = new JwtClaims('issuer', 'user', ['web'], PHP_INT_MAX, 1000, 1000, 'max-expiry');
+    $token = SymmetricJwt::issuer($key, $policy->expectedType)->issue($claims);
+    expect(SymmetricJwt::verifier($key, $policy, replayStore: $store, clock: $clock)->verify($token))->toBeTrue()
+        ->and($store->deadline)->toBe(PHP_INT_MAX);
+});
