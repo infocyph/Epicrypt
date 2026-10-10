@@ -79,7 +79,7 @@ final readonly class RemoteJwks
             throw new KeyResolutionException('Remote JWKS resolution failed.', 0, $exception);
         }
 
-        return $this->cacheFetched($jwks, $cachePolicy, $now);
+        return $this->storeFetched($jwks, $cachePolicy, $now);
     }
 
     public function resolve(string $kid, AsymmetricJwtAlgorithm $algorithm): string
@@ -92,44 +92,6 @@ final readonly class RemoteJwks
             $jwks = $this->load(true);
 
             return new Jwks()->resolvePublicKeyByKid($jwks, $kid, $algorithm);
-        }
-    }
-
-    /**
-     * @param array{keys: list<array<string, mixed>>} $jwks
-     * @param array{maxAge: int|null, noStore: bool, noCache: bool} $cachePolicy
-     * @return array{keys: list<array<string, mixed>>}
-     */
-    private function cacheFetched(array $jwks, array $cachePolicy, int $now): array
-    {
-        try {
-            if ($cachePolicy['noStore']) {
-                if ($this->cache?->delete($this->cacheKey) === false) {
-                    throw new KeyResolutionException('Remote JWKS cache invalidation failed.');
-                }
-
-                return $jwks;
-            }
-
-            $ttl = $cachePolicy['noCache']
-                ? 0
-                : max($this->configuration->minimumTtl, min(
-                    $this->configuration->maximumTtl,
-                    $cachePolicy['maxAge'] ?? $this->configuration->maximumTtl,
-                ));
-            $staleTtl = $cachePolicy['noCache'] ? 0 : $this->configuration->staleTtl;
-            $entry = [
-                'jwks' => $jwks,
-                'freshUntil' => $now + $ttl,
-                'staleUntil' => $now + $ttl + $staleTtl,
-            ];
-            if ($this->cache?->set($this->cacheKey, $entry, max(1, $ttl + $staleTtl)) === false) {
-                throw new KeyResolutionException('Remote JWKS cache write failed.');
-            }
-
-            return $jwks;
-        } catch (Throwable $exception) {
-            throw new KeyResolutionException('Remote JWKS cache operation failed.', 0, $exception);
         }
     }
 
@@ -199,5 +161,42 @@ final readonly class RemoteJwks
         }
 
         return $normalized;
+    }
+    /**
+     * @param array{keys: list<array<string, mixed>>} $jwks
+     * @param array{maxAge: int|null, noStore: bool, noCache: bool} $cachePolicy
+     * @return array{keys: list<array<string, mixed>>}
+     */
+    private function storeFetched(array $jwks, array $cachePolicy, int $now): array
+    {
+        try {
+            if ($cachePolicy['noStore']) {
+                if ($this->cache?->delete($this->cacheKey) === false) {
+                    throw new KeyResolutionException('Remote JWKS cache invalidation failed.');
+                }
+
+                return $jwks;
+            }
+
+            $ttl = $cachePolicy['noCache']
+                ? 0
+                : max($this->configuration->minimumTtl, min(
+                    $this->configuration->maximumTtl,
+                    $cachePolicy['maxAge'] ?? $this->configuration->maximumTtl,
+                ));
+            $staleTtl = $cachePolicy['noCache'] ? 0 : $this->configuration->staleTtl;
+            $entry = [
+                'jwks' => $jwks,
+                'freshUntil' => $now + $ttl,
+                'staleUntil' => $now + $ttl + $staleTtl,
+            ];
+            if ($this->cache?->set($this->cacheKey, $entry, max(1, $ttl + $staleTtl)) === false) {
+                throw new KeyResolutionException('Remote JWKS cache write failed.');
+            }
+
+            return $jwks;
+        } catch (Throwable $exception) {
+            throw new KeyResolutionException('Remote JWKS cache operation failed.', 0, $exception);
+        }
     }
 }
