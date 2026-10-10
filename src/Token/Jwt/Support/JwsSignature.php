@@ -93,7 +93,6 @@ final readonly class JwsSignature
         } else {
             throw new ConfigurationException('Unsupported JWS key family.');
         }
-
     }
 
     private function configuredPss(
