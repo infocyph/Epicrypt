@@ -17,14 +17,7 @@ final class OpenSslExtensionConfig
      */
     public static function createTempConfig(CertificateOptions $options, array $distinguishedName = []): string
     {
-        $validatedDistinguishedName = [];
-        foreach ($distinguishedName as $key => $value) {
-            if (!is_string($key) || !is_string($value)) {
-                throw new ConfigurationException('OpenSSL distinguished name values must be strings.');
-            }
-            self::assertConfigValue($value, 'distinguished name');
-            $validatedDistinguishedName[$key] = $value;
-        }
+        $validatedDistinguishedName = self::validateDistinguishedName($distinguishedName);
         $commonName = self::resolveCommonName($validatedDistinguishedName);
 
         $lines = [
@@ -62,20 +55,7 @@ final class OpenSslExtensionConfig
             array_push($lines, ...$sanEntries);
         }
 
-        $tempFile = tempnam(sys_get_temp_dir(), 'epicrypt-openssl-');
-        if ($tempFile === false) {
-            throw new ConfigurationException('Unable to create OpenSSL extension config.');
-        }
-
-        if (file_put_contents($tempFile, implode(PHP_EOL, $lines) . PHP_EOL) === false) {
-            if (file_exists($tempFile)) {
-                unlink($tempFile);
-            }
-
-            throw new ConfigurationException('Unable to write OpenSSL extension config.');
-        }
-
-        return $tempFile;
+        return self::writeConfigFile($lines);
     }
 
     private static function assertConfigValue(string $value, string $label): void
@@ -115,5 +95,40 @@ final class OpenSslExtensionConfig
         }
 
         return $entries;
+    }
+    /**
+     * @param array<array-key, mixed> $distinguishedName
+     * @return array<string, string>
+     */
+    private static function validateDistinguishedName(array $distinguishedName): array
+    {
+        $validatedDistinguishedName = [];
+        foreach ($distinguishedName as $key => $value) {
+            if (!is_string($key) || !is_string($value)) {
+                throw new ConfigurationException('OpenSSL distinguished name values must be strings.');
+            }
+            self::assertConfigValue($value, 'distinguished name');
+            $validatedDistinguishedName[$key] = $value;
+        }
+        return $validatedDistinguishedName;
+    }
+
+    /** @param list<string> $lines */
+    private static function writeConfigFile(array $lines): string
+    {
+        $tempFile = tempnam(sys_get_temp_dir(), 'epicrypt-openssl-');
+        if ($tempFile === false) {
+            throw new ConfigurationException('Unable to create OpenSSL extension config.');
+        }
+
+        if (file_put_contents($tempFile, implode(PHP_EOL, $lines) . PHP_EOL) === false) {
+            if (file_exists($tempFile)) {
+                unlink($tempFile);
+            }
+
+            throw new ConfigurationException('Unable to write OpenSSL extension config.');
+        }
+
+        return $tempFile;
     }
 }
