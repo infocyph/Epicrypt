@@ -137,3 +137,37 @@ it('retains replay state through acceptance for single-use token policies', func
     'asymmetric email no leeway' => ['email', true, 0],
     'asymmetric action leeway' => ['action', true, 30],
 ]);
+
+it('does not consume replay state for rejected JWT signatures or claims', function () {
+    $clock = replayBoundaryClock(1000);
+    $store = new class implements JwtReplayStoreInterface {
+        public int $attempts = 0;
+
+        public function consume(string $namespace, string $tokenId, int $expiresAt): bool
+        {
+            $this->attempts++;
+
+            return $this->attempts === 1;
+        }
+
+        public function isRevoked(string $namespace, string $tokenId, int $expiresAt): bool
+        {
+            return false;
+        }
+    };
+    $key = random_bytes(64);
+    $policy = JwtPolicy::passwordReset('issuer', 'web');
+    $verifier = SymmetricJwt::verifier($key, $policy, replayStore: $store, clock: $clock);
+    $badSignature = SymmetricJwt::issuer(random_bytes(64), $policy->expectedType)
+        ->issue(new JwtClaims('issuer', 'user', ['web'], 1010, 1000, 1000, 'bad-signature'));
+    $badIssuer = SymmetricJwt::issuer($key, $policy->expectedType)
+        ->issue(new JwtClaims('other', 'user', ['web'], 1010, 1000, 1000, 'bad-issuer'));
+    expect($verifier->verify($badSignature))->toBeFalse()
+        ->and($verifier->verify($badIssuer))->toBeFalse()
+        ->and($store->attempts)->toBe(0);
+
+    $valid = SymmetricJwt::issuer($key, $policy->expectedType)
+        ->issue(new JwtClaims('issuer', 'user', ['web'], 1010, 1000, 1000, 'valid'));
+    expect($verifier->verify($valid))->toBeTrue()
+        ->and($store->attempts)->toBe(1);
+});
