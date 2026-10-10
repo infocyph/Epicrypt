@@ -580,3 +580,45 @@ it('uses PSR-16-compatible cache keys and isolates different JWKS policies', fun
         ->toBe(['keys' => []])
         ->and($strictClient->getRequests())->toHaveCount(1);
 });
+
+it('does not substitute stale JWKS when the metadata cache write fails', function () {
+    $factory = new Psr17Factory();
+    $cache = $this->createMock(CacheInterface::class);
+    $cache->method('get')->willReturn([
+        'jwks' => ['keys' => []],
+        'freshUntil' => 999,
+        'staleUntil' => 1200,
+    ]);
+    $cache->method('set')->willThrowException(new RuntimeException('Cache unavailable.'));
+    $client = new Client($factory);
+    $client->addResponse(new Response(200, ['Content-Type' => 'application/jwk-set+json'], '{"keys":[]}'));
+    $remote = new RemoteJwks(
+        $client,
+        $factory,
+        new RemoteJwksConfiguration('https://issuer.example', 'https://issuer.example/jwks'),
+        $cache,
+        remoteJwksClock(1000),
+        remoteJwksResolver(),
+    );
+
+    expect(fn () => $remote->load())->toThrow(KeyResolutionException::class, 'Remote JWKS cache operation failed.')
+        ->and($client->getRequests())->toHaveCount(1);
+});
+
+it('fails closed on cache lookup errors without issuing an HTTP request', function () {
+    $factory = new Psr17Factory();
+    $cache = $this->createMock(CacheInterface::class);
+    $cache->method('get')->willThrowException(new RuntimeException('Cache lookup failed.'));
+    $client = new Client($factory);
+    $remote = new RemoteJwks(
+        $client,
+        $factory,
+        new RemoteJwksConfiguration('https://issuer.example', 'https://issuer.example/jwks'),
+        $cache,
+        remoteJwksClock(1000),
+        remoteJwksResolver(),
+    );
+
+    expect(fn () => $remote->load())->toThrow(KeyResolutionException::class, 'Remote JWKS cache lookup failed.')
+        ->and($client->getRequests())->toHaveCount(0);
+});
