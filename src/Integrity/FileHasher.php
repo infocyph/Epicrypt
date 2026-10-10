@@ -7,6 +7,9 @@ namespace Infocyph\Epicrypt\Integrity;
 use Infocyph\Epicrypt\Exception\FileAccessException;
 use Infocyph\Epicrypt\Exception\Integrity\HashingException;
 use Infocyph\Epicrypt\Internal\StreamIO;
+use Infocyph\Epicrypt\Integration\Runwire\RunwireExecutionContext;
+use Infocyph\Runwire\Exception\CancelledException;
+use LogicException;
 
 final readonly class FileHasher
 {
@@ -14,13 +17,16 @@ final readonly class FileHasher
 
     public function __construct(private IntegrityAlgorithm $algorithm = IntegrityAlgorithm::SHA256) {}
 
-    public function hash(string $path, bool $binary = false, ?int $length = null): string
+    public function hash(string $path, bool $binary = false, ?int $length = null, ?RunwireExecutionContext $context = null): string
     {
+        $context?->assertActive();
         try {
             return StreamIO::withReadableLocalFile(
                 $path,
-                fn($stream): string => $this->hashStream($stream, $binary, $length),
+                fn($stream): string => $this->hashStream($stream, $binary, $length, $context),
             );
+        } catch (CancelledException|LogicException $exception) {
+            throw $exception;
         } catch (HashingException|FileAccessException $exception) {
             throw $exception;
         } catch (\Throwable $exception) {
@@ -33,13 +39,14 @@ final readonly class FileHasher
      *
      * @param resource $stream
      */
-    public function hashStream(mixed $stream, bool $binary = false, ?int $length = null): string
+    public function hashStream(mixed $stream, bool $binary = false, ?int $length = null, ?RunwireExecutionContext $context = null): string
     {
+        $context?->assertActive();
         $stream = StreamIO::readable($stream);
 
         return $this->algorithm === IntegrityAlgorithm::BLAKE2B
-            ? $this->hashBlake2b($stream, $binary, $length)
-            : $this->hashPhp($stream, $binary, $length);
+            ? $this->hashBlake2b($stream, $binary, $length, $context)
+            : $this->hashPhp($stream, $binary, $length, $context);
     }
 
     public function verify(
@@ -48,12 +55,13 @@ final readonly class FileHasher
         string $digest,
         bool $binary = false,
         ?int $length = null,
+        ?RunwireExecutionContext $context = null,
     ): bool {
         if (!$this->digestIsWellFormed($digest, $binary, $length)) {
             return false;
         }
 
-        return hash_equals($this->hash($path, $binary, $length), $digest);
+        return hash_equals($this->hash($path, $binary, $length, $context), $digest);
     }
 
     /**
@@ -67,12 +75,13 @@ final readonly class FileHasher
         string $digest,
         bool $binary = false,
         ?int $length = null,
+        ?RunwireExecutionContext $context = null,
     ): bool {
         if (!$this->digestIsWellFormed($digest, $binary, $length)) {
             return false;
         }
 
-        return hash_equals($this->hashStream($stream, $binary, $length), $digest);
+        return hash_equals($this->hashStream($stream, $binary, $length, $context), $digest);
     }
 
     private function blake2bLength(?int $length): int
@@ -101,7 +110,7 @@ final readonly class FileHasher
     }
 
     /** @param resource $stream */
-    private function hashBlake2b(mixed $stream, bool $binary, ?int $length): string
+    private function hashBlake2b(mixed $stream, bool $binary, ?int $length, ?RunwireExecutionContext $context): string
     {
         $outputLength = $this->blake2bLength($length);
         $state = sodium_crypto_generichash_init('', $outputLength);
@@ -109,6 +118,7 @@ final readonly class FileHasher
 
         try {
             while (($chunk = StreamIO::readChunk($stream, self::STREAM_CHUNK_SIZE)) !== null) {
+            $context?->checkpoint();
                 sodium_crypto_generichash_update($state, $chunk);
             }
             $digest = sodium_crypto_generichash_final($state, $outputLength);
@@ -123,7 +133,7 @@ final readonly class FileHasher
     }
 
     /** @param resource $stream */
-    private function hashPhp(mixed $stream, bool $binary, ?int $length): string
+    private function hashPhp(mixed $stream, bool $binary, ?int $length, ?RunwireExecutionContext $context): string
     {
         if ($length !== null) {
             throw new HashingException('Digest length is configurable only for BLAKE2b.');
@@ -131,6 +141,7 @@ final readonly class FileHasher
 
         $context = hash_init($this->algorithm->value);
         while (($chunk = StreamIO::readChunk($stream, self::STREAM_CHUNK_SIZE)) !== null) {
+            $context?->checkpoint();
             hash_update($context, $chunk);
         }
 
