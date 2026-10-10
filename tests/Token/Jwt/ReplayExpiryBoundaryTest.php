@@ -203,3 +203,33 @@ it('saturates single-use retention at the maximum integer expiry', function () {
     expect(SymmetricJwt::verifier($key, $policy, replayStore: $store, clock: $clock)->verify($token))->toBeTrue()
         ->and($store->deadline)->toBe(PHP_INT_MAX);
 });
+
+it('does not consume DPoP state for rejected bindings and blocks future-skew duplicates', function () {
+    $clock = replayBoundaryClock(1000);
+    $store = expiringReplayStore($clock);
+    $pair = KeyPairGenerator::sodiumSign()->generate();
+    $jwk = new Jwks()->exportOkpPublicKey($pair['public'], 'dpop-key');
+    $dpop = new DpopProof($clock);
+    $proof = $dpop->issue(
+        'POST',
+        'https://api.example/endpoint',
+        $pair['private'],
+        $jwk,
+        AsymmetricJwtAlgorithm::EDDSA,
+        accessToken: 'bound-token',
+        nonce: 'expected-nonce',
+        issuedAt: 1005,
+        jwtId: 'future-proof',
+    );
+    $args = [$proof, 'POST', 'https://api.example/endpoint', AsymmetricJwtAlgorithm::EDDSA, $store];
+
+    expect(fn () => $dpop->verify(...$args, accessToken: 'wrong-token', nonce: 'expected-nonce'))
+        ->toThrow(InvalidTokenException::class);
+    expect(fn () => $dpop->verify(...$args, accessToken: 'bound-token', nonce: 'wrong-nonce'))
+        ->toThrow(InvalidTokenException::class);
+
+    $dpop->verify(...$args, accessToken: 'bound-token', nonce: 'expected-nonce');
+    $clock->timestamp = 1006;
+    expect(fn () => $dpop->verify(...$args, accessToken: 'bound-token', nonce: 'expected-nonce'))
+        ->toThrow(InvalidTokenException::class);
+});
