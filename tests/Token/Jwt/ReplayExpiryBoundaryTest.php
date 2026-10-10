@@ -102,3 +102,38 @@ it('holds DPoP replay state through the inclusive oldest accepted second', funct
     $dpop->verify(...$args);
     expect(fn () => $dpop->verify(...$args))->toThrow(InvalidTokenException::class);
 });
+
+it('retains replay state through acceptance for single-use token policies', function (string $purpose, bool $asymmetric, int $leeway) {
+    $clock = replayBoundaryClock(1000);
+    $store = expiringReplayStore($clock);
+    $base = match ($purpose) {
+        'reset' => JwtPolicy::passwordReset('issuer', 'web'),
+        'email' => JwtPolicy::emailVerification('issuer', 'web'),
+        'action' => JwtPolicy::singleUseAction('issuer', 'web'),
+    };
+    $policy = new JwtPolicy('issuer', 'web', $base->expectedType, leewaySeconds: $leeway, replayMode: JwtReplayMode::SINGLE_USE);
+    $claims = new JwtClaims('issuer', 'user', ['web'], 1010, 1000, 1000, 'replay-' . $purpose);
+    if ($asymmetric) {
+        $pair = KeyPairGenerator::sodiumSign()->generate();
+        $token = AsymmetricJwt::issuer($pair['private'], $policy->expectedType, algorithm: AsymmetricJwtAlgorithm::EDDSA)->issue($claims);
+        $verifier = AsymmetricJwt::verifier($pair['public'], $policy, AsymmetricJwtAlgorithm::EDDSA, $store, $clock);
+    } else {
+        $key = random_bytes(64);
+        $token = SymmetricJwt::issuer($key, $policy->expectedType)->issue($claims);
+        $verifier = SymmetricJwt::verifier($key, $policy, replayStore: $store, clock: $clock);
+    }
+
+    expect($verifier->verify($token))->toBeTrue()
+        ->and($verifier->verifyResult($token)->failureReason)->toBe(JwtFailureReason::REPLAYED);
+    $clock->timestamp = 1009 + $leeway;
+    expect($verifier->verifyResult($token)->failureReason)->toBe(JwtFailureReason::REPLAYED);
+    $clock->timestamp = 1010 + $leeway;
+    expect($verifier->verifyResult($token)->failureReason)->toBe(JwtFailureReason::EXPIRED);
+})->with([
+    'symmetric reset no leeway' => ['reset', false, 0],
+    'symmetric email leeway' => ['email', false, 30],
+    'symmetric action leeway' => ['action', false, 30],
+    'asymmetric reset leeway' => ['reset', true, 30],
+    'asymmetric email no leeway' => ['email', true, 0],
+    'asymmetric action leeway' => ['action', true, 30],
+]);
