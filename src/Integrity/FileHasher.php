@@ -139,12 +139,12 @@ final readonly class FileHasher
             throw new HashingException('Digest length is configurable only for BLAKE2b.');
         }
 
-        $context = hash_init($this->algorithm->value);
+        $hashContext = hash_init($this->algorithm->value);
         while (($chunk = StreamIO::readChunk($stream, self::STREAM_CHUNK_SIZE)) !== null) {
             $context?->checkpoint();
-            hash_update($context, $chunk);
+            hash_update($hashContext, $chunk);
         }
 
-        return hash_final($context, $binary);
+        return hash_final($hashContext, $binary);
     }
 }
