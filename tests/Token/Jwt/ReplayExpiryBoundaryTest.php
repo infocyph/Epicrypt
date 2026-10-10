@@ -53,6 +53,8 @@ function expiringReplayStore(ClockInterface $clock): JwtReplayStoreInterface
 
         public function isRevoked(string $namespace, string $tokenId, int $expiresAt): bool
         {
+            unset($namespace, $tokenId, $expiresAt);
+
             return false;
         }
     };
@@ -145,6 +147,7 @@ it('does not consume replay state for rejected JWT signatures or claims', functi
 
         public function consume(string $namespace, string $tokenId, int $expiresAt): bool
         {
+            unset($namespace, $tokenId, $expiresAt);
             $this->attempts++;
 
             return $this->attempts === 1;
@@ -152,6 +155,8 @@ it('does not consume replay state for rejected JWT signatures or claims', functi
 
         public function isRevoked(string $namespace, string $tokenId, int $expiresAt): bool
         {
+            unset($namespace, $tokenId, $expiresAt);
+
             return false;
         }
     };
@@ -179,6 +184,7 @@ it('saturates single-use retention at the maximum integer expiry', function () {
 
         public function consume(string $namespace, string $tokenId, int $expiresAt): bool
         {
+            unset($namespace, $tokenId);
             $this->deadline = $expiresAt;
 
             return true;
@@ -186,6 +192,8 @@ it('saturates single-use retention at the maximum integer expiry', function () {
 
         public function isRevoked(string $namespace, string $tokenId, int $expiresAt): bool
         {
+            unset($namespace, $tokenId, $expiresAt);
+
             return false;
         }
     };

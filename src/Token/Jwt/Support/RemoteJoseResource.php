@@ -103,5 +103,4 @@ final readonly class RemoteJoseResource
             'noCache' => preg_match('/(?:^|,)\s*no-cache(?:\s*(?:,|$))/i', $cacheControl) === 1,
         ];
     }
-
 }
