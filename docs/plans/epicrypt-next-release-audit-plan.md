@@ -1,310 +1,88 @@
-# Epicrypt audit and next-release plan
+# Epicrypt 3.2.0 audit and release plan
 
-Date: 2026-10-10, Asia/Dhaka. Status: implementation and local QA complete, including clock-provider cancellation fencing. Deployment acceptance and final committed-revision certification are recorded by fresh host reports and required checks on draft PR #32.
+Updated 2026-10-10. One **3.2.0** release contains all security fixes, quality remediation, optional Runwire integration and documentation changes. No identified change requires a major release.
 
-## Implementation tracker
+Status: **Implementation and local PHP QA complete; final Alpine deployment and exact-head CI certification pending.** [Draft PR #32](https://github.com/infocyph/Epicrypt/pull/32) remains unmerged and untagged. Merge, tag and publication are user-managed. Historical green runs never certify later changes.
 
-Status: **Implementation and local QA complete**. Draft PR: [#32](https://github.com/infocyph/Epicrypt/pull/32). Final publication requires successful Security & Standards and Documentation checks on the current PR head, including independent Docker acceptance, and successful renewed host acceptance for the final source. Their execution reports are the certification record; historical runs never substitute for them. Merge, tag and publication remain user-managed.
+## Governing rules
 
-**Post-review remediation:** The review of `1b034ec` identified four additional medium-severity boundaries. All four are corrected without changing public call forms or host ownership:
+Follow [PHPForge engineering principles](../../vendor/infocyph/phpforge/resources/engineering-principles.md) and its [agent workflow](../../vendor/infocyph/phpforge/resources/AGENTS.md).
 
-- Scoped contexts use one immutable task-local lookup key and copied weak binding maps. Discarded contexts no longer accumulate keys, and earlier sibling tasks do not gain access to later bindings. A 20,000-binding probe dropped from 10,755,104 bytes retained to 71,640 bytes; the permanent scoped smoke measures 4,496 bytes after warmup against the existing 2 MiB budget.
-- SHA-256 and BLAKE2b hashing/verification recheck borrowed liveness after the final EOF read.
-- Failed remote refreshes recheck the clock before stale fallback, including the exact expiry boundary.
-- JWKS cache lookup/write/invalidation preserve cancellation, and HTTP cancellation cannot return stale keys.
-- Caller-supplied clock reads recheck liveness on both successful and failing returns, before fresh/stale keys or provider failures escape. Six regressions cover fresh, stale and expired cache evaluation with returning or throwing clock providers; the original clock probes reproduced returned keys and masked cancellation.
+- Preserve correctness, security, public parameter names/call forms, persisted formats and host lifecycle ownership.
+- Reproduce defects, retain meaningful regressions, and use the smallest cohesive fix in the existing owner.
+- Keep all configured static, mutation, style and complexity gates: class 80/function 12. No suppression, exclusion, vendor edit or budget increase to conceal a failure.
+- Measure matched complete HTTP workloads; isolated microbenchmarks support investigation only.
+- Retain public persistence contracts, protocol results, enums, catchable exceptions and distinct security boundaries. Remove generated or redundant assets after checking references.
 
-Ten meaningful pre-fix failures reproduced the four initial findings; six further clock boundary failures cover returned data and masked cancellation. The updated suite passes 387 tests / 1,770 assertions, including direct cancellation from a separate request in each cache operation. PHPForge processing, detailed QA and the release guard pass, strict Sphinx passes, and refreshed no-dev `php -n` smoke passes without Runwire, Pathwise or Ctype. Composer reports zero advisories; the already-excluded development-only Doctrine abandonment remains non-blocking.
+## Resolved audit findings
 
-The Docker-equivalent host is explicitly authorized by the user. `benchmarks/docker-host-acceptance.sh` compares matched four-worker FPM deployments with identical production dependencies, OPcache and CPU affinity; validates every mixed file/JWT/JWKS/cancellation response; monitors live RSS; rejects a >2% median RPM regression or >5% trial spread; and checks a 300-second persistent process plus worker replacement. Initial measured acceptance is retained below; final production tree `5d0286488c5d60223bc24df0448bc3dac8c6919c` requires a successful fresh report in `var/docker-host-final-clock/` and independent hosted confirmation. The final CI job uploads source identities, trials and configuration as its `docker-host-acceptance` artifact. These execution records determine current deployment acceptance. Existing historical checkpoints do not certify this final tree.
+Severity describes demonstrated behavior and preconditions, not an assigned advisory score. The initial baseline is tag `3.1`, commit `5d10b40527b3e235cf418333bc67e7d12bc02841`.
 
-**Measurement integrity:** Early Docker attempts are not certification: a BusyBox `ps` reported non-KiB units, and later runs exceeded the 5% stability bound. The comparator now rejects nonnumeric RSS and unstable trials with permanent negative regressions. The final profile uses matched bounded tmpfs staging, disabled access logs, explicit CPU affinity and 60-second warmup. A separate hosted Docker job validates the exact PR source and uploads raw measurements; budgets remain unchanged.
+| Finding | Behavior and implemented fix | Permanent acceptance coverage |
+| --- | --- | --- |
+| S1 High — single-use JWT replay window | Replay retention previously ended at `exp` while acceptance continued through leeway. Both JWT families now retain through the complete acceptance window with saturated arithmetic; denylist lookup keeps the original expiry. | Expiring stores, symmetric/asymmetric policies, leeway/expiry boundaries, invalid signatures and overflow. |
+| S2 Medium — DPoP oldest accepted second | Inclusive maximum-age acceptance could outlive replay retention within that second. Retain through the following second using checked arithmetic. | Oldest accepted proof, second rollover, duplicates, method/URI/nonce/`ath` bindings. |
+| S3 High, deployment-dependent — remote address policy | Private/reserved filter flags accepted shared, benchmark, documentation and multicast destinations. Use one public-unicast policy for literals, all DNS answers and mapped IPv6. | Address/CIDR boundaries, mixed answers, public IPv4/IPv6 positives; reject before HTTP invocation. |
+| S4 Medium — undeclared Ctype dependency | Development dependencies hid integrity/JOSE failures without Ctype. Replace incidental Ctype calls with native byte/grammar checks. | Production-only `php -n` valid/invalid integrity and actual JWT issue/verify without development packages. |
+| S5 Medium — PSR-16 cache keys | Reserved colons and a 78-byte key failed conforming providers. Use a versioned, domain-separated 64-character SHA-256 identity. | Strict PSR-16 key provider; documented cold-cache transition. |
+| S6 Medium — JWKS policy isolation | Strict freshness/trust readers reused entries fetched under another policy. Include normalized trust, freshness/stale and resource bounds in cache identity. | Equivalent-policy hits, differing TTL/stale/hosts/bounds, discovery/URI separation, force refresh, malformed entries and cache failures. |
+| S7 Medium — stalled remote body | Empty reads without EOF could retain a worker indefinitely. Reject no-progress reads while retaining exact-limit and bounded normal reads. | Unknown sizes, stalled/throwing/truncated bodies, EOF and malformed JSON. |
+| Q1 Required — PHPForge quality | Resolve 20 complexity diagnostics and the `JwtPolicy` Rector finding using cohesive guards/private steps and justified collaborators. | Maximum-level PHPStan/Psalm, Rector and all configured structural checks remain unchanged and pass. |
+| R1 Required — release trigger | Enable tag events while retaining branch/PR QA and tag-only release routing. | Static routing checks; real tag dispatch remains part of user-managed publication. |
 
-**First post-review CI:** Commit `63577d2` passed strict Documentation and all 35 non-Docker Security & Standards jobs, including full PHPForge acceptance, PHP 8.4/8.5 stable/lowest, Windows, AEGIS, all mutation shards and independent JOSE/OAuth interoperability. Docker CI correctly rejected an unstable concurrency-4 baseline: 61,405.604 to 58,155.638 RPM (>5% spread); candidate trials also slowed. This is not performance certification. The independent job now uses native `ubuntu-24.04-arm` and longer 30-second trials, retaining all existing budgets. Local Docker acceptance uses the same frozen production sources.
+**Q2 excluded:** `doctrine/annotations` abandonment comes through PHPBench/PHPForge's development toolchain. It is non-blocking and explicitly outside Epicrypt remediation. Production dependencies have no advisories or abandoned packages; no audit policy is weakened.
 
-**Independent measurement correction:** The initial native ARM runs (`d9ad7b7`, `507600f`) passed all 35 non-Docker jobs and strict Documentation, but rejected >5% trial spread at borrowed concurrency 4 and unbound concurrency 8 respectively. Completed RPM comparisons stayed within 2%. Controller shells and Docker daemons had unrestricted CPU affinity and could overlap the FPM cores. CI now pins those controller processes to CPUs 0,1, preserves FPM CPUs 2,3, records actual affinities and uses 60-second trials. This isolation applies only to the fresh hosted runner; the local Docker host is unchanged. No RPM, spread, memory, response or error guard is relaxed. The production tree remains frozen.
+Four additional review findings and a clock-provider edge were reproduced and fixed:
 
-### Initial authorized Docker host acceptance (before final clock fence)
+- Live task-local bindings retained discarded contexts. One immutable lookup key plus copied weak binding maps prevents accumulation and preserves earlier sibling isolation. A 20,000-binding probe reduced retained heap from 10,755,104 to 71,640 bytes; the warmed permanent smoke measures about 4.4 KiB.
+- SHA/BLAKE integrity hashing now checks cancellation after the final EOF read, including verification paths.
+- Stale JWKS expiry is checked after the failed fetch, including elapsed transport time and the exclusive expiry boundary.
+- Cache get/set/delete preserve Runwire cancellation, including independently cancelled child requests.
+- Caller-supplied clock cancellation is checked when the clock returns or throws, before fresh/stale keys can be accepted or another error can mask cancellation.
 
-Local deployment completed successfully using PHP 8.4.26 FPM (`php:8.4-fpm-bookworm`, manifest digest `sha256:6bfef8e416977aa41f48e3e42a40c1e08050d24e4a938c6edb421400bff24601`), four static workers, production Composer autoloading, OPcache 128 MiB/JIT off, bounded 128 MiB tmpfs staging and disabled access logs. Host: AMD Ryzen AI 9 HX 370; FPM CPUs 10,11; proxy 0; client 1; soak 6. Each deployment used the same host production dependency lock, including Runwire 2.1.1. Warmup was 60 seconds per variant; three alternating 20-second measured trials ran at each concurrency. Fixed concurrency bounds outstanding work to eight connections.
+Ten pre-fix failures reproduced the initial review findings; six further clock cases cover fresh/stale/expired entries and returning/throwing clocks. The final PHP suite passes **387 tests / 1,770 assertions**. PHPForge processing, detailed QA, release guard, strict local Sphinx and production-only no-Runwire/no-Pathwise/no-Ctype smoke pass.
 
-Measured candidate source: `63577d2`; production tree `cd1a0983c9a9a2f2ec5cadd16c14ea46d86a2d25`, unchanged through `0f693e9`. The final clock fence changes that tree and requires renewed measurement; this initial record does not certify it. Unbound baseline: tag 3.1 (`5d10b40527b3e235cf418333bc67e7d12bc02841`). Borrowed baseline: `1b034ecafb7d2c9daf1f4ea1205ef5d34126a98a`.
+## Integration and compatibility
 
-| Calls | Concurrency | Baseline median RPM | Candidate median RPM | Delta | Candidate peak RSS (KiB) | Maximum candidate p99 (ms) |
-| --- | --- | --- | --- | --- | --- | --- |
-| Unbound | 1 | 25,859.380 | 25,444.553 | -1.604% | 107,084 | 4.780 |
-| Unbound | 4 | 64,336.597 | 64,013.161 | -0.503% | 107,088 | 7.442 |
-| Unbound | 8 | 69,571.116 | 70,225.414 | +0.940% | 107,092 | 10.428 |
-| Borrowed | 1 | 28,308.115 | 28,266.629 | -0.147% | 109,620 | 3.577 |
-| Borrowed | 4 | 65,875.176 | 66,601.803 | +1.103% | 109,620 | 7.082 |
-| Borrowed | 8 | 66,956.544 | 67,440.806 | +0.723% | 109,620 | 10.865 |
+- PHP `^8.4`; required extensions: Hash, JSON, OpenSSL and Sodium. CI certifies PHP 8.4/8.5, stable/lowest dependencies and Windows publication.
+- Runwire is optional: exact `2.1.1` in development, an explicit suggestion and an unsupported-version conflict. No mandatory production runtime dependency.
+- `RunwireExecutionContext` accepts the passed `RuntimeContext`, optional `RequestContext`, optional live `CoroutineScope` and bounded checkpoint interval. Bind inside the owning task and forward the same context, or the three raw host objects, through intermediary libraries.
+- `SecretStream`, `FileProtector`, `FileHasher` and `RemoteJwks` accept optional named `context` arguments. Invalid/completed/cancelled bindings fail; absent context retains normal synchronous calls.
+- Cooperative yield requires both `RUNWIRE_COROUTINES` and a live scope. Cancellation works without coroutine capability. Regular file/PSR-18 I/O remains synchronous; cryptographic calls are not offloaded.
+- Epicrypt never creates workers, starts/stops runtimes, owns event loops, completes host requests or closes host scopes. Cancellation preserves atomic file publication; caller-owned output streams retain host rollback/publication responsibility.
+- Host adapters retain HTTP timeout, redirect suppression, connected-socket DNS pinning, durable atomic state, authorization, rate limiting and password-cost responsibilities.
+- Pathwise `^4.2` is a development interoperability baseline only. Its wrapper is not required by Epicrypt.
+- Node **26.11.1** and exact `jose` **6.2.12** support independent JOSE/OAuth testing. The npm manifests and lockfile are required by CI and excluded from distribution archives.
 
-All six comparisons passed the unchanged 2% RPM, 5% trial-spread and 256 MiB process-tree RSS limits. Across both variants, 643,401 responses passed exact-body/HTTP-status validation, with zero incorrect responses, transport errors or timeouts. Maximum observed spread was 2.298%; maximum tree RSS was 110,208 KiB. CPU samples reached approximately 200% in the two-CPU FPM deployment, while the client peaked at 13.69% and proxy at 14.75%, providing load-generator headroom. p50/p95/p99 and live memory samples are retained per trial. These small RPM differences do not establish a throughput improvement.
+See the maintained [Runwire guide](../runwire-integration.rst), [remote JOSE guide](../remote-jose-security.rst), [storage contracts](../token-storage.rst), [benchmark guide](../benchmarking.rst) and [release notes](../release-notes-3.2.0.rst).
 
-The persistent process passed 300.093691182 seconds, 7,857,590 verified operations, 78,575 cancellation checks and 20,000 discarded scoped bindings. PHP heap growth was 6,648 bytes; scoped binding growth was 4,432 bytes, both below 2 MiB. Peak live RSS was 26,600 KiB. Candidate FPM master replacement changed host PID `788119` to `879203`; the new process served the validated borrowed-context route. The harness exited zero and removed its owned containers/network.
+## Final deployment certification
 
-Raw local evidence is in ignored `var/docker-host-stable/`: TSV trials with validated request counts and p50/p95/p99, deployment/PHP/Docker profiles, image identities, the shared host dependency lock, resource samples, persistent RSS/JSON and replacement evidence. The independent hosted job uploads equivalent raw evidence for each exact PR revision. This profile certifies Docker FPM with memory-backed staging and the native Runwire persistent process; disk storage, external network latency and undeclared server runtimes are outside these measurements.
+All release Docker images use Alpine: digest-pinned PHP 8.4 FPM for HTTP and the persistent process, Nginx Alpine plus Bash/curl/wrk/procps/coreutils for measurement, and the existing pinned Alpine AEGIS runtime. CI runner operating systems remain separate from container images.
 
-### Historical implementation checkpoints
+Run `benchmarks/docker-host-acceptance.sh` on the user-authorized Docker host. The script records source identities/patch, runtime and image metadata, production lockfile, shared public EC/JWKS fixtures, CPU affinity, FPM/OPcache/proxy configuration, raw trials and live resource samples in `var/docker-host-acceptance/`. Independent exact-head CI uploads the equivalent `docker-host-acceptance` artifact.
 
-The following snapshots retain earlier audit and remediation evidence. Their pending status statements describe those revisions; current completion is governed by the evidence above and live checks on the final PR head.
+Required profile and unchanged budgets:
 
-| Batch | Scope | Implementation | Focused QA | Commit / evidence |
-| --- | --- | --- | --- | --- |
-| 1 | S1–S3 JWT/DPoP replay and remote JOSE address security | Complete: source, boundary regressions, security docs | Focused QA passed on `816287e`: Pest/Pint/PHPCS, all mutation shards incl. JWT and remote JOSE, JOSE/OAuth interoperability, AEGIS/Windows. Q1 static/Rector failures remain tracked in Batch 3; baseline probes documented below | `284da9a`–`816287e`; [security QA run](https://github.com/infocyph/Epicrypt/actions/runs/38026345942) |
-| 2 | S4–S7 integrity, PSR-16 cache, remote reads | Complete: Ctype-free integrity/JSON verification, policy-aware PSR-16 JWKS, bounded PSR-7 reads, strict-cache and production smoke regressions | Focused QA passed: Pest/Pint/PHPCS, strict-cache and stalled-stream tests, mutation security and protocol interoperability on `2b50ccf`; original 20 PHPStan Q1 issues remain, no new complexity. Isolated production `php -n` acceptance remains in final release gate | `47da2d1`–`2b50ccf`; [Batch 2 QA](https://github.com/infocyph/Epicrypt/actions/runs/38027365638) |
-| 3 | Q1 complexity and Rector remediation | Complete: all original 20 function/class complexity findings eliminated by focused owner refactors and JWS/JWK/query collaborators; Rector `JwtPolicy` rule applied | PHPStan and Psalm analysis, Pest, Pint, PHPCS, Rector, reference/architecture checks, mutation shards, JOSE/OAuth interoperability and Windows/AEGIS lanes passed for `463fdf6`; 8.4/8.5 benchmark jobs tracked separately under final release gates | `342e9d4`–`463fdf6`; [Batch 3 QA](https://github.com/infocyph/Epicrypt/actions/runs/38029335803) |
-| 4 | Optional Runwire 2.1.1 integration | Complete: optional Composer 2.1.1 contract, borrowed task/scope validation, stream/JOSE forwarding, cancellation-aware atomic publication and focused lifecycle regressions | Focused hosted QA passed on `b9a4363`: Security & Standards 29 passed, 0 failed, 1 expected release skip; Documentation passed; PHPForge PHP 8.4/8.5, mutation suites, independent interop, Windows, AEGIS and benchmarks green. Final production-equivalent RPM remains Batch 6. | `2167bc4`–`b9a4363`; [Batch 4 QA](https://github.com/infocyph/Epicrypt/actions/runs/38035110185), [Documentation](https://github.com/infocyph/Epicrypt/actions/runs/38035109788) |
-| 5 | Pathwise 4.2/docs/release automation R1 | Complete: Pathwise ^4.2 test baseline and naming, updated migration/start/password/remote-JOSE/Runwire guidance, enabled workflow `push.tags` while retaining branch/PR QA | Focused hosted QA passed on `aa19b73`: Security & Standards 29 successful jobs, no failures, expected release skip; Documentation passed. Tag-dispatch behavior awaits controlled release tagging in Batch 6. | `aa19b73`; [Batch 5 QA](https://github.com/infocyph/Epicrypt/actions/runs/38035607327), [Documentation](https://github.com/infocyph/Epicrypt/actions/runs/38035606896) |
-| 6 | Final QA, interoperability, performance and release guard | All source/CI implementation complete; added per-response wrk Lua accounting, deterministic comparator failure tests, live local HTTP/wrk integration smoke, and a matched-host RPM harness. PR remains draft and unmerged, with no release tag. | `42b104f` checks: Documentation successful, all 29 applicable Security & Standards jobs passed including PHPForge release guard, real wrk positive/negative validation, regression/error rejection tests, PHP 8.4/8.5, integration/mutation, no-dev smoke, persistent-worker isolation, and benchmarks. **Pending external release sign-off:** actual matched production-equivalent host RPM comparison and controlled real tag dispatch (user-owned). | [Security & Standards](https://github.com/infocyph/Epicrypt/actions/runs/38060550817), [Documentation](https://github.com/infocyph/Epicrypt/actions/runs/38060550355), `42b104f` |
+- Four static FPM workers, identical production dependencies including Runwire 2.1.1, OPcache 128 MiB/JIT off, bounded 128 MiB tmpfs and disabled access logs.
+- Separate FPM/proxy/client CPU sets; record actual affinities. Only the fresh CI runner pins its Docker daemon/controller threads; local host daemon configuration is untouched.
+- Readiness and 60-second warmup before each comparison. Three alternating trials at concurrency **1, 4, 8**, comparing unbound calls with `3.1` and borrowed calls with pre-review `1b034ec`.
+- Each mixed response independently verifies file encryption round trip/integrity, JWT, JWKS miss/hit and borrowed cancellation/ownership. Zero incorrect responses, socket errors or timeouts.
+- Reject **>2% median successful RPM loss**, **>5% trial spread**, or **>256 MiB process-tree RSS**. Retain p50/p95/p99 and CPU/memory samples. CI uses 60-second measured trials; local default is 20 seconds.
+- A **300-second** persistent process checks alternating tenant/request state, cancellation, 20,000 discarded scoped bindings and **2 MiB heap-growth** guards. Sample live RSS continuously and verify real FPM replacement with a changed host PID and correct response.
 
-**Final benchmark correctness QA (2026-10-10):** Commit `42b104f` added the per-response Lua checker and exercised it against a live PHP HTTP endpoint with genuine `wrk` on CI, including correct-body acceptance and incorrect-body rejection. The comparator's deterministic regression tests also reject >2% RPM loss, bad bodies, read errors and missing validation results. GitHub ran every applicable security, PHPForge, release-guard, production-smoke, interoperability and benchmark job successfully (29 passes, 0 failures), and strict documentation passed. These tests prove the gate works, not that a matched production host measurement has been conducted. **Production-equivalent host RPM and tag publication remain unverified; neither merge nor tag is authorized to this automation.**
+**Historical evidence:** The pre-clock-fence Debian profile passed all six comparisons (unbound -1.604%, -0.503%, +0.940%; borrowed -0.147%, +1.103%, +0.723%), with 643,401 correct responses, zero errors, peak RSS 110,208 KiB and a successful 300-second soak/replacement. Subsequent runs rejected unstable trials; the final-clock local Debian attempt rejected a stable -3.250% unbound concurrency-1 regression. These results are retained as diagnostic history and do not certify Alpine or the final revision. No guard is relaxed by changing images.
 
-**Batch 6 host/lifecycle checkpoint (2026-10-10):** Source `a799d08` passed all 29 applicable Security & Standards jobs and strict Documentation. The permanent PHP 8.4/8.5 persistent-Runwire host smoke measured 6,744 bytes of PHP heap growth after warmup and 2,000 alternating request operations, versus a 2 MiB guard; two independent processes also passed the restart simulation. The matched-host `benchmarks/host-rpm-compare.sh` provides alternating baseline/candidate load and process-tree RSS reporting; it has a syntax gate, not a production-equivalent measurement. Tag dispatch routing was statically checked without publishing. Remaining **blocking external** evidence: matched FPM/persistent-host 2% RPM comparison, host-specific correctness and process memory, controlled real tag release verification. Keep draft/unmerged/untagged.
+Generated graphs, superseded raw local attempts and the verbose historical tracker have been moved out of the workspace after reference checks. Unique audit findings and release requirements are consolidated here; hosted run artifacts and current reports retain execution evidence. This cleanup does not remove CI/test/docs dependencies or public API types.
 
-**Batch 6 final-source QA (2026-10-10):** Source `1e452f2` passed Security & Standards `38036550837` and Documentation `38036550443` with full PHPForge release guard and production-minimal integration checks. This tracker-only documentation commit does not make the tag publishable: matched production-equivalent RPM, host lifecycle/tenant-isolation certification and controlled tag dispatch remain unverified. Do not merge or tag.
+## Release checklist
 
-**Batch 6 interim acceptance (2026-10-10):** Commit `f62c7e6` passed the hosted PHPForge processors, detailed tests and release guard, plus no-dev/declared-extension production smoke on PHP 8.4/8.5. Doctrine annotations remain non-blocking development-toolchain warning, as explicitly excluded. A later commit strengthens negative cases and adds release notes; validate that final source SHA separately. Production-equivalent host RPM, sustained isolation and controlled tag verification cannot be inferred from CI microbenchmarks and remain open.
+- [x] Security and review findings fixed with meaningful pre-fix reproductions and permanent regressions.
+- [x] PHPForge processors/detailed QA/release guard and production-minimal smoke pass for the current production source tree `5d0286488c5d60223bc24df0448bc3dac8c6919c`.
+- [x] Regenerated Node lockfile, clean npm install/audit and both bidirectional interop checks pass with the upgraded tools; npm reports zero vulnerabilities.
+- [x] Cross-checked documentation, complete-example syntax/runtime checks and strict Sphinx pass after cleanup; PHPForge CI and comparator positive/six negative cases pass.
+- [ ] Fresh authorized Alpine host passes all six RPM comparisons, 300-second soak and worker replacement.
+- [ ] Latest committed PR head passes **all** Security & Standards and Documentation checks, including independent Alpine acceptance, PHP 8.4/8.5 stable/lowest, PHPForge acceptance, production smoke, mutation floors, Windows, AEGIS, interoperability/npm audit and benchmarks.
+- [ ] User-managed merge/tag/publication after the blocking gates pass; verify actual tag release dispatch separately.
 
-**Batch 5 closure (2026-10-10):** Commit `aa19b73` passed all 29 applicable security, quality, mutation, interoperability, platform and benchmark jobs and the Documentation workflow. R1's tag push filter is now present; no premature release tag was pushed, so tag-event acceptance remains in the controlled final release stage.
-
-**Batch 4 closure (2026-10-10):** Resolved the syntax, normalization, formatter and Rector issues without suppressions or threshold changes. Focused hosted Security & Standards on `b9a4363` passed all 29 applicable jobs, with the expected tag-only release job skipped; Documentation passed. Production-equivalent RPM, isolated production smoke and final release guard remain in Batch 6.
-
-**QA feedback (2026-10-10):** PR #32 is receiving workflow results. Earlier SHA `dbf76d4` failed PHPForge analysis and mutation shards. GitHub job logs traced the widespread mutation failures to a Pathwise `^4.1` test expectation against the already-changed `^4.2` declaration; corrected in `3b10f2b`. Subsequent QA also reported Pint/PHPCS issues addressed in the same commit. The 20 planned Q1 complexity diagnostics and one Rector dry-run change remain open by design. Batch 1 committed security regression code and focused QA are complete; do not confuse the known Q1 static/Rector failures with a new security regression. Preserve thresholds. Local full Composer/PHPForge QA has not been executed in this editing environment. The baseline quality diagnostics remain open.
-
-**Batch 2 QA note:** The two temporary new complexity diagnostics for `RemoteJwks::load()` and `RemoteJoseResource::fetch()` were resolved with private cohesive helpers before concluding Batch 2. The release is still blocked by the original 20 Q1 complexity findings and the Rector change, with no standards relaxed.
-
-**Batch 3 evidence:** QA run `38029335803` on `463fdf6` has clean PHPStan for PHP 8.4/8.5 (zero function/class complexity or static diagnostics), Rector, Pest, Pint, PHPCS, release dependency checks, all security-critical mutation shards, JOSE/OAuth interoperability, AEGIS and Windows publication. Q1 is complete. Representative end-to-end host RPM acceptance remains a distinct final-release gate; a microbenchmark is not host-throughput certification.
-
-**Q2 disposition:** Abandoned `doctrine/annotations` is a non-blocking development-toolchain warning; explicitly excluded from Epicrypt 3.2 remediation. No Composer/PHPForge/PHPBench changes planned for it.
-
-**R1 — Release workflow trigger (resolved in Batch 5):** `.github/workflows/security-standards.yml` now includes `push.tags` while keeping branch/PR QA. Static tag-only routing tests passed; the actual tag event is intentionally reserved for the user-managed release.
-
-## Decision and governing rules
-
-Target one **3.2.0** release containing the full planned change set: S1-S7 security/correctness fixes, Q1 quality remediation, additive Runwire 2.1.1 support, Pathwise 4.2 integration baseline and affected documentation. Runwire support is part of the release scope; using it remains optional for consumers. All applicable fix and integration gates must pass before releasing. No finding currently requires a 4.0 release.
-
-Follow [PHPForge engineering principles](../../vendor/infocyph/phpforge/resources/engineering-principles.md) and [agent workflow](../../vendor/infocyph/phpforge/resources/AGENTS.md). In particular:
-
-- Correctness, security, public contracts and host lifecycle ownership precede performance and structural simplification.
-- Reproduce each defect, add a meaningful regression, make the smallest cohesive fix, and run the configured gates.
-- Preserve public parameter names, existing call forms, key-purpose boundaries and wire formats. Changes to unsafe acceptance are security fixes; document them.
-- Prefer changes in existing owners and private methods. Justify any new production type by a real boundary or lifecycle responsibility.
-- Keep PHPStan at its active maximum level and cognitive-complexity limits of class 80/function 12. No suppression, baseline expansion, exclusions or threshold increases.
-- Measure meaningful hot-path changes on matching environments. Component microbenchmarks do not prove host RPM or asynchronous behavior.
-- Keep the author's existing `composer.json` and `.gitignore` edits intact.
-
-## Audited baseline and evidence
-
-- Branch: `feature/runwire-2.1`; HEAD/tag `3.1`: `5d10b40527b3e235cf418333bc67e7d12bc02841`.
-- Working tree already changed PHP requirement to `^8.4` and adjusted `.gitignore`. The audit adds only this plan.
-- Inventory: 287 tracked production source files. Review covered dependency/platform declarations, source and tests at security-sensitive boundaries, all library domains through the full suite, protocol interoperability automation, documentation and release automation. Graphify supplied navigation; findings were verified in source/runtime probes.
-- Local runtime: PHP 8.5.4; PHPForge `dev-main f274e78`; phpseclib 4.0.2; Pathwise 4.2.
-- Live Composer metadata confirms Runwire 2.1.1 at `745b1c2bd7caa56aa5abf6d742c1aa8318fec494` and Pathwise 4.2 at `f37e99ae41fbb9ab5c632beef266f146a4dc662c`. Inspected Runwire context/scope APIs match that tag.
-
-| Check | Current result |
-| --- | --- |
-| `composer ic:doctor`, `ic:list-config`, `ic:active-config` | Healthy; inspected active PHPForge configuration |
-| `composer validate --strict` | Pass |
-| `composer ic:tests` | 11 gates pass; PHPStan and Rector fail |
-| `composer ic:test:code` | 299 passed, 1,582 assertions; includes current Pathwise 4.2 interoperability |
-| PHPStan | 20 cognitive-complexity diagnostics, detailed below |
-| Psalm security, Deptrac, Pint, PHPCS, syntax/reference/duplicate/comment/skip checks, Composer normalization | Pass in the aggregate suite |
-| Rector dry run | One required change in `JwtPolicy::acceptsType()` |
-| Live `composer audit --locked --format=json` | Zero advisories; abandoned `doctrine/annotations` in development dependency tree; exit 1 |
-| Live `composer audit --locked --no-dev --format=json` | Pass; zero advisories and abandoned production dependencies |
-| Isolated production `composer install --no-dev --prefer-dist --no-interaction --no-progress --optimize-autoloader` | Pass; eight production packages, no Pathwise/PHPForge |
-| Production `tests/Smoke/core-no-pathwise.php` | Pass with normal PHP and `php -n`; misses the Ctype-dependent paths in S4 |
-| `composer ic:bench:quick` | 43 subjects; zero failures/errors; supporting microbenchmark evidence only |
-| `php benchmarks/authentication.php` | Seven operation scenarios pass; 2,000 repeated PAT validations show zero PHP heap growth, below existing 2 MiB guard |
-| Hosted historical HEAD checks | Latest listed Security & Standards run [37174237331](https://github.com/infocyph/Epicrypt/actions/runs/37174237331) and listed Documentation run [35521921808](https://github.com/infocyph/Epicrypt/actions/runs/35521921808) succeeded on baseline SHA; they do not certify this working tree, today's dependency snapshot, or future fixes |
-
-Node and Sphinx are unavailable locally, so independent Node JOSE/OAuth interop, npm audit and the strict Sphinx build were not rerun. PHP 8.4, Windows publication, the special AEGIS lane and mutation floors also require fresh validation after implementation. The local tag is confirmed; `gh release view 3.1` found no published GitHub release with that exact tag. No new tag/release was created.
-
-Temporary evidence from this audit: `/tmp/epicrypt-audit-quality.log`, `/tmp/epicrypt-pest.log`, `/tmp/epicrypt-audit-probes.php`, `/tmp/epicrypt-audit-probes.json`, `/tmp/epicrypt-production-boundaries.php`, `/tmp/epicrypt-production-install.log`, `/tmp/epicrypt-authentication-evidence.json`, `/tmp/epicrypt-phpbench.log`. Convert the focused probes into permanent regressions during remediation; temporary files are not a release gate.
-
-## Required findings
-
-Severity below is an engineering assessment of demonstrated behavior and its preconditions, not an assigned advisory score.
-
-### S1 — High: single-use JWT replay records expire before token acceptance ends
-
-Owners: `src/Token/Jwt/SymmetricJwt.php:136`, `src/Token/Jwt/AsymmetricJwt.php:144`, `src/Token/Jwt/JwtValidator.php` temporal validation; replay contract and documentation.
-
-Both JWT verifiers accept tokens until `exp + leewaySeconds`, but `SINGLE_USE` passes only `exp` to `consume()`. With a store that expires records at the supplied timestamp, a token accepted once before `exp` is accepted again during leeway. This affects password-reset, email-verification and action JWT policies when used with expiring storage.
-
-Reproduction: issue at time 1000 with `exp=1010`, verify once successfully, reject an immediate duplicate, advance to 1011. Both symmetric and EdDSA asymmetric verification accept the same token again with default 30-second leeway. The store received 1010 on every call. Existing test stores retain records indefinitely and miss this boundary.
-
-Fix and acceptance:
-
-- Retain single-use state through the full acceptance window, following the existing client-assertion implementation, which already consumes through `exp + leeway`.
-- Calculate the retention deadline without integer overflow. Preserve the original claim expiry independently of retention; do not change `DENYLIST` record matching accidentally.
-- Document required denylist retention through the configured acceptance window for host-owned revocation writers. Keep replay-store signatures compatible.
-- Add expiring-store tests for both JWT families, every single-use policy, zero/nonzero leeway, before/at/after expiry, duplicate verification and overflow boundaries. Invalid signatures/claims must never consume state.
-
-### S2 — Medium: DPoP replay retention misses the inclusive maximum-age boundary
-
-Owner: `src/Token/Jwt/DpopProof.php:150`, `isAcceptedIssuedAt()` and replay tests.
-
-DPoP accepts `iat == now - maximumAgeSeconds`, while consuming only through `iat + maximumAgeSeconds`. At that boundary the retention deadline is already `now`. A time-expiring store can immediately remove the record and accept another copy in the same second.
-
-Reproduction: `iat=700`, `now=1000`, default maximum age 300. Two verifications of the same signed proof succeed; both consume calls receive expiry 1000.
-
-Fix: keep the existing inclusive acceptance semantics and retain through the following second, with checked arithmetic, or explicitly justify a compatible protocol boundary correction. Cover oldest accepted proofs, future skew, second rollover, concurrent duplicates, `ath`/nonce bindings and expiring stores. No cryptographic, method/URI or replay check may be weakened.
-
-### S3 — High, deployment-dependent: remote JOSE public-address policy accepts non-public destinations
-
-Owners: `src/Token/Jwt/RemoteJwksConfiguration.php:74` and `src/Token/Jwt/Support/RemoteJoseResource.php:107`.
-
-`FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE` does not mean globally reachable unicast. The configured-literal path and outbound boundary both accept `100.64.0.1`, `198.18.0.1`, `192.0.2.1`, `224.0.0.1`, `2001:db8::1` and `ff02::1`. Each probe reached the mock HTTP client. A controlled DNS answer can expose the same gap for a trusted configured hostname; no real request to those destinations was made.
-
-This is an incomplete SSRF defense, especially where non-public shared/benchmark space is routed internally. Token-supplied `jku`/`x5u` remains unused, and exploitability still depends on configuration, DNS and transport/egress behavior.
-
-Fix and acceptance:
-
-- Apply one consistent public-unicast policy to URL literals, every A/AAAA answer and IPv4-mapped IPv6 addresses. Reject mixed public/non-public answers before sending.
-- Prefer supported native validation, including evaluation of `FILTER_FLAG_GLOBAL_RANGE`, plus explicit multicast checks. The local probe shows the global flag alone still accepts multicast; do not replace one incomplete predicate with another.
-- Add exact-address and CIDR-boundary tests on PHP 8.4/8.5 for shared, benchmark, documentation, multicast, loopback, private, link-local, unspecified, reserved and mapped forms; include genuine public IPv4/IPv6 positives.
-- Preserve HTTPS/host allowlists, repeat resolution, response bounds and visible-redirect rejection. Existing PSR-18 transport pinning, timeout, proxy and no-auto-redirect requirements remain host responsibilities.
-
-Sources: [PHP validation flags](https://www.php.net/manual/en/filter.constants.validation.php), [IANA IPv4 special-purpose registry](https://www.iana.org/assignments/iana-ipv4-special-registry/), [IANA IPv6 special-purpose registry](https://www.iana.org/assignments/iana-ipv6-special-registry/).
-
-### S4 — Medium: undeclared Ctype dependency breaks production integrity and JOSE verification
-
-Owners: `src/Integrity/StringHasher.php:59`, `src/Integrity/FileHasher.php:100`, `src/Token/Jwt/Support/JwtToken.php:135`, production smoke.
-
-Composer does not require `ext-ctype`; the production dependency tree does not supply its polyfill. The development installation masks the dependency. With a clean `--no-dev` installation and `php -n` (all declared crypto extensions remain present), string/file integrity verification throws undefined-function errors and a correctly issued JWT fails verification. The same operations pass with Ctype enabled.
-
-Prefer removing these incidental Ctype calls using precise native byte/regex checks, including JSON's actual whitespace grammar. Declaring a new hard extension would expand the deployment contract unnecessarily. Retain malformed-digest and duplicate-key rejection. Extend the production-only smoke to include integrity **verification** and an actual JWT issue/verify round trip under the declared minimal extension set.
-
-### S5 — Medium: JWKS cache keys violate the PSR-16 interoperability contract
-
-Owner: `src/Token/Jwt/RemoteJwks.php:40`; permissive cache fake in `tests/Token/Jwt/RemoteJwksTest.php`.
-
-The key `epicrypt:jwks:` plus a 64-character digest contains reserved colons and is 78 bytes. A conforming cache rejects the reserved characters; a provider supporting only the required 64-byte key minimum cannot accept its length either. The strict-cache probe throws before any network request.
-
-Use an ASCII-safe, at-most-64-character key, preferably a full SHA-256 hex digest over an explicitly domain-separated, versioned canonical identity. Update test fixtures and document the cold-cache transition. Add a strict PSR-16 provider/fake regression instead of relying solely on a permissive array cache.
-
-Source: [PSR-16 key requirements](https://www.php-fig.org/psr/psr-16/).
-
-### S6 — Medium: different JWKS trust/freshness policies share cache entries
-
-Owner: `src/Token/Jwt/RemoteJwks.php:40`, `load()` and `cached()`.
-
-The cache identity includes issuer and configured JWKS URI/discovery mode, but omits policy. A cache entry fetched with a 3,600-second TTL is reused without network access by another instance configured for a five-second maximum TTL and no stale allowance. Reproduction: populate at 1000, read through the strict instance at 1100; it returns the old key with zero HTTP requests.
-
-Version the cache identity and include normalized settings that affect destination trust, freshness/stale behavior and accepted resource bounds. Alternatively, persist enough provenance to enforce the reader's policy; prefer the simpler complete-identity design. Keep equivalent allowlists order-independent. Resolver/transport deployments with materially different trust guarantees must also use separate caller-owned cache namespaces.
-
-Cover same-policy hits; different TTL/stale/host/bound policies; discovery and explicit URI separation; malformed entries; no-cache/no-store; force refresh. Review cache exceptions and failed get/set/delete behavior explicitly: public metadata cache outages must not become stale authorization-state fallbacks. Preserve existing authoritative token-store failure behavior.
-
-### S7 — Medium: remote response read loop has no no-progress guard
-
-Owner: `src/Token/Jwt/Support/RemoteJoseResource.php:49`.
-
-For a PSR-7 body returning `''` while `eof()` remains false, the loop never changes its byte count. The bounded probe returned empty strings until its fifth read deliberately threw; Epicrypt did not reject the stall. A persistent stalled stream can hold a worker indefinitely even though byte bounds are satisfied.
-
-Reject no-progress reads with `KeyResolutionException`, preserving exact-limit success, oversized-response rejection and normal chunked reads. Cover unknown sizes, read exceptions, truncated bodies, empty reads with/without EOF and malformed JSON. Host connect/read/total timeouts remain necessary for blocking transport calls.
-
-### Q1 — Required quality remediation: 20 complexity diagnostics and one Rector change
-
-The current PHPForge version reports these valid complexity findings:
-
-| Owner | Diagnostic |
-| --- | --- |
-| `OAuthAccessTokenService::validatedState()` | Function 13 |
-| `OAuthClientAssertionValidator::validateClaims()` | Function 13 |
-| `OAuthClientKeySet::__construct()` | Function 14 |
-| `OAuthTokenEndpoint::refreshToken()` | Function 15 |
-| `RefreshTokenManager::rotate()` | Function 13 |
-| `OpenSslExtensionConfig::createTempConfig()` | Function 13 |
-| `StreamIO::readChunk()` | Function 13 |
-| `WrappedSecretManager::unwrapCandidateSet()` | Function 14 |
-| `SignedUrl` / `normalizeQuery()` | Class 86 / function 13 |
-| `SignedUrlOptions::__construct()` | Function 14 |
-| `Jwks` | Class 94 |
-| `Jws` | Class 84 |
-| `JwtClaims::normalizeCustomClaims()` | Function 15 |
-| `JwtValidator::validateCustomClaims()` | Function 13 |
-| `OpenIdIdTokenValidator::validateAuthentication()` | Function 16 |
-| `JwkOkpCodec::importPrivate()` | Function 13 |
-| `JwkPrivateKeyCodec::validateShape()` | Function 13 |
-| `JwsSignature::opensslKey()` | Function 13 |
-| `JwtToken::rejectDuplicateObjectKeys()` | Function 15 |
-
-Simplify guards/branching first; use private methods for cohesive steps. A class-level finding requires lower total class complexity or a genuinely distinct collaborator, not simply moving branches among private methods. Do not create a type for each claim, frame or validation condition. Preserve security regressions and public APIs while refactoring. Apply and review Rector's nullsafe/coalesce simplification in `JwtPolicy::acceptsType()` through the existing processor workflow.
-
-### Q2 — Non-blocking maintenance: abandoned development dependency
-
-`composer why doctrine/annotations` identifies `phpbench/phpbench 1.7.0 -> doctrine/annotations ^2.0`, obtained through PHPForge's development toolchain. Production is unaffected. The installed PHPForge auditor intentionally reports abandoned packages as non-blocking, while plain Composer audit exits 1.
-
-Non-blocking and expressly out of Epicrypt's release work. No changes, remediation ticket or dependency maintenance work is required for this warning. Do not edit vendor, fake replacements or weaken audit policy.
-
-## Optional Runwire 2.1.1 integration for 3.2.0
-
-Implement after S1-S7 and Q1 are resolved, within the same 3.2.0 release candidate. Benefits are cancellation/deadline propagation, cooperative fairness during long stream processing and correct composition with already runtime-aware host transports/stores. Individual OpenSSL/Sodium/password-hashing calls remain synchronous; no throughput improvement is established by this audit.
-
-### Smallest proposed contract
-
-One optional `Infocyph\Epicrypt\Integration\Runwire\RunwireExecutionContext` would accept the **passed** `RuntimeContext`, optional active `RequestContext`, and optional host task `CoroutineScope`. Its independent justification is borrowed-lifecycle validation plus cancellation/checkpoint policy reused by stream and remote-resource operations. Use the released Pathwise 4.2 borrowed-context implementation as a design reference; do not introduce a production Pathwise dependency or require its wrapper type.
-
-Append an optional named `context` argument to the affected operation methods. Forward the same object through existing internal calls. Bind per operation; retain no request context in static state or shared long-lived services. Pure short scalar crypto/token operations need no runtime wrapper.
-
-Proposed usage, not an existing API:
-
-```php
-$context = new RunwireExecutionContext($runtime, $request, $scope);
-$protector->protectStream($input, $output, $key, $options, context: $context);
-```
-
-An intermediary library accepts and forwards that same context, or forwards the three raw Runwire objects into the Epicrypt context at its boundary. The flow is framework -> intermediary -> Epicrypt -> existing stream/resource owner, with no service lookup or runtime discovery.
-
-### Scope and ownership
-
-- Initial owners: `SecretStream`, `FileProtector`, `FileHasher`, `RemoteJwks` and its internal resource boundary. Reuse existing stream loops; keep optional checks absent from unbound hot paths beyond a nullable guard.
-- Validate runtime PID, request/runtime identity, request completion, scope/task liveness and both request/scope cancellation sources. Reject invalid, completed, cancelled or stale borrowed objects. Validate at entry, safe checkpoints, after suspension and before publishing output.
-- Check deadlines/cancellation without needing coroutine capability. Use `RUNWIRE_COROUTINES` plus a live host scope to select periodic `yieldNow()`; a capability flag by itself is insufficient.
-- Keep regular-file I/O synchronous. Readiness waits are eligible only for suitable caller-owned nonblocking streams and actual scoped scheduler support. Do not silently change caller stream blocking mode.
-- Preserve normal calls when Runwire is absent; preserve synchronous execution when no applicable capability/scope is supplied. An explicitly cancelled/invalid context must fail, not fall back.
-- Never create/start/stop `Runtime` or `Server`, own workers/listeners/event loops, complete the request, close the host scope, drain unrelated tasks, or alter host hooks.
-- Pass cancellation through existing crypto/error wrappers and remote stale-cache handling deliberately. Cancellation must not be converted into successful stale JWKS retrieval.
-- Preserve file atomic publication and staging cleanup on cancellation. For caller-owned stream output, retain documented partial-write/publication responsibility. Cryptographic framing, authentication, final-tag and trailing-data rules remain unchanged.
-- HTTP and persistence are already caller-injected boundaries. Share context with runtime-aware adapters explicitly when supported; do not assume PSR-18/PSR-16 provides asynchronous operations or mutate arbitrary adapters.
-- Do not offload private keys/passwords to a process, build an internal pool, parallelize state transitions or add async contracts as part of this integration.
-- Keep Runwire under `require-dev` at exact `2.1.1`, plus `suggest`; production use remains opt-in. Declare unsupported-version conflicts based on the validated compatibility contract. No mandatory runtime dependency.
-
-### Integration acceptance
-
-Test direct framework -> Epicrypt and framework -> intermediary -> Epicrypt forwarding with identical borrowed objects; runtime capability missing; scope missing; Runwire entirely absent; normal PHP-FPM; live native coroutine scope; cancelled/expired/completed/mismatched contexts; closed/wrong-task scope; fork/PID mismatch; request replacement; nested composition; interleaved tasks; cancelled file publication; and cancellation during remote fetch/cache refresh. Assert host workers, scope and request lifecycle remain usable and owned by the host.
-
-Use one focused integration test file and existing suites unless a distinct backend needs separate fixtures. Test the exact released Runwire 2.1.1, not just sibling development HEAD. Add Swoole/OpenSwoole acceptance only for explicitly supported capability/transport paths.
-
-## Pathwise 4.2 and bounded improvements
-
-Pathwise is development-only; `^4.1` already permits 4.2, and existing stream/context containment tests pass with installed 4.2. Set the intended integration-test baseline to `^4.2` when implementing the next-release plan, update test descriptions and remaining 4.1 guidance, and retain production smoke coverage with Pathwise absent. No core filesystem rewrite is necessary.
-
-The 287-file inventory warrants a proportionate cohesion review, not blanket deletion. Keep public store interfaces, protocol records/results, policy enums, catchable exceptions and distinct crypto/security boundaries. Consolidate only demonstrated equivalent internal wrappers or redundant conversions while touching their owner. Broad public-type removals would need separate compatibility analysis and may require a major version; they are outside this 3.2.0 plan.
-
-Review explicit password-cost policy documentation and runnable remote-resolver examples as documentation improvements. Preserve memory-hard defaults and host-owned rate limiting, durable storage, routing/consent UI and authorization policy.
-
-## Execution order and release gates
-
-1. Turn S1-S7 probes into permanent regressions in existing JWT/JOSE/integrity/production-smoke suites. Record failures on the old source.
-2. Fix replay windows, destination policy and minimal-production behavior first, then cache interoperability/isolation and response progress. Keep each owner cohesive and preserve formats/public signatures.
-3. Resolve Q1 with the configured sequential PHPForge processors, review every mutation, run focused tests and active static/refactor checks. Report Q2 separately.
-4. Update security/storage/platform guidance with the fixes and retain one 3.2.0 release candidate.
-5. Implement optional Runwire support and Pathwise 4.2 baseline/docs in that candidate; complete all integration acceptance cases.
-6. Certify the complete final committed revision against every applicable gate, then prepare the single 3.2.0 release; report implementation, local validation, hosted validation and published tag/release separately.
-
-Completed local implementation validation:
-
-- [x] Every S1-S7 regression fails before its fix and passes afterward; Q1 static/refactor gates are clean. Four post-review boundaries now have additional adversarial coverage.
-- [x] `composer ic:process`, `composer ic:tests:details` and final `composer ic:release:guard`, following installed PHPForge agent workflow. No gate weakening or vendor edits.
-- [x] Fresh production-only installation exercises valid/invalid integrity and JWT/JOSE paths without dev packages, Pathwise or Runwire, using only declared required extensions.
-- [x] Strict local Sphinx build passes; release documentation covers direct and intermediary context forwarding and final clock-provider cancellation behavior.
-- [x] Release notes explain security acceptance changes, cache cold-start/namespace transition, supported PHP/Pathwise/Runwire contracts and remaining host responsibilities. No tag until all applicable blocking gates are closed.
-
-Completion means confirmed defects are fixed and their regressions/gates pass. A green baseline suite or zero Composer advisories does not close these findings.
-
-**Mandatory final deployment certification:** Fresh authorized Docker PHP-FPM/native persistent-host reports must validate production tree `5d0286488c5d60223bc24df0448bc3dac8c6919c`, including all six unbound/bound concurrency comparisons, correct responses, zero transport errors/timeouts, p50/p95/p99, continuous process-tree RSS, matched runtime/dependency/OPcache/CPU metadata, the 300-second tenant/cancellation/20,000-binding soak and real FPM replacement. Preserve the 2% median RPM, 5% spread, 256 MiB RSS and 2 MiB heap budgets. The initial deployment table is historical; successful final execution reports close this gate.
-
-**Mandatory final-commit certification:** Before release, the latest committed head of [PR #32](https://github.com/infocyph/Epicrypt/pull/32/checks) must have successful Security & Standards and Documentation runs. This includes PHP 8.4/8.5 stable/lowest, full PHPForge processors/detailed tests/release guard, production-only smoke, all mutation floors, Windows/AEGIS, independent JOSE/OAuth/npm audit, benchmarks, and the independent Docker RPM/300-second lifecycle job. The live checks and their uploaded artifacts record this changing commit-level gate; no historical checkpoint or documentation-only change waives it. A green final head establishes pre-publication readiness. Actual merge/tag/release dispatch is a separate user-managed action.
+Completion is determined by successful final execution records, not this document's historical checkpoints. Report local validation, host deployment, exact-head hosted CI and publication state separately.

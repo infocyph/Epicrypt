@@ -28,6 +28,19 @@ composer ic:doctor
 
 Do not modify files inside `vendor/`.
 
+Independent JOSE/OAuth checks use Node 26.11.1 and the exact `jose` version
+in `package-lock.json`. Install and audit them with:
+
+```bash
+npm ci --ignore-scripts
+npm audit --audit-level=high
+```
+
+The two interoperability jobs in `.github/workflows/security-standards.yml`
+contain the bidirectional fixture commands. Docker release measurements use
+Alpine containers; see `docs/benchmarking.rst` for the matched deployment,
+CPU configuration, required tools and acceptance budgets.
+
 ## Engineering Standards
 
 Before changing or reviewing code, read and follow:

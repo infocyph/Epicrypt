@@ -40,6 +40,9 @@ Integration and platform compatibility
   no production Pathwise dependency.
 * PHPForge complexity and Rector findings were resolved without weakening
   the configured analysis, mutation or style thresholds.
+* Release Docker deployments and measurement tools use Alpine images.
+  Independent JavaScript interoperability checks use Node 26.11.1 and
+  ``jose`` 6.2.12; these are development tools only.
 
 Upgrade and operational notes
 -----------------------------

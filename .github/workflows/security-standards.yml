@@ -95,7 +95,7 @@ jobs:
 
   docker-host-acceptance:
     if: github.event_name == 'pull_request'
-    name: "Matched Docker FPM RPM and persistent-host acceptance"
+    name: "Matched Alpine FPM RPM and persistent-host acceptance"
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 80
     permissions:
@@ -223,7 +223,7 @@ jobs:
           fail-fast: true
       - uses: actions/setup-node@v7
         with:
-          node-version: "24"
+          node-version: "26.11.1"
           cache: npm
       - name: Install PHP dependencies
         run: composer install --no-interaction --no-progress --prefer-dist
@@ -256,7 +256,7 @@ jobs:
           fail-fast: true
       - uses: actions/setup-node@v7
         with:
-          node-version: "24"
+          node-version: "26.11.1"
           cache: npm
       - name: Install PHP dependencies
         run: composer install --no-interaction --no-progress --prefer-dist

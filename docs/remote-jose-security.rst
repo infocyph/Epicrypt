@@ -106,7 +106,9 @@ Cached JWKS values are structurally revalidated before use; malformed or
 oversized cached values are ignored and refreshed.
 
 A bounded stale value may be used only after an ordinary refresh failure while
-its configured stale window is still active. An explicit/forced refresh never
+its configured stale window is still active after the failed fetch completes.
+Cancellation from the HTTP client, cache or caller-supplied clock propagates
+instead of returning stale keys. An explicit/forced refresh never
 falls back to stale data. Unknown ``kid`` resolution performs at most one forced
 refresh.
 

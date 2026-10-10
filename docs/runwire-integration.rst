@@ -10,6 +10,11 @@ Installation and ownership
 --------------------------
 
 Only callers opting into this integration install infocyph/runwire 2.1.1.
+
+.. code-block:: bash
+
+   composer require infocyph/runwire:2.1.1
+
 The host owns the runtime, request and optional active coroutine scope.
 Epicrypt never starts or stops the runtime, creates workers, owns a task
 or completes a caller-owned request.
@@ -38,6 +43,27 @@ The optional named context argument is available on SecretStream encrypt
 and decrypt methods (file and stream), FileProtector variants, FileHasher
 hash and verify methods (file and stream), RemoteJwks::load and resolve.
 Do not store a per-request context on static or globally shared owners.
+
+An intermediary can accept the Epicrypt context and forward the same object:
+
+.. code-block:: php
+
+   <?php
+
+   declare(strict_types=1);
+
+   use Infocyph\Epicrypt\Integration\Runwire\RunwireExecutionContext;
+   use Infocyph\Epicrypt\Integrity\FileHasher;
+
+   function artifactDigest(string $path, ?RunwireExecutionContext $context = null): string
+   {
+       return new FileHasher()->hash($path, context: $context);
+   }
+
+Alternatively, forward the host's RuntimeContext, RequestContext and optional
+CoroutineScope through intermediaries and construct the Epicrypt binding inside
+the owning task at the final boundary. A context may be omitted when Runwire
+is unavailable; an explicitly invalid or cancelled binding is rejected.
 
 Cancellation and coroutine scheduling
 -------------------------------------

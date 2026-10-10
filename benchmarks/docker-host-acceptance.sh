@@ -7,7 +7,7 @@ mkdir -p "$report"
 report="$(cd "$report" && pwd)"
 scratch=$(mktemp -d)
 prefix="epicrypt-release-$$"
-php_image=${HOST_PHP_IMAGE:-php:8.4-fpm-bookworm}
+php_image=${HOST_PHP_IMAGE:-php:8.4-fpm-alpine@sha256:78cd8de9970a9cd6ff4d98860a94eb5bf37dd2d5776b4785562dbfad01c29d5a}
 tools_image=${HOST_TOOLS_IMAGE:-"$prefix-tools"}
 sampler=''
 cleanup() {
@@ -32,6 +32,7 @@ cp -a "$repo/src" "$scratch/host/"
 cp "$scratch/host/composer.lock" "$report/host-composer.lock"
 cp "$repo/benchmarks/host-workload.php" "$report/host-workload.fixture"
 php -r 'require $argv[1]; $key=openssl_pkey_new(["private_key_type"=>OPENSSL_KEYTYPE_EC,"curve_name"=>"prime256v1"]); $public=openssl_pkey_get_details($key)["key"]; file_put_contents($argv[2],$public); echo json_encode(["keys"=>[(new Infocyph\Epicrypt\Token\Jwt\Jwks())->exportPublicKeyToJwk($public,"release",Infocyph\Epicrypt\Token\Jwt\Enum\AsymmetricJwtAlgorithm::ES256)]],JSON_THROW_ON_ERROR);' "$repo/vendor/autoload.php" "$scratch/host-public.pem" > "$scratch/host-jwks.json"
+cp "$scratch/host-public.pem" "$scratch/host-jwks.json" "$report/"
 for variant in baseline previous candidate; do
   mkdir -p "$scratch/$variant/benchmarks"
   case "$variant" in
@@ -63,7 +64,7 @@ opcache.memory_consumption=128
 opcache.jit=off
 INI
 if [[ -z ${HOST_TOOLS_IMAGE:-} ]]; then
-  printf '%s\n' 'FROM nginx:stable-bookworm' 'RUN apt-get update && apt-get install -y --no-install-recommends wrk curl procps && rm -rf /var/lib/apt/lists/*' > "$scratch/Dockerfile"
+  printf '%s\n' 'FROM nginx:stable-alpine@sha256:0985e772fb9f729e6fa0980da05fca5d9c468e870eed43071545afa9d2e27d94' 'RUN apk add --no-cache bash curl wrk procps coreutils' > "$scratch/Dockerfile"
   docker build -t "$tools_image" "$scratch" > "$report/tools-build.log" 2>&1
 fi
 docker network create "$prefix" >/dev/null

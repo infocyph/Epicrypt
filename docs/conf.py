@@ -34,7 +34,6 @@ html_theme_options = {
     "show_toc_level": 2,
 }
 
-templates_path = ["_templates"]
 html_static_path = ["_static"]
 html_css_files = ["theme.css"]
 html_title = f"Epicrypt - {version} Documentation"

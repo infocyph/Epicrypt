@@ -133,13 +133,22 @@ For a Docker-equivalent deployment, run the matched FPM fixture:
    HOST_DOCKER_REPORT=var/docker-host-acceptance \
      bash benchmarks/docker-host-acceptance.sh
 
+All fixture containers use Alpine: digest-pinned PHP 8.4 FPM for the HTTP
+variants and persistent process, and digest-pinned Nginx Alpine with Bash,
+curl, wrk, procps and coreutils for the proxy and measurement client.
+The procps implementation supplies numeric process-tree RSS in KiB;
+BusyBox memory units are unsuitable for the RSS guard. Image identities
+and runtime configuration are retained with every report.
+
 The fixture installs one identical production dependency set, including
 host-owned Runwire 2.1.1 and Nyholm PSR-7. It deploys four static FPM workers
 per variant with identical OPcache settings, warms each variant for 60 seconds, then runs
 three alternating 20-second trials at concurrency 1, 4 and 8. CPU affinity
 separates FPM (cores 2,3), the proxy (core 0) and the load generator (core 1);
 override ``HOST_FPM_CPUS``, ``HOST_PROXY_CPUS`` and ``HOST_CLIENT_CPUS`` for
-the host's available CPU set. ``HOST_PHP_IMAGE`` selects the FPM image.
+the host's available CPU set. ``HOST_PHP_IMAGE`` selects an alternative FPM
+image; ``HOST_TOOLS_IMAGE`` reuses a prepared measurement image. Overrides
+define a separate deployment profile and must be recorded with its evidence.
 Temporary file outputs use an identical bounded 128 MiB tmpfs per variant;
 request access logs are disabled while error logs remain available. This
 profile measures a Docker deployment with ephemeral memory-backed staging,
@@ -153,7 +162,8 @@ Unbound calls compare against tag 3.1; borrowed calls compare against the
 pre-remediation Runwire implementation at ``1b034ec``. Every measured response
 must exactly match the independently defined result. The unchanged 2% median
 RPM and 256 MiB process-tree RSS budgets apply. Evidence includes raw trials,
-latencies, image identities, PHP configuration and the host dependency lock.
+latencies, image identities, PHP configuration, the host dependency lock,
+and the public EC key/JWKS shared by the three variants within that run.
 The comparator rejects trial spreads above 5% before evaluating the RPM budget.
 The same fixture runs independently in CI and preserves its raw evidence as
 an artifact; the Docker-authorized host remains the production-equivalent
