@@ -390,7 +390,6 @@ final readonly class OAuthTokenEndpoint
         if (!$grant instanceof RefreshTokenGrant || !hash_equals($grant->clientId, $clientId)) {
             return OAuthErrorCode::INVALID_GRANT;
         }
-        $actualDpop = $dpop?->keyThumbprint;
         if ($grant->dpopKeyThumbprint !== $actualDpop) {
             return OAuthErrorCode::INVALID_DPOP_PROOF;
         }
