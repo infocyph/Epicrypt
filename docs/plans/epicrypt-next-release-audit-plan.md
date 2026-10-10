@@ -2,6 +2,21 @@
 
 Date: 2026-10-10, Asia/Dhaka. Status: audit complete; remediation and optional integration are planned, not implemented.
 
+## Implementation tracker
+
+Status: **In progress**. Draft PR: [#32](https://github.com/infocyph/Epicrypt/pull/32). Update each row only after a committed change and recorded QA evidence. Never treat the audited baseline as final release certification.
+
+| Batch | Scope | Implementation | Focused QA | Commit / evidence |
+| --- | --- | --- | --- | --- |
+| 1 | S1–S3 JWT/DPoP replay and remote JOSE address security | Pending | Pending | — |
+| 2 | S4–S7 integrity, PSR-16 cache, remote reads | Pending | Pending | — |
+| 3 | Q1 complexity and Rector remediation | Pending | Pending | — |
+| 4 | Optional Runwire 2.1.1 integration | Pending | Pending | — |
+| 5 | Pathwise 4.2/docs/release automation R1 | Pending | Pending | — |
+| 6 | Final QA, interoperability, performance and release guard | Pending | Pending | — |
+
+**R1 — Release workflow trigger (blocking):** `.github/workflows/security-standards.yml` has a tag-only `release` job but its push trigger filters only branches. Explicitly enable `push.tags` without disabling branch/PR QA. Check workflow trigger behavior before tagging.
+
 ## Decision and governing rules
 
 Target one **3.2.0** release containing the full planned change set: S1-S7 security/correctness fixes, Q1 quality remediation, additive Runwire 2.1.1 support, Pathwise 4.2 integration baseline and affected documentation. Runwire support is part of the release scope; using it remains optional for consumers. All applicable fix and integration gates must pass before releasing. No finding currently requires a 4.0 release.
