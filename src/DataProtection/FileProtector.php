@@ -6,10 +6,10 @@ namespace Infocyph\Epicrypt\DataProtection;
 
 use Infocyph\Epicrypt\Crypto\SecretStream;
 use Infocyph\Epicrypt\Exception\Crypto\DecryptionException;
+use Infocyph\Epicrypt\Integration\Runwire\RunwireExecutionContext;
 use Infocyph\Epicrypt\Internal\Base64Url;
 use Infocyph\Epicrypt\Internal\Clock\SystemClock;
 use Infocyph\Epicrypt\Internal\Json;
-use Infocyph\Epicrypt\Integration\Runwire\RunwireExecutionContext;
 use Infocyph\Epicrypt\Internal\StreamIO;
 use Infocyph\Epicrypt\Security\KeyPurpose;
 use Infocyph\Epicrypt\Security\KeyRing;
@@ -24,9 +24,7 @@ final readonly class FileProtector
 
     private const int MAX_PREFIX_SIZE = 32 * 1024;
 
-    public function __construct(private ClockInterface $clock = new SystemClock())
-    {
-    }
+    public function __construct(private ClockInterface $clock = new SystemClock()) {}
 
     public function protect(
         string $inputPath,
@@ -162,7 +160,9 @@ final readonly class FileProtector
                     $chunkSize,
                     $context,
                 ),
-                $context === null ? null : static fn() => $context->assertActive(),
+                $context === null ? null : static function () use ($context): void {
+                    $context->assertActive();
+                },
             ),
         );
 
@@ -192,7 +192,9 @@ final readonly class FileProtector
                     $chunkSize,
                     $context,
                 ),
-                $context === null ? null : static fn() => $context->assertActive(),
+                $context === null ? null : static function () use ($context): void {
+                    $context->assertActive();
+                },
             ),
         );
 
@@ -337,7 +339,9 @@ final readonly class FileProtector
                     $chunkSize,
                     $context,
                 ),
-                $context === null ? null : static fn() => $context->assertActive(),
+                $context === null ? null : static function () use ($context): void {
+                    $context->assertActive();
+                },
             ),
         );
 
@@ -367,7 +371,9 @@ final readonly class FileProtector
                     $chunkSize,
                     $context,
                 ),
-                $context === null ? null : static fn() => $context->assertActive(),
+                $context === null ? null : static function () use ($context): void {
+                    $context->assertActive();
+                },
             ),
         );
 
