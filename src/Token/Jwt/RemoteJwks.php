@@ -37,7 +37,20 @@ final readonly class RemoteJwks
             $configuration->maximumKeys,
             $hostResolver ?? new NativeRemoteJoseHostResolver(),
         );
-        $this->cacheKey = 'epicrypt:jwks:' . hash('sha256', $configuration->issuer . "\0" . ($configuration->jwksUri ?? 'discovery'));
+        $hosts = array_values(array_unique($configuration->allowedJwksHosts));
+        sort($hosts, SORT_STRING);
+        $identity = [
+            $configuration->issuer,
+            $configuration->jwksUri,
+            $configuration->minimumTtl,
+            $configuration->maximumTtl,
+            $configuration->staleTtl,
+            $configuration->maximumResponseBytes,
+            $configuration->maximumKeys,
+            $configuration->allowHttp,
+            $hosts,
+        ];
+        $this->cacheKey = hash('sha256', "epicrypt\0jwks\0v2\0" . json_encode($identity, JSON_THROW_ON_ERROR));
     }
 
     /** @return array{keys: list<array<string, mixed>>} */

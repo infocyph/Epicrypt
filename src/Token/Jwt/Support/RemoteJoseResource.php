@@ -48,7 +48,11 @@ final readonly class RemoteJoseResource
         }
         $json = '';
         while (!$body->eof()) {
-            $json .= $body->read(min(8192, ($this->maximumBytes + 1) - strlen($json)));
+            $chunk = $body->read(min(8192, ($this->maximumBytes + 1) - strlen($json)));
+            if ($chunk === '') {
+                throw new KeyResolutionException('Remote JOSE response stream made no progress.');
+            }
+            $json .= $chunk;
             if (strlen($json) > $this->maximumBytes) {
                 throw new KeyResolutionException('Remote JOSE response exceeds the configured size bound.');
             }

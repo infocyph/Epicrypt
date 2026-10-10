@@ -132,9 +132,7 @@ final class JwtToken
     private static function isObjectKey(#[\SensitiveParameter] string $json, int $offset, bool $insideObject): bool
     {
         $length = strlen($json);
-        while ($offset < $length && ctype_space($json[$offset])) {
-            $offset++;
-        }
+        $offset += strspn($json, " \t\r\n", $offset);
 
         return $insideObject && $offset < $length && $json[$offset] === ':';
     }
