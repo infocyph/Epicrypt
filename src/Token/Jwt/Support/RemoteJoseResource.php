@@ -84,7 +84,7 @@ final readonly class RemoteJoseResource
             throw new KeyResolutionException('Remote JOSE host did not resolve to an allowed address.');
         }
         foreach ($addresses as $address) {
-            if (!$this->isPublicAddress($address)) {
+            if (!PublicUnicastAddress::allows($address)) {
                 throw new KeyResolutionException('Remote JOSE host resolved to a disallowed address.');
             }
         }
@@ -104,25 +104,4 @@ final readonly class RemoteJoseResource
         ];
     }
 
-    private function isPublicAddress(string $address): bool
-    {
-        if (filter_var($address, FILTER_VALIDATE_IP) === false) {
-            return false;
-        }
-
-        $packed = inet_pton($address);
-        if (is_string($packed)
-            && strlen($packed) === 16
-            && substr($packed, 0, 12) === str_repeat("\0", 10) . "\xff\xff") {
-            $mapped = inet_ntop(substr($packed, 12, 4));
-
-            return is_string($mapped) && $this->isPublicAddress($mapped);
-        }
-
-        return filter_var(
-            $address,
-            FILTER_VALIDATE_IP,
-            FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE,
-        ) !== false;
-    }
 }

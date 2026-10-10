@@ -147,7 +147,9 @@ final readonly class DpopProof
         $this->validateOptionalBinding($claims, 'ath', $accessToken === null ? null : Base64Url::encode(hash('sha256', $accessToken, true)));
         $this->validateOptionalBinding($claims, 'nonce', $nonce);
         $thumbprint = new Jwks()->thumbprint($jwk);
-        if (!$replayStore->consume($thumbprint, $jwtId, $issuedAt + $maximumAgeSeconds)) {
+        if (!$replayStore->consume($thumbprint, $jwtId, ($issuedAt > PHP_INT_MAX - $maximumAgeSeconds - 1
+            ? PHP_INT_MAX
+            : $issuedAt + $maximumAgeSeconds + 1))) {
             throw new InvalidTokenException('DPoP proof was already consumed.');
         }
 
