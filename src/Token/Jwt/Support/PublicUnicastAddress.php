@@ -9,10 +9,6 @@ final class PublicUnicastAddress
 {
     public static function allows(string $address): bool
     {
-        if (filter_var($address, FILTER_VALIDATE_IP, FILTER_FLAG_GLOBAL_RANGE) === false) {
-            return false;
-        }
-
         $packed = inet_pton($address);
         if (!is_string($packed)) {
             return false;
@@ -25,9 +21,12 @@ final class PublicUnicastAddress
                 return is_string($mapped) && self::allows($mapped);
             }
 
-            return ord($packed[0]) !== 0xff;
+            return ord($packed[0]) !== 0xff
+                && filter_var($address, FILTER_VALIDATE_IP, FILTER_FLAG_GLOBAL_RANGE) !== false;
         }
 
-        return strlen($packed) === 4 && (ord($packed[0]) < 224 || ord($packed[0]) > 239);
+        return strlen($packed) === 4
+            && filter_var($address, FILTER_VALIDATE_IP, FILTER_FLAG_GLOBAL_RANGE) !== false
+            && (ord($packed[0]) < 224 || ord($packed[0]) > 239);
     }
 }
