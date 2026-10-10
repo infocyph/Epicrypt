@@ -120,16 +120,7 @@ final readonly class OpenIdIdTokenValidator
             throw new InvalidClaimException('OIDC ID token nonce does not match.');
         }
 
-        $now = $this->clock->now()->getTimestamp();
-        $authTime = $claims['auth_time'] ?? null;
-        if (array_key_exists('auth_time', $claims)
-            && (!is_int($authTime) || $authTime < 1 || $authTime > $now)) {
-            throw new InvalidClaimException('OIDC ID token auth_time is invalid.');
-        }
-        if ($maximumAuthenticationAge !== null
-            && (!is_int($authTime) || ($now - $authTime) > $maximumAuthenticationAge)) {
-            throw new InvalidClaimException('OIDC ID token auth_time violates maximum age.');
-        }
+        $this->validateAuthenticationTime($claims, $maximumAuthenticationAge);
 
         $acr = $claims['acr'] ?? null;
         if (array_key_exists('acr', $claims)
@@ -158,6 +149,22 @@ final readonly class OpenIdIdTokenValidator
             }
             $seen[$method] = true;
         }
+    }
+
+    /** @param array<string, mixed> $claims */
+    private function validateAuthenticationTime(array $claims, ?int $maximumAuthenticationAge): void
+    {
+        $now = $this->clock->now()->getTimestamp();
+        $authTime = $claims['auth_time'] ?? null;
+        if (array_key_exists('auth_time', $claims)
+            && (!is_int($authTime) || $authTime < 1 || $authTime > $now)) {
+            throw new InvalidClaimException('OIDC ID token auth_time is invalid.');
+        }
+        if ($maximumAuthenticationAge !== null
+            && (!is_int($authTime) || ($now - $authTime) > $maximumAuthenticationAge)) {
+            throw new InvalidClaimException('OIDC ID token auth_time violates maximum age.');
+        }
+
     }
 
     private function validateConfiguration(
