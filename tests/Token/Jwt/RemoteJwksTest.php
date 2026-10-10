@@ -573,11 +573,10 @@ it('uses PSR-16-compatible cache keys and isolates different JWKS policies', fun
         ->toBe(['keys' => []])
         ->and($cacheHitClient->getRequests())->toHaveCount(0);
 
-    $clock->timestamp = 1100;
     $strict = new RemoteJwksConfiguration($issuer, $url, minimumTtl: 1, maximumTtl: 5, staleTtl: 0, allowedJwksHosts: $hosts);
     $strictClient = new Client($factory);
     $strictClient->addResponse(new Response(200, ['Content-Type' => 'application/jwk-set+json'], '{"keys":[]}'));
-    expect((new RemoteJwks($strictClient, $factory, $strict, $cache, $clock, remoteJwksResolver()))->load())
+    expect((new RemoteJwks($strictClient, $factory, $strict, $cache, remoteJwksClock(1100), remoteJwksResolver()))->load())
         ->toBe(['keys' => []])
         ->and($strictClient->getRequests())->toHaveCount(1);
 });
