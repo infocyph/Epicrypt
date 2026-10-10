@@ -31,6 +31,71 @@ jobs:
       actions: read
       contents: read
 
+  release-candidate-acceptance:
+    if: github.event_name == 'pull_request'
+    name: "PHPForge release candidate acceptance"
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.4"
+          extensions: "hash, json, openssl, sodium"
+          coverage: none
+          tools: composer:v2
+        env:
+          fail-fast: true
+      - name: Install development and QA dependencies
+        run: composer install --no-interaction --no-progress --prefer-dist
+      - name: Apply PHPForge processors without changing committed sources
+        run: |
+          composer ic:process
+          git diff --exit-code
+      - name: Run detailed PHPForge quality suite
+        run: composer ic:tests:details
+      - name: Run final PHPForge release guard
+        run: composer ic:release:guard
+
+  production-minimal:
+    if: github.event_name == 'pull_request'
+    name: "Production-only declared extensions (PHP ${{ matrix.php }})"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ["8.4", "8.5"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "${{ matrix.php }}"
+          extensions: "hash, json, openssl, sodium"
+          coverage: none
+          tools: composer:v2
+        env:
+          fail-fast: true
+      - name: Install only production dependencies
+        run: composer install --no-dev --no-interaction --no-progress --prefer-dist --optimize-autoloader
+      - name: Verify absent optional integrations and minimal production paths
+        run: php tests/Smoke/core-no-pathwise.php
+      - name: Verify minimum declared extension set without php.ini
+        shell: bash
+        run: |
+          flags=()
+          for extension in hash json openssl sodium; do
+            if ! php -n -r "exit(extension_loaded('$extension') ? 0 : 1);"; then
+              flags+=("-d" "extension=$extension")
+            fi
+          done
+          php -n "${flags[@]}" -r 'foreach (["hash", "json", "openssl", "sodium"] as $extension) { if (!extension_loaded($extension)) { fwrite(STDERR, "Missing required extension: $extension\n"); exit(1); } }'
+          php -n "${flags[@]}" tests/Smoke/core-no-pathwise.php
+
   jose-interoperability:
     if: github.event_name != 'push' || !startsWith(github.ref, 'refs/tags/')
     name: "Independent JOSE interoperability"

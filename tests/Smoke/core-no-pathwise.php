@@ -14,6 +14,9 @@ use Infocyph\Epicrypt\Token\Jwt\SymmetricJwt;
 if (class_exists('Infocyph\\Pathwise\\Storage\\StorageContext')) {
     throw new RuntimeException('Pathwise must not be installed in the production-only smoke job.');
 }
+if (class_exists('Infocyph\\Runwire\\RuntimeContext')) {
+    throw new RuntimeException('Runwire must not be installed in the production-only smoke job.');
+}
 
 $key = random_bytes(SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_KEYBYTES);
 $input = fopen('php://temp', 'w+b');
