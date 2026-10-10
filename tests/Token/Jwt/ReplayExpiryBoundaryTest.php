@@ -9,6 +9,8 @@ use Infocyph\Epicrypt\Token\Jwt\DpopProof;
 use Infocyph\Epicrypt\Token\Jwt\Enum\AsymmetricJwtAlgorithm;
 use Infocyph\Epicrypt\Token\Jwt\Jwks;
 use Infocyph\Epicrypt\Token\Jwt\JwtClaims;
+use Infocyph\Epicrypt\Token\Jwt\JwtFailureReason;
+use Infocyph\Epicrypt\Token\Jwt\JwtReplayMode;
 use Infocyph\Epicrypt\Token\Jwt\JwtPolicy;
 use Infocyph\Epicrypt\Token\Jwt\JwtReplayStoreInterface;
 use Infocyph\Epicrypt\Token\Jwt\SymmetricJwt;
