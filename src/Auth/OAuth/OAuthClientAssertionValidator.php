@@ -172,11 +172,11 @@ final readonly class OAuthClientAssertionValidator
             return OAuthClientAssertionStatus::INVALID_CLAIMS;
         }
 
+        /** @var int $issuedAt Validated by validClaimIdentity above. */
         $issuedAt = $claims['iat'];
+        /** @var int $expiresAt Validated by validClaimIdentity above. */
         $expiresAt = $claims['exp'];
-        if (!is_int($issuedAt) || !is_int($expiresAt)) {
-            return OAuthClientAssertionStatus::INVALID_CLAIMS;
-        }
+
         $notBefore = $claims['nbf'] ?? null;
         if ($issuedAt < 1
             || $expiresAt <= $issuedAt

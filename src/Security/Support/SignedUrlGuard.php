@@ -94,7 +94,8 @@ final class SignedUrlGuard
         $normalized = [];
 
         foreach ($query as $key => $value) {
-            if (!self::isValidQueryKey($key)) {
+            $key = self::normalizeQueryName($key);
+            if ($key === null) {
                 return null;
             }
 
@@ -206,11 +207,6 @@ final class SignedUrlGuard
         return true;
     }
 
-    private static function isValidQueryKey(mixed $queryName): bool
-    {
-        return is_string($queryName) && preg_match('/\A[A-Za-z0-9_-]+\z/D', $queryName) === 1;
-    }
-
     /**
      * @param array<array-key, mixed> $value
      * @return array<array-key, scalar>|null
@@ -231,6 +227,13 @@ final class SignedUrlGuard
         ksort($normalized);
 
         return $normalized;
+    }
+
+    private static function normalizeQueryName(mixed $queryName): ?string
+    {
+        return is_string($queryName) && preg_match('/\A[A-Za-z0-9_-]+\z/D', $queryName) === 1
+            ? $queryName
+            : null;
     }
 
     private static function parseTimestamp(mixed $value): ?int
