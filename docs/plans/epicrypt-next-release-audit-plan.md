@@ -19,6 +19,8 @@ The Docker-equivalent host is explicitly authorized by the user. `benchmarks/doc
 
 **Measurement integrity:** Early Docker attempts are not certification: a BusyBox `ps` reported non-KiB units, and later runs exceeded the 5% stability bound. The comparator now rejects nonnumeric RSS and unstable trials with permanent negative regressions. The final profile uses matched bounded tmpfs staging, disabled access logs, explicit CPU affinity and 60-second warmup. A separate hosted Docker job validates the exact PR source and uploads raw measurements; budgets remain unchanged.
 
+**First post-review CI:** Commit `63577d2` passed strict Documentation and all 35 non-Docker Security & Standards jobs, including full PHPForge acceptance, PHP 8.4/8.5 stable/lowest, Windows, AEGIS, all mutation shards and independent JOSE/OAuth interoperability. Docker CI correctly rejected an unstable concurrency-4 baseline: 61,405.604 to 58,155.638 RPM (>5% spread); candidate trials also slowed. This is not performance certification. The independent job now uses native `ubuntu-24.04-arm` and longer 30-second trials, retaining all existing budgets. Local Docker acceptance uses the same frozen production sources.
+
 | Batch | Scope | Implementation | Focused QA | Commit / evidence |
 | --- | --- | --- | --- | --- |
 | 1 | S1–S3 JWT/DPoP replay and remote JOSE address security | Complete: source, boundary regressions, security docs | Focused QA passed on `816287e`: Pest/Pint/PHPCS, all mutation shards incl. JWT and remote JOSE, JOSE/OAuth interoperability, AEGIS/Windows. Q1 static/Rector failures remain tracked in Batch 3; baseline probes documented below | `284da9a`–`816287e`; [security QA run](https://github.com/infocyph/Epicrypt/actions/runs/38026345942) |

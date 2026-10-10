@@ -96,8 +96,8 @@ jobs:
   docker-host-acceptance:
     if: github.event_name == 'pull_request'
     name: "Matched Docker FPM RPM and persistent-host acceptance"
-    runs-on: ubuntu-latest
-    timeout-minutes: 50
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 60
     permissions:
       contents: read
     steps:
@@ -116,6 +116,7 @@ jobs:
       - name: Measure matched deployments and sustained lifecycle
         env:
           HOST_SOAK_CPUS: "2"
+          HOST_DURATION: "30s"
         run: bash benchmarks/docker-host-acceptance.sh
       - name: Preserve raw measurements and deployment configuration
         if: always()

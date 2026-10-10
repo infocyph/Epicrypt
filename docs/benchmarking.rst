@@ -158,6 +158,9 @@ The comparator rejects trial spreads above 5% before evaluating the RPM budget.
 The same fixture runs independently in CI and preserves its raw evidence as
 an artifact; the Docker-authorized host remains the production-equivalent
 acceptance environment.
+The independent CI deployment uses native ARM, four static FPM workers and
+30-second measured trials with the same budgets. Interpret each deployment's
+baseline/candidate comparison within its recorded architecture and CPU profile.
 
 For a sustained persistent-process check, set
 ``EPICRYPT_HOST_SOAK_SECONDS=300`` when running
