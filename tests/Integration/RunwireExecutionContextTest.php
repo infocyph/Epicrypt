@@ -17,7 +17,11 @@ use Psr\Http\Client\ClientInterface;
 use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseInterface;
 use Psr\SimpleCache\CacheInterface;
+use Infocyph\Runwire\Coroutine\CoroutineRuntime;
+use Infocyph\Runwire\Coroutine\CoroutineScope;
 use Infocyph\Runwire\Exception\CancelledException;
+use Infocyph\Runwire\Runtime\Enum\RuntimeDriver;
+use Infocyph\Runwire\RuntimeCapabilities;
 use Infocyph\Runwire\RequestContext;
 use Infocyph\Runwire\Runtime\Enum\CancellationReason;
 use Infocyph\Runwire\RuntimeContext;
@@ -171,4 +175,75 @@ it('does not return stale JWKS when host cancellation occurs during HTTP refresh
     );
 
     expect(fn () => $remote->load(context: $context))->toThrow(CancelledException::class);
+});
+
+it('checks liveness and yields only inside a live borrowed host coroutine scope', function () {
+    $capabilities = new RuntimeCapabilities(RuntimeDriver::NATIVE, supportsRunwireCoroutines: true);
+    $runtime = RuntimeContext::fromCapabilities($capabilities, 'epicrypt-test');
+    $request = RequestContext::create($runtime);
+    $events = [];
+    $borrowed = null;
+
+    $digest = (new CoroutineRuntime())->run(function (CoroutineScope $scope) use (
+        $runtime,
+        $request,
+        &$events,
+        &$borrowed,
+    ): string {
+        $borrowed = new RunwireExecutionContext($runtime, $request, $scope, checkpointEvery: 1);
+        $task = $scope->spawn(static function () use (&$events): void {
+            $events[] = 'host-task';
+        });
+        $stream = fopen('php://temp', 'w+b');
+        fwrite($stream, str_repeat('owned-by-host', 4096));
+        rewind($stream);
+
+        try {
+            $hash = (new FileHasher())->hashStream($stream, context: $borrowed);
+            $task->await();
+            $events[] = 'epicrypt-complete';
+
+            return $hash;
+        } finally {
+            fclose($stream);
+        }
+    });
+    expect($digest)->toBe(hash('sha256', str_repeat('owned-by-host', 4096)))
+        ->and($events)->toBe(['host-task', 'epicrypt-complete'])
+        ->and($request->completed())->toBeFalse();
+    expect(fn () => $borrowed->checkpoint())->toThrow(LogicException::class);
+});
+
+it('preserves separate borrowed request cancellation across interleaved host tasks', function () {
+    $runtime = RuntimeContext::fromCapabilities(
+        new RuntimeCapabilities(RuntimeDriver::NATIVE, supportsRunwireCoroutines: true),
+        'epicrypt-isolated',
+    );
+    $first = RequestContext::create($runtime);
+    $second = RequestContext::create($runtime);
+    $events = [];
+
+    (new CoroutineRuntime())->run(function (CoroutineScope $scope) use ($runtime, $first, $second, &$events): void {
+        $one = new RunwireExecutionContext($runtime, $first, $scope, checkpointEvery: 1);
+        $two = new RunwireExecutionContext($runtime, $second, $scope, checkpointEvery: 1);
+        $a = $scope->spawn(static function () use ($first, $one, &$events): void {
+            $first->cancel(CancellationReason::HOST_CANCELLED);
+            try {
+                $one->checkpoint();
+            } catch (CancelledException) {
+                $events['a'] = 'cancelled';
+            }
+        });
+        $b = $scope->spawn(static function () use ($two, &$events): void {
+            $two->checkpoint();
+            $events['b'] = 'active';
+        });
+        $a->await();
+        $b->await();
+        $two->checkpoint();
+    });
+
+    expect($events)->toBe(['a' => 'cancelled', 'b' => 'active'])
+        ->and($second->completed())->toBeFalse()
+        ->and($first->completed())->toBeFalse();
 });
