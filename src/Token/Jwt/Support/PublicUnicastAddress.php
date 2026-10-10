@@ -22,11 +22,11 @@ final class PublicUnicastAddress
             }
 
             return ord($packed[0]) !== 0xff
-                && filter_var($address, FILTER_VALIDATE_IP, FILTER_FLAG_GLOBAL_RANGE) !== false;
+                && filter_var($address, FILTER_VALIDATE_IP, FILTER_FLAG_GLOBAL_RANGE) === $address;
         }
 
         return strlen($packed) === 4
-            && filter_var($address, FILTER_VALIDATE_IP, FILTER_FLAG_GLOBAL_RANGE) !== false
+            && filter_var($address, FILTER_VALIDATE_IP, FILTER_FLAG_GLOBAL_RANGE) === $address
             && (ord($packed[0]) < 224 || ord($packed[0]) > 239);
     }
 }
