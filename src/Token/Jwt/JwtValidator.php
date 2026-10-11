@@ -160,9 +160,11 @@ final class JwtValidator
             }
 
             if (!self::validCustomClaim($name, $value, $profile)) {
-                return $name === 'scope'
-                    ? JwtFailureReason::INVALID_SCOPE
-                    : ($name === 'client_id' ? JwtFailureReason::INVALID_CLIENT_ID : JwtFailureReason::INVALID_CUSTOM_CLAIM);
+                return match ($name) {
+                    'scope' => JwtFailureReason::INVALID_SCOPE,
+                    'client_id' => JwtFailureReason::INVALID_CLIENT_ID,
+                    default => JwtFailureReason::INVALID_CUSTOM_CLAIM,
+                };
             }
         }
 

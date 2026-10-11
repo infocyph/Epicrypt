@@ -71,7 +71,7 @@ final readonly class SignedUrl
         }
 
         $merged = array_merge($existing, $parameters);
-        $normalized = $this->normalizeQuery($merged, $options->allowArrayParameters);
+        $normalized = SignedUrlGuard::normalizeQuery($merged, $options->allowArrayParameters);
         if ($normalized === null) {
             throw new ConfigurationException('Signed URL query parameters contain unsupported values.');
         }
@@ -90,7 +90,7 @@ final readonly class SignedUrl
             $merged[$this->keyIdParam] = $keyId;
         }
 
-        $merged = $this->normalizeQuery($merged, $options->allowArrayParameters);
+        $merged = SignedUrlGuard::normalizeQuery($merged, $options->allowArrayParameters);
         if ($merged === null) {
             throw new ConfigurationException('Signed URL query parameters contain unsupported values.');
         }
@@ -139,7 +139,7 @@ final readonly class SignedUrl
             return $methodValidation;
         }
 
-        $normalized = $this->normalizeQuery($query, $options->allowArrayParameters);
+        $normalized = SignedUrlGuard::normalizeQuery($query, $options->allowArrayParameters);
         if ($normalized === null) {
             return SignedUrlGuard::invalidSignatureResult($expiresAt, $version);
         }
@@ -317,68 +317,6 @@ final readonly class SignedUrl
         return preg_match('/%(?![0-9A-Fa-f]{2})/', $value) !== 1;
     }
 
-    /**
-     * @param array<array-key, mixed> $value
-     * @return array<array-key, scalar>|null
-     */
-    private function normalizeArrayValue(array $value): ?array
-    {
-        $normalized = [];
-        foreach ($value as $key => $item) {
-            if (is_scalar($item)) {
-                $normalized[$key] = $item;
-
-                continue;
-            }
-
-            return null;
-        }
-
-        ksort($normalized);
-
-        return $normalized;
-    }
-
-    /**
-     * @param array<array-key, mixed> $query
-     * @return QueryMap|null
-     */
-    private function normalizeQuery(array $query, bool $allowArrays): ?array
-    {
-        $normalized = [];
-
-        foreach ($query as $key => $value) {
-            if (!is_string($key) || preg_match('/\A[A-Za-z0-9_-]+\z/D', $key) !== 1) {
-                return null;
-            }
-
-            if (is_scalar($value)) {
-                $normalized[$key] = $value;
-
-                continue;
-            }
-
-            if ($value === null) {
-                continue;
-            }
-
-            if (!$allowArrays || !is_array($value)) {
-                return null;
-            }
-
-            $normalizedArray = $this->normalizeArrayValue($value);
-            if ($normalizedArray === null) {
-                return null;
-            }
-
-            $normalized[$key] = $normalizedArray;
-        }
-
-        ksort($normalized);
-
-        return $normalized;
-    }
-
     /** @return QueryMap|null */
     private function parseRawQuery(string $query): ?array
     {
@@ -418,7 +356,7 @@ final readonly class SignedUrl
             return null;
         }
 
-        $normalizedQuery = $this->normalizeQuery($query, allowArrays: true);
+        $normalizedQuery = SignedUrlGuard::normalizeQuery($query, allowArrays: true);
         if ($normalizedQuery === null) {
             return null;
         }

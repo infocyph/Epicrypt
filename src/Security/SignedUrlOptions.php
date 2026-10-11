@@ -29,25 +29,34 @@ final class SignedUrlOptions
         }
 
         if ($this->allowedHosts !== null) {
-            $normalizedHosts = [];
-            foreach ($this->allowedHosts as $host) {
-                if (!is_string($host)) {
-                    throw new ConfigurationException('Signed URL allowedHosts must contain only non-empty strings.');
-                }
-
-                $normalized = strtolower(trim($host));
-                if ($normalized === '') {
-                    throw new ConfigurationException('Signed URL allowedHosts must contain only non-empty strings.');
-                }
-
-                $normalizedHosts[] = $normalized;
-            }
-
-            if ($normalizedHosts === []) {
-                throw new ConfigurationException('Signed URL allowedHosts must not be empty when provided.');
-            }
-
-            $this->allowedHosts = array_values(array_unique($normalizedHosts));
+            $this->allowedHosts = self::normalizeAllowedHosts($this->allowedHosts);
         }
+    }
+
+    /**
+     * @param array<int, mixed> $hosts
+     * @return non-empty-list<string>
+     */
+    private static function normalizeAllowedHosts(array $hosts): array
+    {
+        $normalizedHosts = [];
+        foreach ($hosts as $host) {
+            if (!is_string($host)) {
+                throw new ConfigurationException('Signed URL allowedHosts must contain only non-empty strings.');
+            }
+
+            $normalized = strtolower(trim($host));
+            if ($normalized === '') {
+                throw new ConfigurationException('Signed URL allowedHosts must contain only non-empty strings.');
+            }
+
+            $normalizedHosts[] = $normalized;
+        }
+
+        if ($normalizedHosts === []) {
+            throw new ConfigurationException('Signed URL allowedHosts must not be empty when provided.');
+        }
+
+        return array_values(array_unique($normalizedHosts));
     }
 }

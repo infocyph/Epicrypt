@@ -5,10 +5,12 @@ declare(strict_types=1);
 namespace Infocyph\Epicrypt\Token\Jwt\Support;
 
 use Infocyph\Epicrypt\Exception\Token\KeyResolutionException;
+use Infocyph\Epicrypt\Integration\Runwire\RunwireExecutionContext;
 use Infocyph\Epicrypt\Token\Jwt\RemoteJoseHostResolverInterface;
 use Psr\Http\Client\ClientExceptionInterface;
 use Psr\Http\Client\ClientInterface;
 use Psr\Http\Message\RequestFactoryInterface;
+use Psr\Http\Message\StreamInterface;
 use Throwable;
 
 /** @internal Bounded PSR-18 JSON resource boundary. */
@@ -23,9 +25,11 @@ final readonly class RemoteJoseResource
     ) {}
 
     /** @return array{array<string, mixed>, array{maxAge: int|null, noStore: bool, noCache: bool}} */
-    public function fetch(string $uri, bool $jwks = false): array
+    public function fetch(string $uri, bool $jwks = false, ?RunwireExecutionContext $context = null): array
     {
+        $context?->assertActive();
         $this->assertPublicTarget($uri);
+        $context?->assertActive();
 
         try {
             $request = $this->requestFactory->createRequest('GET', $uri)
@@ -34,6 +38,7 @@ final readonly class RemoteJoseResource
         } catch (ClientExceptionInterface $exception) {
             throw new KeyResolutionException('Remote JOSE request failed.', 0, $exception);
         }
+        $context?->assertActive();
         if ($response->getStatusCode() !== 200) {
             throw new KeyResolutionException(sprintf('Remote JOSE endpoint returned HTTP %d.', $response->getStatusCode()));
         }
@@ -42,21 +47,13 @@ final readonly class RemoteJoseResource
         if (!in_array($contentType, $allowedMediaTypes, true)) {
             throw new KeyResolutionException('Remote JOSE endpoint returned a non-JSON content type.');
         }
-        $body = $response->getBody();
-        if (($size = $body->getSize()) !== null && $size > $this->maximumBytes) {
-            throw new KeyResolutionException('Remote JOSE response exceeds the configured size bound.');
-        }
-        $json = '';
-        while (!$body->eof()) {
-            $json .= $body->read(min(8192, ($this->maximumBytes + 1) - strlen($json)));
-            if (strlen($json) > $this->maximumBytes) {
-                throw new KeyResolutionException('Remote JOSE response exceeds the configured size bound.');
-            }
-        }
+        $json = $this->readBoundedBody($response->getBody(), $context);
 
         $maximumMembers = $jwks
             ? 1 + ($this->maximumKeys * (JosePolicy::MAX_JWK_MEMBERS + 1))
             : JosePolicy::MAX_DOCUMENT_MEMBERS;
+
+        $context?->assertActive();
 
         return [
             JwtToken::decodeJsonObject($json, 'remote JOSE document', $this->maximumBytes, $maximumMembers),
@@ -84,7 +81,7 @@ final readonly class RemoteJoseResource
             throw new KeyResolutionException('Remote JOSE host did not resolve to an allowed address.');
         }
         foreach ($addresses as $address) {
-            if (!$this->isPublicAddress($address)) {
+            if (!PublicUnicastAddress::allows($address)) {
                 throw new KeyResolutionException('Remote JOSE host resolved to a disallowed address.');
             }
         }
@@ -104,25 +101,26 @@ final readonly class RemoteJoseResource
         ];
     }
 
-    private function isPublicAddress(string $address): bool
+    private function readBoundedBody(StreamInterface $body, ?RunwireExecutionContext $context): string
     {
-        if (filter_var($address, FILTER_VALIDATE_IP) === false) {
-            return false;
+        if (($size = $body->getSize()) !== null && $size > $this->maximumBytes) {
+            throw new KeyResolutionException('Remote JOSE response exceeds the configured size bound.');
+        }
+        $json = '';
+        while (!$body->eof()) {
+            $context?->checkpoint();
+            $chunk = $body->read(min(8192, ($this->maximumBytes + 1) - strlen($json)));
+            if ($chunk === '') {
+                throw new KeyResolutionException('Remote JOSE response stream made no progress.');
+            }
+            $json .= $chunk;
+            if (strlen($json) > $this->maximumBytes) {
+                throw new KeyResolutionException('Remote JOSE response exceeds the configured size bound.');
+            }
         }
 
-        $packed = inet_pton($address);
-        if (is_string($packed)
-            && strlen($packed) === 16
-            && substr($packed, 0, 12) === str_repeat("\0", 10) . "\xff\xff") {
-            $mapped = inet_ntop(substr($packed, 12, 4));
+        $context?->assertActive();
 
-            return is_string($mapped) && $this->isPublicAddress($mapped);
-        }
-
-        return filter_var(
-            $address,
-            FILTER_VALIDATE_IP,
-            FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE,
-        ) !== false;
+        return $json;
     }
 }

@@ -56,6 +56,6 @@ final readonly class StringHasher
     {
         return $binary
             ? strlen($digest) === $expectedBytes
-            : strlen($digest) === $expectedBytes * 2 && ctype_xdigit($digest);
+            : strlen($digest) === $expectedBytes * 2 && strspn($digest, '0123456789abcdefABCDEF') === strlen($digest);
     }
 }

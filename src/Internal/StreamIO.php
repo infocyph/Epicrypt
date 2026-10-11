@@ -80,11 +80,9 @@ final class StreamIO
             }
 
             if ($chunk === '') {
-                if (feof($stream)) {
-                    break;
-                }
+                self::requireReadEof($stream);
 
-                throw new FileAccessException('Input stream made no progress before EOF.');
+                break;
             }
             $buffer .= $chunk;
         }
@@ -126,9 +124,10 @@ final class StreamIO
     /**
      * @template TResult
      * @param \Closure(resource): TResult $operation
+     * @param null|\Closure(): void $beforePublish
      * @return TResult
      */
-    public static function withAtomicLocalOutput(string $outputPath, \Closure $operation): mixed
+    public static function withAtomicLocalOutput(string $outputPath, \Closure $operation, ?\Closure $beforePublish = null): mixed
     {
         self::assertLocalPath($outputPath);
         $directory = dirname($outputPath);
@@ -167,6 +166,7 @@ final class StreamIO
             }
             fclose($stream);
             $stream = null;
+            $beforePublish?->__invoke();
             self::replaceLocalOutput($temporaryPath, $outputPath);
             $committed = true;
 
@@ -288,5 +288,13 @@ final class StreamIO
         }
 
         throw new FileAccessException('Unable to finalize output file: ' . $outputPath);
+    }
+
+    /** @param resource $stream */
+    private static function requireReadEof(mixed $stream): void
+    {
+        if (!feof($stream)) {
+            throw new FileAccessException('Input stream made no progress before EOF.');
+        }
     }
 }

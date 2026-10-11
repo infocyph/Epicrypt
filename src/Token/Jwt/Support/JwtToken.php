@@ -132,11 +132,30 @@ final class JwtToken
     private static function isObjectKey(#[\SensitiveParameter] string $json, int $offset, bool $insideObject): bool
     {
         $length = strlen($json);
-        while ($offset < $length && ctype_space($json[$offset])) {
-            $offset++;
-        }
+        $offset += strspn($json, " \t\r\n", $offset);
 
         return $insideObject && $offset < $length && $json[$offset] === ':';
+    }
+
+    /**
+     * @param list<array<string, true>> $objects
+     */
+    private static function recordObjectKey(array &$objects, #[\SensitiveParameter] string $json, int $start, int $end): void
+    {
+        $key = json_decode(substr($json, $start, ($end - $start) + 1), true, 2, JSON_THROW_ON_ERROR);
+        if (!is_string($key)) {
+            throw new JsonException('JSON object key must be a string.');
+        }
+        $objectIndex = count($objects) - 1;
+        if ($objectIndex < 0) {
+            throw new JsonException('JSON object key is outside an object.');
+        }
+        $object = $objects[$objectIndex];
+        if (isset($object[$key])) {
+            throw new JsonException('Duplicate JSON object key.');
+        }
+        $object[$key] = true;
+        $objects[$objectIndex] = $object;
     }
 
     private static function rejectDuplicateObjectKeys(#[\SensitiveParameter] string $json): void
@@ -165,20 +184,7 @@ final class JwtToken
                 continue;
             }
 
-            $key = json_decode(substr($json, $start, ($offset - $start) + 1), true, 2, JSON_THROW_ON_ERROR);
-            if (!is_string($key)) {
-                throw new JsonException('JSON object key must be a string.');
-            }
-            $objectIndex = count($objects) - 1;
-            if ($objectIndex < 0) {
-                throw new JsonException('JSON object key is outside an object.');
-            }
-            $object = $objects[$objectIndex];
-            if (isset($object[$key])) {
-                throw new JsonException('Duplicate JSON object key.');
-            }
-            $object[$key] = true;
-            $objects[$objectIndex] = $object;
+            self::recordObjectKey($objects, $json, $start, $offset);
         }
     }
 }

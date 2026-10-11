@@ -1,7 +1,7 @@
 Getting started
 ===============
 
-Epicrypt 3.0 requires PHP 8.4 or later with Hash, JSON, OpenSSL, and Sodium.
+Epicrypt 3.2 requires PHP 8.4 or later with Hash, JSON, OpenSSL, and Sodium.
 Install it with Composer and generate cryptographic key material with Epicrypt's
 CSPRNG-backed generators; never derive production keys from memorable secrets.
 

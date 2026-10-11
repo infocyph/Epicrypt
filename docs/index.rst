@@ -1,4 +1,4 @@
-Epicrypt 3.0
+Epicrypt 3.2
 ============
 
 Epicrypt provides authenticated data protection, token security, password
@@ -6,7 +6,8 @@ security, integrity primitives, certificate tooling, and a transport-neutral
 OAuth 2.1/OpenID Connect/personal-token core for PHP 8.4 and later.
 
 Upgrading from Epicrypt 2.x? Start with :doc:`migration-3.0` for dependency,
-API, persisted-format and deployment changes.
+API, persisted-format and deployment changes. See :doc:`release-notes-3.2.0`
+for the security, cache and optional Runwire changes in this candidate.
 
 Complete-path examples
 ----------------------
@@ -34,6 +35,7 @@ Complete-path examples
   subject tokens.
 - :doc:`authentication-standards`: review the exact OAuth 2.1, OIDC Core and
   Discovery standards profile, supported behavior and explicit 3.0 exclusions.
+- :doc:`runwire-integration`: borrow host-owned Runwire 2.1.1 request/scopes for optional stream cancellation.
 - :doc:`remote-jose-security`: deploy Remote JWKS/OpenID discovery with explicit
   DNS, redirect, timeout, cache, and SSRF boundaries.
 - :doc:`token-storage`: implement durable atomic authorization-code, refresh,
@@ -49,6 +51,7 @@ integration example.
 
    getting-started
    migration-3.0
+   release-notes-3.2.0
    architecture
    security-recommendations
    certificate
@@ -63,6 +66,7 @@ integration example.
    oauth-lifecycle
    personal-access-tokens
    authentication-standards
+   runwire-integration
    remote-jose-security
    token-storage
    error-handling

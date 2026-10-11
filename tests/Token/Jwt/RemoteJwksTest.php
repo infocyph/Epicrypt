@@ -15,6 +15,8 @@ use Infocyph\Epicrypt\Token\Jwt\RemoteJwksConfiguration;
 use Nyholm\Psr7\Factory\Psr17Factory;
 use Nyholm\Psr7\Response;
 use Psr\Clock\ClockInterface;
+use Psr\Http\Client\ClientInterface;
+use Psr\Http\Message\StreamInterface;
 use Psr\SimpleCache\CacheInterface;
 
 function remoteJwksClock(int $timestamp): ClockInterface
@@ -114,9 +116,22 @@ function remoteJwksResolver(array $answers = []): RemoteJoseHostResolverInterfac
     };
 }
 
-function remoteJwksCacheKey(string $issuer, ?string $jwksUri): string
+function remoteJwksCacheKey(RemoteJwksConfiguration $configuration): string
 {
-    return 'epicrypt:jwks:' . hash('sha256', $issuer . "\0" . ($jwksUri ?? 'discovery'));
+    $hosts = array_values(array_unique($configuration->allowedJwksHosts));
+    sort($hosts, SORT_STRING);
+
+    return hash('sha256', "epicrypt\0jwks\0v2\0" . json_encode([
+        $configuration->issuer,
+        $configuration->jwksUri,
+        $configuration->minimumTtl,
+        $configuration->maximumTtl,
+        $configuration->staleTtl,
+        $configuration->maximumResponseBytes,
+        $configuration->maximumKeys,
+        $configuration->allowHttp,
+        $hosts,
+    ], JSON_THROW_ON_ERROR));
 }
 
 it('uses one forced refresh to resolve a rolled over remote key', function () {
@@ -239,6 +254,15 @@ it('rejects private reserved mixed empty and malformed DNS answers before sendin
     'loopback IPv6' => [['::1']],
     'link local IPv6' => [['fe80::1']],
     'IPv4 mapped loopback' => [['::ffff:127.0.0.1']],
+    'shared address' => [['100.64.0.1']],
+    'benchmark address' => [['198.18.0.1']],
+    'documentation IPv4' => [['192.0.2.1']],
+    'multicast IPv4' => [['224.0.0.1']],
+    'multicast IPv6' => [['ff02::1']],
+    'documentation IPv6' => [['2001:db8::1']],
+    'mapped multicast' => [['::ffff:224.0.0.1']],
+    'mixed public shared' => [['1.1.1.1', '100.64.0.1']],
+    'mixed public multicast' => [['1.1.1.1', '224.0.0.1']],
     'mixed public and private' => [['1.1.1.1', '10.0.0.1']],
     'empty resolution' => [[]],
     'malformed resolution' => [['not-an-ip']],
@@ -308,7 +332,7 @@ it('discards malformed cached JWKS and retrieves a fresh bounded document', func
     for ($index = 0; $index < 33; $index++) {
         $oversizedJwk['field_' . $index] = 'x';
     }
-    $cache->set(remoteJwksCacheKey($issuer, $jwksUri), [
+    $cache->set(remoteJwksCacheKey(new RemoteJwksConfiguration($issuer, $jwksUri, maximumKeys: 1)), [
         'jwks' => ['keys' => [$oversizedJwk]],
         'freshUntil' => 1_700_000_100,
         'staleUntil' => 1_700_000_200,
@@ -369,6 +393,40 @@ it('uses stale JWKS only after an ordinary refresh failure and never for force r
         ->and($failingClient->getRequests())->toHaveCount(2);
 });
 
+it('checks stale expiry after a slow refresh failure', function (int $finishedAt, bool $allowed) {
+    $factory = new Psr17Factory();
+    $cache = remoteJwksCache();
+    $configuration = new RemoteJwksConfiguration(
+        'https://issuer.example',
+        'https://issuer.example/jwks',
+        minimumTtl: 1,
+        maximumTtl: 1,
+        staleTtl: 2,
+    );
+    $clock = remoteJwksClock(998);
+    $initialClient = new Client($factory);
+    $initialClient->addResponse(new Response(200, ['Content-Type' => 'application/jwk-set+json'], '{"keys":[]}'));
+    $initial = new RemoteJwks($initialClient, $factory, $configuration, $cache, $clock, remoteJwksResolver());
+    expect($initial->load())->toBe(['keys' => []]);
+    $clock->timestamp = 1000;
+    $failingClient = $this->createMock(ClientInterface::class);
+    $failingClient->method('sendRequest')->willReturnCallback(static function () use ($clock, $finishedAt): never {
+        $clock->timestamp = $finishedAt;
+        throw new RuntimeException('Transport failed after waiting.');
+    });
+    $remote = new RemoteJwks($failingClient, $factory, $configuration, $cache, $clock, remoteJwksResolver());
+
+    if ($allowed) {
+        expect($remote->load())->toBe(['keys' => []]);
+    } else {
+        expect(fn () => $remote->load())->toThrow(KeyResolutionException::class);
+    }
+})->with([
+    'before stale expiry' => [1000, true],
+    'at stale expiry' => [1001, false],
+    'after stale expiry' => [1002, false],
+]);
+
 it('honors max-age no-cache and no-store using the injected clock', function (string $cacheControl, int $expectedRequests) {
     $factory = new Psr17Factory();
     $client = new Client($factory);
@@ -398,3 +456,204 @@ it('honors max-age no-cache and no-store using the injected clock', function (st
     'no-cache forces retrieval' => ['no-cache, max-age=120', 2],
     'no-store prevents persistence' => ['no-store, max-age=120', 2],
 ]);
+
+it('rejects non-public literal JOSE issuer addresses during configuration', function (string $url) {
+    expect(fn () => new RemoteJwksConfiguration($url))->toThrow(ConfigurationException::class);
+})->with([
+    'shared IPv4' => ['https://100.64.0.1'],
+    'benchmark IPv4' => ['https://198.18.0.1'],
+    'documentation IPv4' => ['https://192.0.2.1'],
+    'multicast IPv4' => ['https://224.0.0.1'],
+    'documentation IPv6' => ['https://[2001:db8::1]'],
+    'multicast IPv6' => ['https://[ff02::1]'],
+    'mapped multicast' => ['https://[::ffff:224.0.0.1]'],
+]);
+
+it('accepts allowed public literal JOSE issuer addresses', function (string $url) {
+    expect(new RemoteJwksConfiguration($url))->toBeInstanceOf(RemoteJwksConfiguration::class);
+})->with([
+    'global IPv4' => ['https://8.8.8.8'],
+    'global IPv6' => ['https://[2001:4860:4860::8888]'],
+    'mapped public IPv4' => ['https://[::ffff:8.8.8.8]'],
+]);
+
+it('fails closed when a remote JOSE stream makes no read progress', function () {
+    $factory = new Psr17Factory();
+    $client = new Client($factory);
+    $body = $this->createMock(StreamInterface::class);
+    $body->method('getSize')->willReturn(null);
+    $body->method('eof')->willReturn(false);
+    $reads = 0;
+    $body->method('read')->willReturnCallback(static function (int $size) use (&$reads): string {
+        unset($size);
+        if (++$reads > 4) {
+            throw new RuntimeException('Stalled-stream test guard.');
+        }
+
+        return '';
+    });
+    $client->addResponse((new Response(200, ['Content-Type' => 'application/jwk-set+json']))
+        ->withBody($body));
+    $remote = new RemoteJwks(
+        $client,
+        $factory,
+        new RemoteJwksConfiguration('https://issuer.example', 'https://issuer.example/jwks'),
+        hostResolver: remoteJwksResolver(),
+    );
+
+    expect(fn () => $remote->load())->toThrow(KeyResolutionException::class, 'Remote JOSE response stream made no progress.');
+    expect($reads)->toBe(1);
+});
+
+function remoteJwksStrictCache(): CacheInterface
+{
+    return new class implements CacheInterface {
+        /** @var array<string, mixed> */
+        private array $values = [];
+
+        private function assertKey(string $key): void
+        {
+            if (strlen($key) > 64 || preg_match('/\A[A-Za-z0-9_.]+\z/D', $key) !== 1) {
+                throw new InvalidArgumentException('Invalid PSR-16 key.');
+            }
+        }
+
+        public function get(string $key, mixed $default = null): mixed
+        {
+            $this->assertKey($key);
+
+            return $this->values[$key] ?? $default;
+        }
+
+        public function set(string $key, mixed $value, DateInterval|int|null $ttl = null): bool
+        {
+            unset($ttl);
+            $this->assertKey($key);
+            $this->values[$key] = $value;
+
+            return true;
+        }
+
+        public function delete(string $key): bool
+        {
+            $this->assertKey($key);
+            unset($this->values[$key]);
+
+            return true;
+        }
+
+        public function clear(): bool
+        {
+            $this->values = [];
+
+            return true;
+        }
+
+        public function getMultiple(iterable $keys, mixed $default = null): iterable
+        {
+            foreach ($keys as $key) {
+                yield $key => $this->get($key, $default);
+            }
+        }
+
+        public function setMultiple(iterable $values, DateInterval|int|null $ttl = null): bool
+        {
+            foreach ($values as $key => $value) {
+                $this->set((string) $key, $value, $ttl);
+            }
+
+            return true;
+        }
+
+        public function deleteMultiple(iterable $keys): bool
+        {
+            foreach ($keys as $key) {
+                $this->delete($key);
+            }
+
+            return true;
+        }
+
+        public function has(string $key): bool
+        {
+            $this->assertKey($key);
+
+            return array_key_exists($key, $this->values);
+        }
+    };
+}
+
+it('uses PSR-16-compatible cache keys and isolates different JWKS policies', function () {
+    $factory = new Psr17Factory();
+    $cache = remoteJwksStrictCache();
+    $clock = remoteJwksClock(1000);
+    $issuer = 'https://issuer.example';
+    $url = 'https://keys.example/jwks';
+    $hosts = ['keys.example', 'cdn.example'];
+    $baseline = new RemoteJwksConfiguration($issuer, $url, minimumTtl: 1, maximumTtl: 3600, allowedJwksHosts: $hosts);
+    $client = new Client($factory);
+    $client->addResponse(new Response(200, ['Content-Type' => 'application/jwk-set+json'], '{"keys":[]}'));
+    $remote = new RemoteJwks($client, $factory, $baseline, $cache, $clock, remoteJwksResolver());
+    expect($remote->load())->toBe(['keys' => []]);
+
+    $equivalent = new RemoteJwksConfiguration(
+        $issuer,
+        $url,
+        minimumTtl: 1,
+        maximumTtl: 3600,
+        allowedJwksHosts: array_reverse($hosts),
+    );
+    $cacheHitClient = new Client($factory);
+    expect((new RemoteJwks($cacheHitClient, $factory, $equivalent, $cache, $clock, remoteJwksResolver()))->load())
+        ->toBe(['keys' => []])
+        ->and($cacheHitClient->getRequests())->toHaveCount(0);
+
+    $strict = new RemoteJwksConfiguration($issuer, $url, minimumTtl: 1, maximumTtl: 5, staleTtl: 0, allowedJwksHosts: $hosts);
+    $strictClient = new Client($factory);
+    $strictClient->addResponse(new Response(200, ['Content-Type' => 'application/jwk-set+json'], '{"keys":[]}'));
+    expect((new RemoteJwks($strictClient, $factory, $strict, $cache, remoteJwksClock(1100), remoteJwksResolver()))->load())
+        ->toBe(['keys' => []])
+        ->and($strictClient->getRequests())->toHaveCount(1);
+});
+
+it('does not substitute stale JWKS when the metadata cache write fails', function () {
+    $factory = new Psr17Factory();
+    $cache = $this->createMock(CacheInterface::class);
+    $cache->method('get')->willReturn([
+        'jwks' => ['keys' => []],
+        'freshUntil' => 999,
+        'staleUntil' => 1200,
+    ]);
+    $cache->method('set')->willThrowException(new RuntimeException('Cache unavailable.'));
+    $client = new Client($factory);
+    $client->addResponse(new Response(200, ['Content-Type' => 'application/jwk-set+json'], '{"keys":[]}'));
+    $remote = new RemoteJwks(
+        $client,
+        $factory,
+        new RemoteJwksConfiguration('https://issuer.example', 'https://issuer.example/jwks'),
+        $cache,
+        remoteJwksClock(1000),
+        remoteJwksResolver(),
+    );
+
+    expect(fn () => $remote->load())->toThrow(KeyResolutionException::class, 'Remote JWKS cache operation failed.')
+        ->and($client->getRequests())->toHaveCount(1);
+});
+
+it('fails closed on cache lookup errors without issuing an HTTP request', function () {
+    $factory = new Psr17Factory();
+    $cache = $this->createMock(CacheInterface::class);
+    $cache->method('get')->willThrowException(new RuntimeException('Cache lookup failed.'));
+    $client = new Client($factory);
+    $remote = new RemoteJwks(
+        $client,
+        $factory,
+        new RemoteJwksConfiguration('https://issuer.example', 'https://issuer.example/jwks'),
+        $cache,
+        remoteJwksClock(1000),
+        remoteJwksResolver(),
+    );
+
+    expect(fn () => $remote->load())->toThrow(KeyResolutionException::class, 'Remote JWKS cache lookup failed.')
+        ->and($client->getRequests())->toHaveCount(0);
+});

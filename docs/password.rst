@@ -66,6 +66,26 @@ account path still performs password verification. Apply endpoint rate limits
 and capacity-plan the intentional Argon2id cost; never reduce it merely to
 increase login throughput.
 
+Argon2id cost policy
+--------------------
+
+``PasswordHashOptions`` uses PHP's ``PASSWORD_ARGON2_DEFAULT_MEMORY_COST``,
+``PASSWORD_ARGON2_DEFAULT_TIME_COST`` and
+``PASSWORD_ARGON2_DEFAULT_THREADS`` by default. Those platform defaults are
+starting values, not a guarantee that any deployment's password cost is
+sufficient. ``memoryCost`` is in KiB (supported range: 8192-1048576),
+``timeCost`` is the pass count (1-10), and ``threads`` is the parallelism
+setting (1-16). Bcrypt is compatibility-only; ``bcryptCost`` defaults to 12
+and must be between 4 and 31 when selected.
+
+Measure verification time and peak memory at expected concurrent login
+volume on the actual PHP runtime and hardware. Choose a memory-hard Argon2id
+profile within the bounds and available worker memory, then provision the
+same policy for dummy-account verification. Store the selected policy in
+deployment configuration and use ``verifyAndRehash()`` after successful
+authentication when the policy changes. Keep host-owned rate limiting and
+resource controls; never silently lower password cost to improve throughput.
+
 Register, log in, and upgrade a stored hash
 -------------------------------------------
 

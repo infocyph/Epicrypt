@@ -163,7 +163,13 @@ final readonly class SymmetricJwt
         return match ($this->policy?->replayMode) {
             null, JwtReplayMode::NONE => true,
             JwtReplayMode::DENYLIST => $this->replayStore?->isRevoked($issuer, $jwtId, $expiresAt) === false,
-            JwtReplayMode::SINGLE_USE => $this->replayStore?->consume($issuer, $jwtId, $expiresAt) === true,
+            JwtReplayMode::SINGLE_USE => $this->replayStore?->consume(
+                $issuer,
+                $jwtId,
+                $expiresAt > PHP_INT_MAX - $this->policy->leewaySeconds
+                    ? PHP_INT_MAX
+                    : $expiresAt + $this->policy->leewaySeconds,
+            ) === true,
         };
     }
 

@@ -133,9 +133,7 @@ final readonly class JwtPolicy
 
     public function acceptsType(string $type): bool
     {
-        return $this->tokenClass !== null
-            ? $this->tokenClass->acceptsJoseType($type)
-            : hash_equals($this->expectedType, $type);
+        return $this->tokenClass?->acceptsJoseType($type) ?? hash_equals($this->expectedType, $type);
     }
 
     public function requires(string $claim): bool

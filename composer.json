@@ -14,7 +14,7 @@
         }
     ],
     "require": {
-        "php": ">=8.4",
+        "php": "^8.4",
         "ext-hash": "*",
         "ext-json": "*",
         "ext-openssl": "*",
@@ -26,10 +26,17 @@
         "psr/simple-cache": "^3.0"
     },
     "require-dev": {
-        "infocyph/pathwise": "^4.1",
+        "infocyph/pathwise": "^4.2",
         "infocyph/phpforge": "dev-main@dev",
+        "infocyph/runwire": "2.1.1",
         "nyholm/psr7": "^1.8",
         "php-http/mock-client": "^1.6"
+    },
+    "conflict": {
+        "infocyph/runwire": "<2.1.1 || >=2.2.0"
+    },
+    "suggest": {
+        "infocyph/runwire": "2.1.1: Optional borrowed runtime cancellation and coroutine checkpoints for stream and remote JOSE operations."
     },
     "minimum-stability": "stable",
     "prefer-stable": true,

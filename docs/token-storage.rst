@@ -178,6 +178,19 @@ with the token ID; do not collapse unrelated token classes into one identifier
 space. Retain state through the supplied expiration and clean it only after the
 credential can no longer be accepted.
 
+For ``SINGLE_USE`` JWTs, ``consume()`` receives the retention deadline
+``exp + leewaySeconds``, saturated at the integer limit. This is a store
+retention deadline, not a modification to the signed ``exp`` claim. Expiring
+stores must retain the consumed record throughout the token acceptance window.
+DPoP uses an inclusive oldest accepted ``iat`` boundary; its consumed record
+must remain until after ``iat + maximumAgeSeconds``.
+
+For ``DENYLIST``, ``isRevoked()`` continues to receive the original signed
+``exp`` timestamp. Host-owned revocation writers must retain those records
+through ``exp + leewaySeconds``, even if the lookup uses the original claim
+expiry. A revocation store must never treat expiry of its record as positive
+authorization while the token remains acceptable.
+
 Caching and multi-process rules
 -------------------------------
 

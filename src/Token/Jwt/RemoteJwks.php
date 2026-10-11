@@ -5,11 +5,13 @@ declare(strict_types=1);
 namespace Infocyph\Epicrypt\Token\Jwt;
 
 use Infocyph\Epicrypt\Exception\Token\KeyResolutionException;
+use Infocyph\Epicrypt\Integration\Runwire\RunwireExecutionContext;
 use Infocyph\Epicrypt\Internal\Clock\SystemClock;
 use Infocyph\Epicrypt\Token\Jwt\Enum\AsymmetricJwtAlgorithm;
 use Infocyph\Epicrypt\Token\Jwt\Support\JosePolicy;
 use Infocyph\Epicrypt\Token\Jwt\Support\NativeRemoteJoseHostResolver;
 use Infocyph\Epicrypt\Token\Jwt\Support\RemoteJoseResource;
+use Infocyph\Runwire\Exception\CancelledException;
 use Psr\Clock\ClockInterface;
 use Psr\Http\Client\ClientInterface;
 use Psr\Http\Message\RequestFactoryInterface;
@@ -37,43 +39,46 @@ final readonly class RemoteJwks
             $configuration->maximumKeys,
             $hostResolver ?? new NativeRemoteJoseHostResolver(),
         );
-        $this->cacheKey = 'epicrypt:jwks:' . hash('sha256', $configuration->issuer . "\0" . ($configuration->jwksUri ?? 'discovery'));
+        $hosts = array_values(array_unique($configuration->allowedJwksHosts));
+        sort($hosts, SORT_STRING);
+        $identity = [
+            $configuration->issuer,
+            $configuration->jwksUri,
+            $configuration->minimumTtl,
+            $configuration->maximumTtl,
+            $configuration->staleTtl,
+            $configuration->maximumResponseBytes,
+            $configuration->maximumKeys,
+            $configuration->allowHttp,
+            $hosts,
+        ];
+        $this->cacheKey = hash('sha256', "epicrypt\0jwks\0v2\0" . json_encode($identity, JSON_THROW_ON_ERROR));
     }
 
     /** @return array{keys: list<array<string, mixed>>} */
-    public function load(bool $forceRefresh = false): array
+    public function load(bool $forceRefresh = false, ?RunwireExecutionContext $context = null): array
     {
-        $cached = $this->cached();
-        $now = $this->clock->now()->getTimestamp();
-        if (!$forceRefresh && $cached !== null && $cached['freshUntil'] > $now) {
+        $context?->assertActive();
+
+        try {
+            $cached = $forceRefresh ? null : $this->cached();
+        } catch (Throwable $exception) {
+            $this->throwCacheFailure('Remote JWKS cache lookup failed.', $exception, $context);
+        }
+        $context?->assertActive();
+        $now = $this->currentTimestamp($context);
+        if ($cached !== null && $cached['freshUntil'] > $now) {
             return $cached['jwks'];
         }
 
         try {
-            [$jwks, $cachePolicy] = $this->fetch();
-            if ($cachePolicy['noStore']) {
-                $this->cache?->delete($this->cacheKey);
-
-                return $jwks;
-            }
-
-            $ttl = $cachePolicy['noCache']
-                ? 0
-                : max($this->configuration->minimumTtl, min(
-                    $this->configuration->maximumTtl,
-                    $cachePolicy['maxAge'] ?? $this->configuration->maximumTtl,
-                ));
-            $staleTtl = $cachePolicy['noCache'] ? 0 : $this->configuration->staleTtl;
-            $entry = [
-                'jwks' => $jwks,
-                'freshUntil' => $now + $ttl,
-                'staleUntil' => $now + $ttl + $staleTtl,
-            ];
-            $this->cache?->set($this->cacheKey, $entry, max(1, $ttl + $staleTtl));
-
-            return $jwks;
+            [$jwks, $cachePolicy] = $this->fetch($context);
         } catch (Throwable $exception) {
-            if (!$forceRefresh && $cached !== null && $cached['staleUntil'] > $now) {
+            $context?->assertActive();
+            if ($exception instanceof CancelledException) {
+                throw $exception;
+            }
+            if ($cached !== null && $cached['staleUntil'] > $this->currentTimestamp($context)) {
                 return $cached['jwks'];
             }
             if ($exception instanceof KeyResolutionException) {
@@ -82,16 +87,22 @@ final readonly class RemoteJwks
 
             throw new KeyResolutionException('Remote JWKS resolution failed.', 0, $exception);
         }
+
+        $context?->assertActive();
+        $result = $this->storeFetched($jwks, $cachePolicy, $now, $context);
+        $context?->assertActive();
+
+        return $result;
     }
 
-    public function resolve(string $kid, AsymmetricJwtAlgorithm $algorithm): string
+    public function resolve(string $kid, AsymmetricJwtAlgorithm $algorithm, ?RunwireExecutionContext $context = null): string
     {
-        $jwks = $this->load(false);
+        $jwks = $this->load(false, $context);
 
         try {
             return new Jwks()->resolvePublicKeyByKid($jwks, $kid, $algorithm);
         } catch (KeyResolutionException) {
-            $jwks = $this->load(true);
+            $jwks = $this->load(true, $context);
 
             return new Jwks()->resolvePublicKeyByKid($jwks, $kid, $algorithm);
         }
@@ -113,19 +124,28 @@ final readonly class RemoteJwks
         return ['jwks' => ['keys' => $keys], 'freshUntil' => $entry['freshUntil'], 'staleUntil' => $entry['staleUntil']];
     }
 
+    private function currentTimestamp(?RunwireExecutionContext $context): int
+    {
+        try {
+            return $this->clock->now()->getTimestamp();
+        } finally {
+            $context?->assertActive();
+        }
+    }
+
     /** @return array{array{keys: list<array<string, mixed>>}, array{maxAge: int|null, noStore: bool, noCache: bool}} */
-    private function fetch(): array
+    private function fetch(?RunwireExecutionContext $context): array
     {
         $uri = $this->configuration->jwksUri;
         if ($uri === null) {
-            [$metadata] = $this->resource->fetch($this->configuration->discoveryUri());
+            [$metadata] = $this->resource->fetch($this->configuration->discoveryUri(), context: $context);
             if (($metadata['issuer'] ?? null) !== $this->configuration->issuer || !is_string($metadata['jwks_uri'] ?? null)) {
                 throw new KeyResolutionException('OpenID discovery metadata does not match the configured issuer.');
             }
             $uri = $metadata['jwks_uri'];
             $this->configuration->validateJwksUrl($uri);
         }
-        [$document, $cachePolicy] = $this->resource->fetch($uri, jwks: true);
+        [$document, $cachePolicy] = $this->resource->fetch($uri, jwks: true, context: $context);
         $keys = $this->normalizeKeys($document['keys'] ?? null);
         if ($keys === null) {
             throw new KeyResolutionException('Remote JWKS keys collection is invalid or exceeds its bound.');
@@ -163,5 +183,53 @@ final readonly class RemoteJwks
         }
 
         return $normalized;
+    }
+
+    /**
+     * @param array{keys: list<array<string, mixed>>} $jwks
+     * @param array{maxAge: int|null, noStore: bool, noCache: bool} $cachePolicy
+     * @return array{keys: list<array<string, mixed>>}
+     */
+    private function storeFetched(array $jwks, array $cachePolicy, int $now, ?RunwireExecutionContext $context): array
+    {
+        try {
+            if ($cachePolicy['noStore']) {
+                if ($this->cache?->delete($this->cacheKey) === false) {
+                    throw new KeyResolutionException('Remote JWKS cache invalidation failed.');
+                }
+
+                return $jwks;
+            }
+
+            $ttl = $cachePolicy['noCache']
+                ? 0
+                : max($this->configuration->minimumTtl, min(
+                    $this->configuration->maximumTtl,
+                    $cachePolicy['maxAge'] ?? $this->configuration->maximumTtl,
+                ));
+            $staleTtl = $cachePolicy['noCache'] ? 0 : $this->configuration->staleTtl;
+            $entry = [
+                'jwks' => $jwks,
+                'freshUntil' => $now + $ttl,
+                'staleUntil' => $now + $ttl + $staleTtl,
+            ];
+            if ($this->cache?->set($this->cacheKey, $entry, max(1, $ttl + $staleTtl)) === false) {
+                throw new KeyResolutionException('Remote JWKS cache write failed.');
+            }
+
+            return $jwks;
+        } catch (Throwable $exception) {
+            $this->throwCacheFailure('Remote JWKS cache operation failed.', $exception, $context);
+        }
+    }
+
+    private function throwCacheFailure(string $message, Throwable $exception, ?RunwireExecutionContext $context): never
+    {
+        $context?->assertActive();
+        if ($exception instanceof CancelledException) {
+            throw $exception;
+        }
+
+        throw new KeyResolutionException($message, 0, $exception);
     }
 }

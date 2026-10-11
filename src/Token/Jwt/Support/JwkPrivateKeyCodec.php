@@ -98,13 +98,8 @@ final class JwkPrivateKeyCodec
     }
 
     /** @param array<string, mixed> $jwk */
-    private function validateShape(array $jwk, AsymmetricJwtAlgorithm $algorithm): void
+    private function validateRequiredMembers(array $jwk, bool $isRsa): void
     {
-        $isRsa = str_starts_with($algorithm->value, 'RS') || str_starts_with($algorithm->value, 'PS');
-        if (($jwk['kty'] ?? null) !== ($isRsa ? 'RSA' : 'EC') || ($jwk['alg'] ?? null) !== $algorithm->value
-            || (isset($jwk['use']) && $jwk['use'] !== 'sig') || ($jwk['key_ops'] ?? null) !== ['sign']) {
-            throw new KeyResolutionException('Private JWK metadata does not match the signing operation.');
-        }
         $required = $isRsa ? ['n', 'e', 'd', 'p', 'q', 'dp', 'dq', 'qi'] : ['crv', 'x', 'y', 'd'];
         foreach ($required as $name) {
             if (!is_string($jwk[$name] ?? null) || $jwk[$name] === '') {
@@ -114,5 +109,16 @@ final class JwkPrivateKeyCodec
         if ($isRsa && isset($jwk['oth'])) {
             throw new KeyResolutionException('Multi-prime RSA JWKs are not supported.');
         }
+    }
+
+    /** @param array<string, mixed> $jwk */
+    private function validateShape(array $jwk, AsymmetricJwtAlgorithm $algorithm): void
+    {
+        $isRsa = str_starts_with($algorithm->value, 'RS') || str_starts_with($algorithm->value, 'PS');
+        if (($jwk['kty'] ?? null) !== ($isRsa ? 'RSA' : 'EC') || ($jwk['alg'] ?? null) !== $algorithm->value
+            || (isset($jwk['use']) && $jwk['use'] !== 'sig') || ($jwk['key_ops'] ?? null) !== ['sign']) {
+            throw new KeyResolutionException('Private JWK metadata does not match the signing operation.');
+        }
+        $this->validateRequiredMembers($jwk, $isRsa);
     }
 }

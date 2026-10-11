@@ -165,23 +165,18 @@ final readonly class OAuthClientAssertionValidator
         if (count($claims) > AuthProtocolPolicy::MAX_AUTH_CLAIMS || !$this->hasRequiredClaims($claims)) {
             return OAuthClientAssertionStatus::INVALID_CLAIMS;
         }
-        if (!is_string($claims['iss'])
-            || !is_string($claims['sub'])
-            || !hash_equals($clientId, $claims['iss'])
-            || !hash_equals($clientId, $claims['sub'])
-            || !is_int($claims['exp'])
-            || !is_int($claims['iat'])
-            || !is_string($claims['jti'])
-            || !AuthProtocolPolicy::validText($claims['jti'], self::MAX_JTI_BYTES)
-            || !$this->audienceMatches($claims['aud'], $audience)) {
+        if (!$this->validClaimIdentity($claims, $clientId, $audience)) {
             return OAuthClientAssertionStatus::INVALID_CLAIMS;
         }
         if (array_key_exists('nbf', $claims) && !is_int($claims['nbf'])) {
             return OAuthClientAssertionStatus::INVALID_CLAIMS;
         }
 
+        /** @var int $issuedAt Validated by validClaimIdentity above. */
         $issuedAt = $claims['iat'];
+        /** @var int $expiresAt Validated by validClaimIdentity above. */
         $expiresAt = $claims['exp'];
+
         $notBefore = $claims['nbf'] ?? null;
         if ($issuedAt < 1
             || $expiresAt <= $issuedAt
@@ -202,5 +197,19 @@ final readonly class OAuthClientAssertionValidator
         }
 
         return OAuthClientAssertionStatus::VALID;
+    }
+
+    /** @param array<string, mixed> $claims */
+    private function validClaimIdentity(array $claims, string $clientId, string $audience): bool
+    {
+        return !(!is_string($claims['iss'])
+            || !is_string($claims['sub'])
+            || !hash_equals($clientId, $claims['iss'])
+            || !hash_equals($clientId, $claims['sub'])
+            || !is_int($claims['exp'])
+            || !is_int($claims['iat'])
+            || !is_string($claims['jti'])
+            || !AuthProtocolPolicy::validText($claims['jti'], self::MAX_JTI_BYTES)
+            || !$this->audienceMatches($claims['aud'], $audience));
     }
 }

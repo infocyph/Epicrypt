@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Infocyph\Epicrypt\Token\Jwt;
 
 use Infocyph\Epicrypt\Exception\ConfigurationException;
+use Infocyph\Epicrypt\Token\Jwt\Support\PublicUnicastAddress;
 
 final readonly class RemoteJwksConfiguration
 {
@@ -77,7 +78,7 @@ final readonly class RemoteJwksConfiguration
             return false;
         }
 
-        return filter_var($host, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) === false;
+        return !PublicUnicastAddress::allows($host);
     }
 
     private function normalizedHost(string $url): ?string

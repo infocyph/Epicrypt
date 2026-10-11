@@ -8,7 +8,10 @@ use Infocyph\Epicrypt\Exception\ConfigurationException;
 use Infocyph\Epicrypt\Exception\Crypto\DecryptionException;
 use Infocyph\Epicrypt\Exception\Crypto\EncryptionException;
 use Infocyph\Epicrypt\Exception\Crypto\InvalidKeyException;
+use Infocyph\Epicrypt\Integration\Runwire\RunwireExecutionContext;
 use Infocyph\Epicrypt\Internal\StreamIO;
+use Infocyph\Runwire\Exception\CancelledException;
+use LogicException;
 use RuntimeException;
 use Throwable;
 
@@ -36,7 +39,9 @@ final readonly class SecretStream
         string $inputPath,
         string $outputPath,
         int $chunkSize = self::DEFAULT_CHUNK_SIZE,
+        ?RunwireExecutionContext $context = null,
     ): void {
+        $context?->assertActive();
         StreamIO::assertDistinctLocalPaths($inputPath, $outputPath);
         $this->assertValidChunkSize($chunkSize);
 
@@ -44,7 +49,10 @@ final readonly class SecretStream
             $inputPath,
             fn($input) => StreamIO::withAtomicLocalOutput(
                 $outputPath,
-                fn($output) => $this->decryptStream($input, $output, $chunkSize),
+                fn($output) => $this->decryptStream($input, $output, $chunkSize, $context),
+                $context === null ? null : static function () use ($context): void {
+                    $context->assertActive();
+                },
             ),
         );
     }
@@ -60,14 +68,17 @@ final readonly class SecretStream
         mixed $input,
         mixed $output,
         int $chunkSize = self::DEFAULT_CHUNK_SIZE,
+        ?RunwireExecutionContext $context = null,
     ): void {
         $input = StreamIO::readable($input);
         $output = StreamIO::writable($output);
         $this->assertValidChunkSize($chunkSize);
 
         try {
-            $this->decryptFrames($input, $output, $chunkSize);
-        } catch (DecryptionException $exception) {
+            $context?->assertActive();
+            $this->decryptFrames($input, $output, $chunkSize, $context);
+            $context?->assertActive();
+        } catch (CancelledException|LogicException|DecryptionException $exception) {
             throw $exception;
         } catch (Throwable $exception) {
             throw new DecryptionException('SecretStream decryption failed.', 0, $exception);
@@ -78,7 +89,9 @@ final readonly class SecretStream
         string $inputPath,
         string $outputPath,
         int $chunkSize = self::DEFAULT_CHUNK_SIZE,
+        ?RunwireExecutionContext $context = null,
     ): int {
+        $context?->assertActive();
         StreamIO::assertDistinctLocalPaths($inputPath, $outputPath);
         $this->assertValidChunkSize($chunkSize);
 
@@ -86,7 +99,10 @@ final readonly class SecretStream
             $inputPath,
             fn($input): int => StreamIO::withAtomicLocalOutput(
                 $outputPath,
-                fn($output): int => $this->encryptStream($input, $output, $chunkSize),
+                fn($output): int => $this->encryptStream($input, $output, $chunkSize, $context),
+                $context === null ? null : static function () use ($context): void {
+                    $context->assertActive();
+                },
             ),
         );
     }
@@ -102,14 +118,19 @@ final readonly class SecretStream
         mixed $input,
         mixed $output,
         int $chunkSize = self::DEFAULT_CHUNK_SIZE,
+        ?RunwireExecutionContext $context = null,
     ): int {
         $input = StreamIO::readable($input);
         $output = StreamIO::writable($output);
         $this->assertValidChunkSize($chunkSize);
 
         try {
-            return $this->encryptFrames($input, $output, $chunkSize);
-        } catch (EncryptionException $exception) {
+            $context?->assertActive();
+            $result = $this->encryptFrames($input, $output, $chunkSize, $context);
+            $context?->assertActive();
+
+            return $result;
+        } catch (CancelledException|LogicException|EncryptionException $exception) {
             throw $exception;
         } catch (Throwable $exception) {
             throw new EncryptionException('SecretStream encryption failed.', 0, $exception);
@@ -172,12 +193,12 @@ final readonly class SecretStream
      * @param resource $input
      * @param resource $output
      */
-    private function decryptFrames(mixed $input, mixed $output, int $chunkSize): void
+    private function decryptFrames(mixed $input, mixed $output, int $chunkSize, ?RunwireExecutionContext $context): void
     {
         $state = $this->initializePullFromStream($input);
 
         try {
-            $this->decryptRemainingFrames($input, $output, $state, $chunkSize);
+            $this->decryptRemainingFrames($input, $output, $state, $chunkSize, $context);
         } finally {
             sodium_memzero($state);
         }
@@ -193,16 +214,20 @@ final readonly class SecretStream
         #[\SensitiveParameter]
         string &$state,
         int $chunkSize,
+        ?RunwireExecutionContext $context,
     ): void {
         $frameSize = $chunkSize + SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_ABYTES;
         $finalSeen = false;
 
         while (($frame = StreamIO::readChunk($input, $frameSize)) !== null) {
+            $context?->checkpoint();
             $shortFrame = strlen($frame) < $frameSize;
             $finalSeen = $this->decryptFrame($state, $frame, $output, $finalSeen);
+            $context?->assertActive();
 
             if ($finalSeen) {
                 $this->assertNoTrailingData($input);
+                $context?->assertActive();
 
                 return;
             }
@@ -219,12 +244,13 @@ final readonly class SecretStream
      * @param resource $input
      * @param resource $output
      */
-    private function encryptFrames(mixed $input, mixed $output, int $chunkSize): int
+    private function encryptFrames(mixed $input, mixed $output, int $chunkSize, ?RunwireExecutionContext $context): int
     {
         [$state, $header] = $this->initializePush();
         $written = 0;
 
         try {
+            $context?->assertActive();
             $written += StreamIO::writeAll($output, $this->framingPrefix . $header);
             $buffer = StreamIO::readChunk($input, $chunkSize);
 
@@ -236,10 +262,14 @@ final readonly class SecretStream
                     SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_TAG_FINAL,
                 );
 
-                return $written + StreamIO::writeAll($output, $finalFrame);
+                $written += StreamIO::writeAll($output, $finalFrame);
+                $context?->assertActive();
+
+                return $written;
             }
 
             while (true) {
+                $context?->checkpoint();
                 $next = StreamIO::readChunk($input, $chunkSize);
                 $final = $next === null;
                 $frame = sodium_crypto_secretstream_xchacha20poly1305_push(
@@ -251,6 +281,7 @@ final readonly class SecretStream
                         : SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_TAG_MESSAGE,
                 );
                 $written += StreamIO::writeAll($output, $frame);
+                $context?->assertActive();
 
                 if ($final) {
                     return $written;

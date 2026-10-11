@@ -6,6 +6,7 @@ namespace Infocyph\Epicrypt\DataProtection;
 
 use Infocyph\Epicrypt\Crypto\SecretStream;
 use Infocyph\Epicrypt\Exception\Crypto\DecryptionException;
+use Infocyph\Epicrypt\Integration\Runwire\RunwireExecutionContext;
 use Infocyph\Epicrypt\Internal\Base64Url;
 use Infocyph\Epicrypt\Internal\Clock\SystemClock;
 use Infocyph\Epicrypt\Internal\Json;
@@ -32,13 +33,17 @@ final readonly class FileProtector
         string $key,
         ProtectionOptions $options,
         int $chunkSize = SecretStream::DEFAULT_CHUNK_SIZE,
+        ?RunwireExecutionContext $context = null,
     ): ProtectionResult {
+        $context?->assertActive();
+
         return $this->protectWithBinaryKey(
             $inputPath,
             $outputPath,
             Base64Url::decode($key),
             $options,
             $chunkSize,
+            $context,
         );
     }
 
@@ -56,13 +61,17 @@ final readonly class FileProtector
         string $key,
         ProtectionOptions $options,
         int $chunkSize = SecretStream::DEFAULT_CHUNK_SIZE,
+        ?RunwireExecutionContext $context = null,
     ): ProtectionMetadata {
+        $context?->assertActive();
+
         return $this->protectStreamWithBinaryKey(
             $input,
             $output,
             Base64Url::decode($key),
             $options,
             $chunkSize,
+            $context,
         );
     }
 
@@ -77,14 +86,16 @@ final readonly class FileProtector
         string $key,
         ProtectionOptions $options,
         int $chunkSize = SecretStream::DEFAULT_CHUNK_SIZE,
+        ?RunwireExecutionContext $context = null,
     ): ProtectionMetadata {
+        $context?->assertActive();
         $input = StreamIO::readable($input);
         $output = StreamIO::writable($output);
 
         $createdAt = $this->clock->now()->getTimestamp();
         $prefix = $this->encodePrefix($options, $createdAt);
         StreamIO::writeAll($output, $prefix . "\n");
-        new SecretStream($key, $prefix)->encryptStream($input, $output, $chunkSize);
+        new SecretStream($key, $prefix)->encryptStream($input, $output, $chunkSize, $context);
 
         return new ProtectionMetadata(
             self::DOMAIN,
@@ -105,7 +116,9 @@ final readonly class FileProtector
         KeyRing $keyRing,
         ProtectionOptions $options,
         int $chunkSize = SecretStream::DEFAULT_CHUNK_SIZE,
+        ?RunwireExecutionContext $context = null,
     ): ProtectionMetadata {
+        $context?->assertActive();
         $input = StreamIO::readable($input);
         $output = StreamIO::writable($output);
         $entry = $keyRing->activeForWrite(KeyPurpose::FILE_PROTECTION, self::ALGORITHM);
@@ -120,6 +133,7 @@ final readonly class FileProtector
                 $entry->id,
             ),
             $chunkSize,
+            $context,
         );
     }
 
@@ -130,7 +144,9 @@ final readonly class FileProtector
         string $key,
         ProtectionOptions $options,
         int $chunkSize = SecretStream::DEFAULT_CHUNK_SIZE,
+        ?RunwireExecutionContext $context = null,
     ): ProtectionResult {
+        $context?->assertActive();
         StreamIO::assertDistinctLocalPaths($inputPath, $outputPath);
         $metadata = StreamIO::withReadableLocalFile(
             $inputPath,
@@ -142,7 +158,11 @@ final readonly class FileProtector
                     $key,
                     $options,
                     $chunkSize,
+                    $context,
                 ),
+                $context === null ? null : static function () use ($context): void {
+                    $context->assertActive();
+                },
             ),
         );
 
@@ -156,7 +176,9 @@ final readonly class FileProtector
         KeyRing $keyRing,
         ProtectionOptions $options,
         int $chunkSize = SecretStream::DEFAULT_CHUNK_SIZE,
+        ?RunwireExecutionContext $context = null,
     ): ProtectionResult {
+        $context?->assertActive();
         StreamIO::assertDistinctLocalPaths($inputPath, $outputPath);
         $metadata = StreamIO::withReadableLocalFile(
             $inputPath,
@@ -168,7 +190,11 @@ final readonly class FileProtector
                     $keyRing,
                     $options,
                     $chunkSize,
+                    $context,
                 ),
+                $context === null ? null : static function () use ($context): void {
+                    $context->assertActive();
+                },
             ),
         );
 
@@ -182,13 +208,17 @@ final readonly class FileProtector
         string $key,
         ProtectionOptions $options,
         int $chunkSize = SecretStream::DEFAULT_CHUNK_SIZE,
+        ?RunwireExecutionContext $context = null,
     ): ProtectionResult {
+        $context?->assertActive();
+
         return $this->unprotectWithBinaryKey(
             $inputPath,
             $outputPath,
             Base64Url::decode($key),
             $options,
             $chunkSize,
+            $context,
         );
     }
 
@@ -206,13 +236,17 @@ final readonly class FileProtector
         string $key,
         ProtectionOptions $options,
         int $chunkSize = SecretStream::DEFAULT_CHUNK_SIZE,
+        ?RunwireExecutionContext $context = null,
     ): ProtectionMetadata {
+        $context?->assertActive();
+
         return $this->unprotectStreamWithBinaryKey(
             $input,
             $output,
             Base64Url::decode($key),
             $options,
             $chunkSize,
+            $context,
         );
     }
 
@@ -227,12 +261,14 @@ final readonly class FileProtector
         string $key,
         ProtectionOptions $options,
         int $chunkSize = SecretStream::DEFAULT_CHUNK_SIZE,
+        ?RunwireExecutionContext $context = null,
     ): ProtectionMetadata {
+        $context?->assertActive();
         $input = StreamIO::readable($input);
         $output = StreamIO::writable($output);
 
         [$prefix, $metadata] = $this->readAndValidatePrefixFromStream($input, $options);
-        new SecretStream($key, $prefix)->decryptStream($input, $output, $chunkSize);
+        new SecretStream($key, $prefix)->decryptStream($input, $output, $chunkSize, $context);
 
         return new ProtectionMetadata(
             self::DOMAIN,
@@ -253,7 +289,9 @@ final readonly class FileProtector
         KeyRing $keyRing,
         ProtectionOptions $options,
         int $chunkSize = SecretStream::DEFAULT_CHUNK_SIZE,
+        ?RunwireExecutionContext $context = null,
     ): ProtectionMetadata {
+        $context?->assertActive();
         $input = StreamIO::readable($input);
         $output = StreamIO::writable($output);
 
@@ -267,7 +305,7 @@ final readonly class FileProtector
             throw new DecryptionException('Protected-file key id is not eligible for decryption.');
         }
 
-        new SecretStream(Base64Url::decode($entry->key), $prefix)->decryptStream($input, $output, $chunkSize);
+        new SecretStream(Base64Url::decode($entry->key), $prefix)->decryptStream($input, $output, $chunkSize, $context);
 
         return new ProtectionMetadata(
             self::DOMAIN,
@@ -285,7 +323,9 @@ final readonly class FileProtector
         string $key,
         ProtectionOptions $options,
         int $chunkSize = SecretStream::DEFAULT_CHUNK_SIZE,
+        ?RunwireExecutionContext $context = null,
     ): ProtectionResult {
+        $context?->assertActive();
         StreamIO::assertDistinctLocalPaths($inputPath, $outputPath);
         $metadata = StreamIO::withReadableLocalFile(
             $inputPath,
@@ -297,7 +337,11 @@ final readonly class FileProtector
                     $key,
                     $options,
                     $chunkSize,
+                    $context,
                 ),
+                $context === null ? null : static function () use ($context): void {
+                    $context->assertActive();
+                },
             ),
         );
 
@@ -311,7 +355,9 @@ final readonly class FileProtector
         KeyRing $keyRing,
         ProtectionOptions $options,
         int $chunkSize = SecretStream::DEFAULT_CHUNK_SIZE,
+        ?RunwireExecutionContext $context = null,
     ): ProtectionResult {
+        $context?->assertActive();
         StreamIO::assertDistinctLocalPaths($inputPath, $outputPath);
         $metadata = StreamIO::withReadableLocalFile(
             $inputPath,
@@ -323,7 +369,11 @@ final readonly class FileProtector
                     $keyRing,
                     $options,
                     $chunkSize,
+                    $context,
                 ),
+                $context === null ? null : static function () use ($context): void {
+                    $context->assertActive();
+                },
             ),
         );
 

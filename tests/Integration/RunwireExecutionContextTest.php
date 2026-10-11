@@ -1,0 +1,521 @@
+<?php
+
+declare(strict_types=1);
+
+use Infocyph\Epicrypt\Integration\Runwire\RunwireExecutionContext;
+use Infocyph\Epicrypt\Crypto\SecretStream;
+use Infocyph\Epicrypt\DataProtection\FileProtector;
+use Infocyph\Epicrypt\DataProtection\ProtectionOptions;
+use Infocyph\Epicrypt\Integrity\FileHasher;
+use Infocyph\Epicrypt\Integrity\IntegrityAlgorithm;
+use Infocyph\Epicrypt\Token\Jwt\RemoteJoseHostResolverInterface;
+use Infocyph\Epicrypt\Token\Jwt\RemoteJwks;
+use Infocyph\Epicrypt\Token\Jwt\RemoteJwksConfiguration;
+use Nyholm\Psr7\Factory\Psr17Factory;
+use Nyholm\Psr7\Response;
+use Psr\Clock\ClockInterface;
+use Psr\Http\Client\ClientInterface;
+use Psr\Http\Message\RequestInterface;
+use Psr\Http\Message\ResponseInterface;
+use Psr\SimpleCache\CacheInterface;
+use Infocyph\Runwire\Coroutine\CoroutineRuntime;
+use Infocyph\Runwire\Coroutine\CoroutineScope;
+use Infocyph\Runwire\Exception\CancelledException;
+use Infocyph\Runwire\Runtime\Enum\RuntimeDriver;
+use Infocyph\Runwire\RuntimeCapabilities;
+use Infocyph\Runwire\RequestContext;
+use Infocyph\Runwire\Runtime\Enum\CancellationReason;
+use Infocyph\Runwire\RuntimeContext;
+
+it('uses only borrowed runtime objects and supports checkpoints without a scheduler', function () {
+    $runtime = RuntimeContext::standalone();
+    $context = new RunwireExecutionContext($runtime, checkpointEvery: 1);
+
+    expect($context->runtime)->toBe($runtime)
+        ->and($context->scope)->toBeNull()
+        ->and($context->request)->toBeNull();
+    $context->checkpoint();
+    $context->checkpoint();
+    expect($runtime->pid)->toBe(getmypid());
+});
+
+it('rejects missing lifecycle integrity, wrong PID, invalid intervals, and replaced requests', function () {
+    $runtime = RuntimeContext::standalone();
+    expect(fn () => new RunwireExecutionContext($runtime, checkpointEvery: 0))->toThrow(InvalidArgumentException::class)
+        ->and(fn () => new RunwireExecutionContext($runtime, checkpointEvery: 1_000_001))->toThrow(InvalidArgumentException::class);
+
+    $otherRuntime = RuntimeContext::fromCapabilities($runtime->capabilities, 'standalone', pid: getmypid() + 1);
+    expect(fn () => new RunwireExecutionContext($otherRuntime))->toThrow(LogicException::class);
+    expect(fn () => new RunwireExecutionContext($runtime, RequestContext::standalone()))
+        ->toThrow(LogicException::class);
+});
+
+it('rejects cancelled and completed request lifecycles without owning their termination', function () {
+    $runtime = RuntimeContext::standalone();
+    $request = RequestContext::create($runtime);
+    $context = new RunwireExecutionContext($runtime, $request);
+    $context->checkpoint();
+
+    expect($request->completed())->toBeFalse();
+    $request->cancel(CancellationReason::HOST_CANCELLED);
+    expect(fn () => $context->checkpoint())->toThrow(CancelledException::class);
+
+    $completed = RequestContext::create($runtime);
+    $completed->complete();
+    expect(fn () => new RunwireExecutionContext($runtime, $completed))->toThrow(LogicException::class);
+});
+
+it('forwards one borrowed context through direct and intermediary stream operations without owning resources', function () {
+    $runtime = RuntimeContext::standalone();
+    $context = new RunwireExecutionContext($runtime, RequestContext::create($runtime), checkpointEvery: 1);
+    $bridge = static fn(RunwireExecutionContext $borrowed, callable $operation): mixed => $operation($borrowed);
+    $source = fopen('php://temp', 'w+b');
+    $encrypted = fopen('php://temp', 'w+b');
+    $restored = fopen('php://temp', 'w+b');
+    fwrite($source, str_repeat('runwire-borrowed', 1000));
+    rewind($source);
+    $secret = new SecretStream(random_bytes(SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_KEYBYTES));
+
+    try {
+        $bytes = $bridge($context, static fn(RunwireExecutionContext $forwarded): int =>
+            $secret->encryptStream($source, $encrypted, 1024, context: $forwarded));
+        expect($bytes)->toBeGreaterThan(0);
+        rewind($encrypted);
+        $secret->decryptStream($encrypted, $restored, 1024, $context);
+        rewind($restored);
+        expect(stream_get_contents($restored))->toBe(str_repeat('runwire-borrowed', 1000))
+            ->and($context->runtime)->toBe($runtime);
+
+        rewind($restored);
+        $digest = hash('sha256', str_repeat('runwire-borrowed', 1000));
+        expect((new FileHasher())->verifyStream($restored, $digest, context: $context))->toBeTrue();
+        expect(is_resource($source))->toBeTrue()
+            ->and(is_resource($restored))->toBeTrue()
+            ->and($context->request->completed())->toBeFalse();
+    } finally {
+        fclose($source);
+        fclose($encrypted);
+        fclose($restored);
+    }
+});
+
+it('does not publish or replace a local output for an already cancelled borrowed request', function () {
+    $runtime = RuntimeContext::standalone();
+    $request = RequestContext::create($runtime);
+    $context = new RunwireExecutionContext($runtime, $request);
+    $directory = sys_get_temp_dir() . '/epicrypt-runwire-' . bin2hex(random_bytes(8));
+    mkdir($directory, 0700);
+    $source = $directory . '/source.txt';
+    $target = $directory . '/target.txt';
+    file_put_contents($source, 'new-secret-data');
+    file_put_contents($target, 'previous-output');
+    $key = random_bytes(SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_KEYBYTES);
+    $request->cancel(CancellationReason::HOST_CANCELLED);
+
+    try {
+        expect(fn () => (new SecretStream($key))->encrypt($source, $target, context: $context))
+            ->toThrow(CancelledException::class);
+        expect(fn () => (new FileProtector())->protectWithBinaryKey(
+            $source,
+            $target,
+            $key,
+            new ProtectionOptions('runwire-cancellation'),
+            context: $context,
+        ))->toThrow(CancelledException::class);
+        expect(file_get_contents($target))->toBe('previous-output')
+            ->and(glob($directory . '/.epicrypt-*') ?: [])->toBe([]);
+    } finally {
+        unlink($source);
+        unlink($target);
+        rmdir($directory);
+    }
+});
+
+it('does not return stale JWKS when host cancellation occurs during HTTP refresh', function () {
+    $runtime = RuntimeContext::standalone();
+    $request = RequestContext::create($runtime);
+    $context = new RunwireExecutionContext($runtime, $request);
+    $client = new class($request) implements ClientInterface {
+        public function __construct(private RequestContext $request) {}
+
+        public function sendRequest(RequestInterface $request): ResponseInterface
+        {
+            unset($request);
+            $this->request->cancel(CancellationReason::HOST_CANCELLED);
+
+            return new Response(200, ['Content-Type' => 'application/jwk-set+json'], '{"keys":[]}');
+        }
+    };
+    $cache = $this->createMock(CacheInterface::class);
+    $cache->method('get')->willReturn([
+        'jwks' => ['keys' => []],
+        'freshUntil' => 999,
+        'staleUntil' => 1200,
+    ]);
+    $resolver = new class implements RemoteJoseHostResolverInterface {
+        public function resolve(string $hostname): array
+        {
+            unset($hostname);
+
+            return ['8.8.8.8'];
+        }
+    };
+    $clock = new class implements ClockInterface {
+        public function now(): DateTimeImmutable
+        {
+            return new DateTimeImmutable('@1000');
+        }
+    };
+    $remote = new RemoteJwks(
+        $client,
+        new Psr17Factory(),
+        new RemoteJwksConfiguration('https://issuer.example', 'https://issuer.example/jwks'),
+        $cache,
+        $clock,
+        $resolver,
+    );
+
+    expect(fn () => $remote->load(context: $context))->toThrow(CancelledException::class);
+});
+
+it('checks liveness and yields only inside a live borrowed host coroutine scope', function () {
+    $capabilities = new RuntimeCapabilities(RuntimeDriver::NATIVE, supportsRunwireCoroutines: true);
+    $runtime = RuntimeContext::fromCapabilities($capabilities, 'epicrypt-test');
+    $request = RequestContext::create($runtime);
+    $events = [];
+    $borrowed = null;
+
+    $digest = (new CoroutineRuntime())->run(function (CoroutineScope $scope) use (
+        $runtime,
+        $request,
+        &$events,
+        &$borrowed,
+    ): string {
+        $borrowed = new RunwireExecutionContext($runtime, $request, $scope, checkpointEvery: 1);
+        $task = $scope->spawn(static function () use (&$events): void {
+            $events[] = 'host-task';
+        });
+        $stream = fopen('php://temp', 'w+b');
+        fwrite($stream, str_repeat('owned-by-host', 4096));
+        rewind($stream);
+
+        try {
+            $hash = (new FileHasher())->hashStream($stream, context: $borrowed);
+            $task->await();
+            $events[] = 'epicrypt-complete';
+
+            return $hash;
+        } finally {
+            fclose($stream);
+        }
+    });
+    expect($digest)->toBe(hash('sha256', str_repeat('owned-by-host', 4096)))
+        ->and($events)->toBe(['host-task', 'epicrypt-complete'])
+        ->and($request->completed())->toBeFalse();
+    expect(fn () => $borrowed->checkpoint())->toThrow(LogicException::class);
+});
+
+it('rejects a borrowed scope from an unrelated task', function () {
+    $runtime = RuntimeContext::fromCapabilities(
+        new RuntimeCapabilities(RuntimeDriver::NATIVE, supportsRunwireCoroutines: true),
+        'epicrypt-wrong-task',
+    );
+    $borrowed = null;
+    $outcome = null;
+
+    (new CoroutineRuntime())->run(function (CoroutineScope $scope) use ($runtime, &$borrowed, &$outcome): void {
+        $sibling = $scope->spawn(static function () use (&$borrowed, &$outcome): void {
+            try {
+                $borrowed->checkpoint();
+            } catch (LogicException) {
+                $outcome = 'rejected';
+            }
+        });
+        $borrowed = new RunwireExecutionContext($runtime, RequestContext::create($runtime), $scope);
+        $sibling->await();
+    });
+
+    expect($outcome)->toBe('rejected');
+});
+
+it('rejects cancellation after a staged write and before atomic publication', function () {
+    $runtime = RuntimeContext::standalone();
+    $request = RequestContext::create($runtime);
+    $context = new RunwireExecutionContext($runtime, $request);
+    $directory = sys_get_temp_dir() . '/epicrypt-publication-' . bin2hex(random_bytes(8));
+    mkdir($directory, 0700);
+    $target = $directory . '/existing.txt';
+    file_put_contents($target, 'previous-content');
+
+    try {
+        expect(fn() => \Infocyph\Epicrypt\Internal\StreamIO::withAtomicLocalOutput(
+            $target,
+            static function ($stream) use ($request): void {
+                fwrite($stream, 'new-content');
+                $request->cancel(CancellationReason::HOST_CANCELLED);
+            },
+            static fn() => $context->assertActive(),
+        ))->toThrow(CancelledException::class);
+        expect(file_get_contents($target))->toBe('previous-content')
+            ->and(glob($directory . '/.epicrypt-*') ?: [])->toBe([]);
+    } finally {
+        unlink($target);
+        rmdir($directory);
+    }
+});
+
+it('does not bypass cancelled contexts when a supplied digest is malformed', function () {
+    $runtime = RuntimeContext::standalone();
+    $request = RequestContext::create($runtime);
+    $context = new RunwireExecutionContext($runtime, $request);
+    $stream = fopen('php://temp', 'w+b');
+    $request->cancel(CancellationReason::HOST_CANCELLED);
+
+    try {
+        expect(fn() => (new FileHasher())->verifyStream($stream, 'bad-digest', context: $context))
+            ->toThrow(CancelledException::class);
+    } finally {
+        fclose($stream);
+    }
+});
+
+it('preserves separate borrowed request cancellation across interleaved host tasks', function () {
+    $runtime = RuntimeContext::fromCapabilities(
+        new RuntimeCapabilities(RuntimeDriver::NATIVE, supportsRunwireCoroutines: true),
+        'epicrypt-isolated',
+    );
+    $first = RequestContext::create($runtime);
+    $second = RequestContext::create($runtime);
+    $events = [];
+
+    (new CoroutineRuntime())->run(function (CoroutineScope $scope) use ($runtime, $first, $second, &$events): void {
+        $one = new RunwireExecutionContext($runtime, $first, $scope, checkpointEvery: 1);
+        $two = new RunwireExecutionContext($runtime, $second, $scope, checkpointEvery: 1);
+        $a = $scope->spawn(static function () use ($first, $one, &$events): void {
+            $first->cancel(CancellationReason::HOST_CANCELLED);
+            try {
+                $one->checkpoint();
+            } catch (CancelledException) {
+                $events['a'] = 'cancelled';
+            }
+        });
+        $b = $scope->spawn(static function () use ($two, &$events): void {
+            $two->checkpoint();
+            $events['b'] = 'active';
+        });
+        $a->await();
+        $b->await();
+        $two->checkpoint();
+    });
+
+    expect($events)->toBe(['a' => 'cancelled', 'b' => 'active'])
+        ->and($second->completed())->toBeFalse()
+        ->and($first->completed())->toBeFalse();
+});
+
+it('releases discarded bindings inside a long-lived coroutine task', function () {
+    $runtime = RuntimeContext::fromCapabilities(
+        new RuntimeCapabilities(RuntimeDriver::NATIVE, supportsRunwireCoroutines: true),
+        'epicrypt-binding-lifetime',
+    );
+
+    (new CoroutineRuntime())->run(function (CoroutineScope $scope) use ($runtime): void {
+        $request = RequestContext::create($runtime);
+        $context = new RunwireExecutionContext($runtime, $request, $scope);
+        $reference = WeakReference::create($context);
+        unset($context);
+        expect($reference->get())->toBeNull();
+        gc_collect_cycles();
+        $before = memory_get_usage(false);
+
+        for ($index = 0; $index < 20_000; $index++) {
+            $context = new RunwireExecutionContext($runtime, $request, $scope);
+            unset($context);
+        }
+
+        gc_collect_cycles();
+        expect(memory_get_usage(false) - $before)->toBeLessThan(2_097_152);
+        expect($request->completed())->toBeFalse();
+    });
+});
+
+it('does not expose child-created bindings to the parent or an earlier sibling', function () {
+    $runtime = RuntimeContext::fromCapabilities(
+        new RuntimeCapabilities(RuntimeDriver::NATIVE, supportsRunwireCoroutines: true),
+        'epicrypt-binding-snapshot',
+    );
+    $childContext = null;
+    $events = [];
+
+    (new CoroutineRuntime())->run(function (CoroutineScope $scope) use ($runtime, &$childContext, &$events): void {
+        $parentContext = new RunwireExecutionContext($runtime, RequestContext::create($runtime), $scope);
+        $earlier = $scope->spawn(function () use ($scope, &$childContext, &$events): void {
+            while ($childContext === null) {
+                $scope->yieldNow();
+            }
+            expect(fn () => $childContext->checkpoint())->toThrow(LogicException::class);
+            $events[] = 'sibling-rejected';
+        });
+        $child = $scope->spawn(function () use ($runtime, $scope, $parentContext, &$childContext, &$events): void {
+            $parentContext->checkpoint();
+            $childContext = new RunwireExecutionContext($runtime, RequestContext::create($runtime), $scope);
+            $childContext->checkpoint();
+            $events[] = 'child-active';
+        });
+        $child->await();
+        $earlier->await();
+        expect(fn () => $childContext->checkpoint())->toThrow(LogicException::class);
+        $parentContext->checkpoint();
+    });
+
+    expect($events)->toContain('child-active', 'sibling-rejected');
+});
+
+it('rejects cancellation during the final EOF read for hashing and verification', function (IntegrityAlgorithm $algorithm, bool $verify) {
+    $runtime = RuntimeContext::standalone();
+    $request = RequestContext::create($runtime);
+    $context = new RunwireExecutionContext($runtime, $request);
+    $wrapper = new class {
+        public mixed $context;
+
+        private bool $ended = false;
+
+        public function stream_open(string $path, string $mode, int $options, ?string &$openedPath): bool
+        {
+            unset($path, $mode, $options, $openedPath);
+
+            return true;
+        }
+
+        public function stream_read(int $count): string
+        {
+            unset($count);
+            $options = stream_context_get_options($this->context);
+            $options['epicryptcanceleof']['request']->cancel(CancellationReason::HOST_CANCELLED);
+            $this->ended = true;
+
+            return '';
+        }
+
+        public function stream_eof(): bool
+        {
+            return $this->ended;
+        }
+    };
+    stream_wrapper_register('epicryptcanceleof', $wrapper::class);
+    $stream = fopen('epicryptcanceleof://input', 'rb', false, stream_context_create([
+        'epicryptcanceleof' => ['request' => $request],
+    ]));
+    $hasher = new FileHasher($algorithm);
+    $digest = $algorithm === IntegrityAlgorithm::BLAKE2B
+        ? sodium_bin2hex(sodium_crypto_generichash(''))
+        : hash($algorithm->value, '');
+
+    try {
+        expect(fn () => $verify
+            ? $hasher->verifyStream($stream, $digest, context: $context)
+            : $hasher->hashStream($stream, context: $context))->toThrow(CancelledException::class);
+        expect(is_resource($stream))->toBeTrue();
+    } finally {
+        fclose($stream);
+        stream_wrapper_unregister('epicryptcanceleof');
+    }
+})->with([
+    'SHA256 hash' => [IntegrityAlgorithm::SHA256, false],
+    'SHA256 verify' => [IntegrityAlgorithm::SHA256, true],
+    'BLAKE2b hash' => [IntegrityAlgorithm::BLAKE2B, false],
+    'BLAKE2b verify' => [IntegrityAlgorithm::BLAKE2B, true],
+]);
+
+it('preserves borrowed cancellation from every JWKS cache operation', function (string $operation, bool $cancelParent) {
+    $runtime = RuntimeContext::standalone();
+    $request = RequestContext::create($runtime);
+    $context = new RunwireExecutionContext($runtime, $request);
+    $cancelled = $cancelParent ? $request : RequestContext::create($runtime);
+    $cache = $this->createMock(CacheInterface::class);
+    $cache->method($operation)->willReturnCallback(static function () use ($cancelled): never {
+        $cancelled->cancel(CancellationReason::HOST_CANCELLED);
+        $cancelled->cancellation->throwIfCancelled();
+        throw new RuntimeException('Cancellation was not raised.');
+    });
+    $client = new \Http\Mock\Client(new Psr17Factory());
+    $client->addResponse(new Response(200, [
+        'Content-Type' => 'application/jwk-set+json',
+        'Cache-Control' => $operation === 'delete' ? 'no-store' : 'max-age=60',
+    ], '{"keys":[]}'));
+    $resolver = new class implements RemoteJoseHostResolverInterface {
+        public function resolve(string $hostname): array
+        {
+            unset($hostname);
+
+            return ['8.8.8.8'];
+        }
+    };
+    $remote = new RemoteJwks(
+        $client,
+        new Psr17Factory(),
+        new RemoteJwksConfiguration('https://issuer.example', 'https://issuer.example/jwks'),
+        $cache,
+        hostResolver: $resolver,
+    );
+
+    expect(fn () => $remote->load(context: $context))->toThrow(CancelledException::class);
+})->with([
+    'request get' => ['get', true],
+    'request set' => ['set', true],
+    'request delete' => ['delete', true],
+    'child get' => ['get', false],
+    'child set' => ['set', false],
+    'child delete' => ['delete', false],
+]);
+
+it('preserves cancellation during clock reads before returning cached JWKS', function (bool $fresh, int $timestamp, bool $clockFails) {
+    $runtime = RuntimeContext::standalone();
+    $request = RequestContext::create($runtime);
+    $context = new RunwireExecutionContext($runtime, $request);
+    $cache = $this->createMock(CacheInterface::class);
+    $cache->method('get')->willReturn([
+        'jwks' => ['keys' => []],
+        'freshUntil' => $fresh ? 1100 : 999,
+        'staleUntil' => 1200,
+    ]);
+    $client = $this->createMock(ClientInterface::class);
+    $client->expects($fresh ? $this->never() : $this->once())->method('sendRequest')
+        ->willThrowException(new RuntimeException('Unavailable JWKS endpoint.'));
+    $resolver = new class implements RemoteJoseHostResolverInterface {
+        public function resolve(string $hostname): array
+        {
+            unset($hostname);
+
+            return ['8.8.8.8'];
+        }
+    };
+    $clock = new class($request, $fresh ? 1 : 2, $timestamp, $clockFails) implements ClockInterface {
+        private int $reads = 0;
+
+        public function __construct(private RequestContext $request, private int $cancelOnRead, private int $timestamp, private bool $clockFails) {}
+
+        public function now(): DateTimeImmutable
+        {
+            if (++$this->reads === $this->cancelOnRead) {
+                $this->request->cancel(CancellationReason::HOST_CANCELLED);
+                if ($this->clockFails) {
+                    throw new RuntimeException('Clock provider failed after cancellation.');
+                }
+            }
+
+            return new DateTimeImmutable('@' . ($this->reads === $this->cancelOnRead ? $this->timestamp : 1000));
+        }
+    };
+    $remote = new RemoteJwks($client, new Psr17Factory(), new RemoteJwksConfiguration('https://issuer.example', 'https://issuer.example/jwks'), $cache, $clock, $resolver);
+
+    expect(fn () => $remote->load(context: $context))->toThrow(CancelledException::class);
+    expect($request->completed())->toBeFalse();
+})->with([
+    'fresh cached keys' => [true, 1000, false],
+    'stale fallback keys' => [false, 1000, false],
+    'expired stale keys' => [false, 1200, false],
+    'fresh clock failure' => [true, 1000, true],
+    'stale clock failure' => [false, 1000, true],
+    'expired clock failure' => [false, 1200, true],
+]);
