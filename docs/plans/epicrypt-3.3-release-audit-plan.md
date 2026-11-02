@@ -28,6 +28,7 @@ The [3.2 audit](epicrypt-next-release-audit-plan.md) is historical evidence.
 | Generated data in Composer archive | The pre-fix archive contained 717 entries, including Graphify caches and a local .aws directory entry. Exclude graphify-out, phpforge and .aws; inspect a rebuilt archive and verify every tracked runtime source is present. No credential content was observed or inspected. |
 | Release fixture still installs Runwire 2.1.1 | Install ^3.0 in the common production dependency set used by all comparison variants. Preserve matched dependencies and existing budgets. |
 | Development dependency abandonment | Live Composer audit reports zero advisories and abandoned doctrine/annotations through PHPForge/PHPBench. Report separately; shared-toolchain remediation belongs upstream. |
+| Lowest-dependency PHP deprecations | Hosted run 41456525235 on 436e943 reproduced implicit-nullable deprecations in Nyholm PSR-7 1.8.0 and HTTP mock-client 1.6.0. Isolated PHP 8.4 lowest validation also reproduced the same defect in psr/http-factory 1.0. Raise these minimums to ^1.8.2, ^1.6.1 and ^1.1 respectively, retaining the upstream PHP compatibility fixes. Preserve E_ALL and failure on deprecation. |
 
 ## Validation record
 
@@ -68,6 +69,13 @@ The [3.2 audit](epicrypt-next-release-audit-plan.md) is historical evidence.
 - Benchmark/comparator shell syntax and positive/six-negative comparator
   probes pass. Workflow YAML parses; the existing JWS mutation shard now
   includes `JwsSignature`, retaining its **66%** floor.
+- Corrected lowest dependencies pass the complete `composer ic:ci --prefer-lowest`
+  suite on isolated PHP 8.4.26, including deprecation enforcement. The source
+  snapshot retains Git metadata and the same 389 first-party PHP files as CI.
+- Initial hosted revision `436e943` passed all 15 security mutation shards,
+  including JWS **90.77%** and remote JOSE **93.58%**, plus Windows publication.
+  Its lowest-dependency deprecations were corrected as described above; fresh
+  final-head certification remains authoritative for the follow-up revision.
 
 This is the local audit snapshot prepared on branch `patch/runwire-3`, based
 on `8b1cdf370a8676e536db96b7bd0ae66347141512`. Subsequent release certification

@@ -14,6 +14,11 @@ Dependencies and integration
   Runwire remains absent from the production dependency graph.
 * The production phpseclib minimum is now 4.0.3; the Pathwise development
   interoperability minimum is 4.2.1. Pathwise remains optional for consumers.
+* The PSR-17 interface minimum is now psr/http-factory 1.1, which uses explicit
+  nullable parameters compatible with PHP 8.4 and later.
+* Development HTTP fixtures require Nyholm PSR-7 1.8.2 and HTTP mock-client
+  1.6.1 or later, whose explicit nullable parameters support PHP 8.4 and 8.5
+  without deprecations in lowest-dependency validation.
 * The matched FPM acceptance fixture installs Runwire ^3.0 for every variant.
   Runtime, request, scope, worker and event-loop ownership remain with the host.
 
