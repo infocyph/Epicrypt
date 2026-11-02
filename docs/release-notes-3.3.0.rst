@@ -19,6 +19,8 @@ Dependencies and integration
 * Development HTTP fixtures require Nyholm PSR-7 1.8.2 and HTTP mock-client
   1.6.1 or later, whose explicit nullable parameters support PHP 8.4 and 8.5
   without deprecations in lowest-dependency validation.
+* Independent JOSE and OAuth/OIDC tests use Node 26.13.0 LTS, npm 12.2.1
+  and jose 6.2.15. These are development tools, excluded from Composer archives.
 * The matched FPM acceptance fixture installs Runwire ^3.0 for every variant.
   Runtime, request, scope, worker and event-loop ownership remain with the host.
   Both execution modes compare against published Epicrypt 3.2 by default;

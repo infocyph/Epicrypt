@@ -1,6 +1,6 @@
 # Epicrypt 3.3 audit and release plan
 
-Updated 2026-11-02. Recommended release: **3.3.0**, for new optional Runwire 3
+Updated 2026-11-03. Recommended release: **3.3.0**, for new optional Runwire 3
 compatibility plus dependency and correctness fixes. No new public method or
 persisted-format change is required. Version tags and publication remain
 maintainer-owned.
@@ -27,6 +27,8 @@ The [3.2 audit](epicrypt-next-release-audit-plan.md) is historical evidence.
 | JWS accepts EC keys for the wrong algorithm | Bind ES256/ES384/ES512 to P-256/P-384/P-521 per [RFC 7518 section 3.4](https://www.rfc-editor.org/rfc/rfc7518.html#section-3.4), matching the existing JWT boundary. Seven mismatched-curve cases failed before the fix; retain signer/verifier rejection and matching-curve round trips. This requires a misconfigured trusted key; it does not demonstrate forgery with a correctly configured key. |
 | Generated data in Composer archive | The pre-fix archive contained 717 entries, including Graphify caches and a local .aws directory entry. Exclude graphify-out, phpforge and .aws; inspect a rebuilt archive and verify every tracked runtime source is present. No credential content was observed or inspected. |
 | Release fixture still installs Runwire 2.1.1 | Install ^3.0 in the common production dependency set used by all comparison variants. Preserve matched dependencies and existing budgets. |
+| Node interoperability toolchain | Pin Node 26.13.0 LTS, npm 12.2.1 and latest stable jose 6.2.15, regenerate the lockfile, audit and rerun both bidirectional interoperability profiles. |
+| Hosted performance diagnosis | Unchanged 5b709ad passed every nonperformance lane but failed RPM twice: borrowed c8 at -2.255%, then unbound c1 at -2.951%. Retain raw trials and all limits. Add an independent identical-code control at c1 in both modes; it supplements all six candidate-versus-3.2 comparisons and does not replace them. |
 | Development dependency abandonment | Live Composer audit reports zero advisories and abandoned doctrine/annotations through PHPForge/PHPBench. Report separately; shared-toolchain remediation belongs upstream. |
 | Lowest-dependency PHP deprecations | Hosted run 41456525235 on 436e943 reproduced implicit-nullable deprecations in Nyholm PSR-7 1.8.0 and HTTP mock-client 1.6.0. Isolated PHP 8.4 lowest validation also reproduced the same defect in psr/http-factory 1.0. Raise these minimums to ^1.8.2, ^1.6.1 and ^1.1 respectively, retaining the upstream PHP compatibility fixes. Preserve E_ALL and failure on deprecation. |
 | Release fixture retains historical 3.2 audit baselines | For the 3.3 candidate, compare both modes against published 3.2. On unchanged 5080fad, local historical 3.1 comparison first rejected 5.439% baseline spread; the identical retry measured -3.061% median RPM. A matched diagnostic against published 3.2 passed at -0.762%. Correct the release reference, retain explicit overrides for 3.1/1b034ec, resolve immutable commit IDs and rerun all six comparisons. Keep 2% RPM, 5% spread, 256 MiB RSS, durations and trial counts unchanged. This does not claim a source performance fix. |
@@ -50,11 +52,12 @@ The [3.2 audit](epicrypt-next-release-audit-plan.md) is historical evidence.
   mandatory AEGIS lane also passes **2 tests / 8 assertions**. The PHP 8.5 host
   uses libsodium 1.0.18 and exercises the unsupported-algorithm behavior.
 - Strict Sphinx (`-W --keep-going`) passes. Independent bidirectional JOSE
-  and OAuth/OIDC fixtures pass with Node 26.11.1 and jose 6.2.12 after the final
-  JWS fix; clean npm install/audit reports zero vulnerabilities.
+  and OAuth/OIDC fixtures pass with Node 26.13.0 LTS, npm 12.2.1 and jose
+  6.2.15 after the final JWS fix; clean npm install/audit reports zero vulnerabilities.
 - Final Composer archive: **297 entries**, all **291 tracked runtime files**,
   no generated graphs, local configuration or development payloads. SHA-256:
-  `78972ce3acd9224c33613d219a90598c17d068b4525a23f3ddf24be7c29b2f5c`.
+  `1f3c00b6f3357db3fb940ff1ae14f6c6cf8e521b56ac905b596922bd37cb1ac6`
+  for revision 5b709ad; follow-up tooling changes are excluded from the archive.
   An isolated production-only install passes core smoke with `php -n`
   (no Ctype, Runwire or Pathwise), platform checks and phpseclib RSA-PSS smoke.
 - PHPBench quick suite: **43 subjects, zero failures/errors**. Final focused
@@ -71,8 +74,11 @@ The [3.2 audit](epicrypt-next-release-audit-plan.md) is historical evidence.
   probes pass. Workflow YAML parses; the existing JWS mutation shard now
   includes `JwsSignature`, retaining its **66%** floor.
 - Corrected lowest dependencies pass the complete `composer ic:ci --prefer-lowest`
-  suite on isolated PHP 8.4.26, including deprecation enforcement. The source
-  snapshot retains Git metadata and the same 389 first-party PHP files as CI.
+  suite on isolated PHP 8.4.26 and PHP 8.5.4, including deprecation enforcement.
+  The source snapshot retains Git metadata and the same 389 first-party PHP files as CI.
+- Hosted revision `5b709ad` passed all nonperformance checks, including all
+  15 mutation shards, PHP 8.4/8.5 stable/lowest, Windows, AEGIS, documentation,
+  minimal consumers and interoperability. It does not certify a later revision.
 - Initial hosted revision `436e943` passed all 15 security mutation shards,
   including JWS **90.77%** and remote JOSE **93.58%**, plus Windows publication.
   Its lowest-dependency deprecations were corrected as described above; fresh
@@ -101,9 +107,13 @@ above preserve the relevant evidence independently of temporary files.
   Retain the **2% median RPM**, **5% trial spread** and **256 MiB RSS** limits.
   For this 3.3 release, both references default to published 3.2; historical
   3.2-audit references remain available through the documented overrides.
-  This long deployment certification was not run during this audit.
-- The requested dependency minimums are validated locally, but the complete
-  lowest-dependency and Windows matrices require fresh execution records.
+  All six local cases qualified on 5b709ad across retained batches, with
+  median changes from -0.473% to +1.631%; noisy trials were rejected unchanged.
+  The final borrowed batch also passed a 300.125-second Alpine soak with
+  5,131,090 isolated requests, 7,928 bytes retained heap growth, live RSS
+  sampling and a real FPM restart. Hosted RPM remains unresolved as above.
+- The requested dependency minimums and Windows matrix passed on 5b709ad;
+  the follow-up toolchain and control changes need exact-head hosted results.
 - `doctrine/annotations` abandonment is a development-only upstream
   PHPBench/PHPForge maintenance item, not a production advisory.
 

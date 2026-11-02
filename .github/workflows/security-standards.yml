@@ -95,11 +95,15 @@ jobs:
 
   docker-host-acceptance:
     if: github.event_name == 'pull_request'
-    name: "Matched Alpine FPM RPM and persistent-host acceptance"
+    name: "Matched Alpine FPM RPM and persistent-host acceptance (${{ matrix.profile }})"
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 80
     permissions:
       contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        profile: [candidate, control]
     steps:
       - uses: actions/checkout@v7
         with:
@@ -127,12 +131,15 @@ jobs:
         env:
           HOST_SOAK_CPUS: "2"
           HOST_DURATION: "60s"
+          HOST_BASELINE_REF: ${{ matrix.profile == 'control' && github.event.pull_request.head.sha || '3.2' }}
+          HOST_BORROWED_BASELINE_REF: ${{ matrix.profile == 'control' && github.event.pull_request.head.sha || '3.2' }}
+          HOST_CONCURRENCIES: ${{ matrix.profile == 'control' && '1' || '1 4 8' }}
         run: taskset -c 0,1 bash benchmarks/docker-host-acceptance.sh
       - name: Preserve raw measurements and deployment configuration
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: docker-host-acceptance
+          name: docker-host-acceptance-${{ matrix.profile }}
           path: var/docker-host-acceptance/
           if-no-files-found: error
 
@@ -223,8 +230,10 @@ jobs:
           fail-fast: true
       - uses: actions/setup-node@v7
         with:
-          node-version: "26.11.1"
+          node-version: "26.13.0"
           cache: npm
+      - name: Install the pinned npm release
+        run: npm install --global npm@12.2.1 --ignore-scripts
       - name: Install PHP dependencies
         run: composer install --no-interaction --no-progress --prefer-dist
       - name: Install and audit the independent JOSE implementation
@@ -256,8 +265,10 @@ jobs:
           fail-fast: true
       - uses: actions/setup-node@v7
         with:
-          node-version: "26.11.1"
+          node-version: "26.13.0"
           cache: npm
+      - name: Install the pinned npm release
+        run: npm install --global npm@12.2.1 --ignore-scripts
       - name: Install PHP dependencies
         run: composer install --no-interaction --no-progress --prefer-dist
       - name: Install and audit the independent JOSE implementation

@@ -182,6 +182,14 @@ This changes only the ephemeral CI runner; the local script never changes host
 daemon affinity. Interpret each deployment's
 baseline/candidate comparison within its recorded architecture and CPU profile.
 
+CI also runs a control deployment at concurrency 1 in both execution modes,
+using the candidate commit as both references. It retains the same warmup,
+trial lengths, trial counts, correctness, RPM, variance and resource limits,
+followed by the persistent-process soak and worker replacement checks.
+This identical-code comparison helps distinguish deployment or measurement
+bias from a library regression; its result does not replace the complete
+candidate comparison against the preceding release.
+
 For a sustained persistent-process check, set
 ``EPICRYPT_HOST_SOAK_SECONDS=300`` when running
 ``tests/Smoke/persistent-runwire-host.php``. Its default remains a short smoke.
