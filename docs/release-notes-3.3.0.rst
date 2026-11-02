@@ -21,6 +21,8 @@ Dependencies and integration
   without deprecations in lowest-dependency validation.
 * The matched FPM acceptance fixture installs Runwire ^3.0 for every variant.
   Runtime, request, scope, worker and event-loop ownership remain with the host.
+  Both execution modes compare against published Epicrypt 3.2 by default;
+  explicit reference overrides retain historical audit reproducibility.
 
 Fixes
 ------

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Matched FPM acceptance: release baseline for unbound calls, pre-fix candidate for borrowed calls.
+# Matched FPM acceptance against the preceding published release, with explicit historical overrides.
 set -euo pipefail
 repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 report=${HOST_DOCKER_REPORT:-"$repo/var/docker-host-acceptance"}
@@ -9,6 +9,8 @@ scratch=$(mktemp -d)
 prefix="epicrypt-release-$$"
 php_image=${HOST_PHP_IMAGE:-php:8.4.26-fpm-alpine3.24}
 tools_image=${HOST_TOOLS_IMAGE:-"$prefix-tools"}
+baseline_ref=${HOST_BASELINE_REF:-3.2}
+borrowed_ref=${HOST_BORROWED_BASELINE_REF:-$baseline_ref}
 sampler=''
 cleanup() {
   if [[ -n $sampler ]]; then kill "$sampler" 2>/dev/null || :; wait "$sampler" 2>/dev/null || :; fi
@@ -20,14 +22,16 @@ cleanup() {
 trap cleanup EXIT
 git -C "$repo" rev-parse HEAD > "$report/candidate-parent-sha"
 git -C "$repo" diff --binary > "$report/candidate.patch"
-git -C "$repo" rev-parse 3.1 > "$report/baseline-sha"
-git -C "$repo" rev-parse 1b034ec > "$report/borrowed-baseline-sha"
+baseline_sha=$(git -C "$repo" rev-parse --verify --end-of-options "${baseline_ref}^{commit}")
+borrowed_sha=$(git -C "$repo" rev-parse --verify --end-of-options "${borrowed_ref}^{commit}")
+printf '%s\n' "$baseline_sha" > "$report/baseline-sha"
+printf '%s\n' "$borrowed_sha" > "$report/borrowed-baseline-sha"
 mkdir -p "$scratch/host"
 cp "$repo/composer.json" "$repo/composer.lock" "$scratch/host/"
 cp -a "$repo/src" "$scratch/host/"
 (
   cd "$scratch/host"
-  composer require 'infocyph/runwire:^3.0' 'nyholm/psr7:^1.8' --update-no-dev --no-interaction --no-progress --prefer-dist
+  composer require 'infocyph/runwire:^3.0' 'nyholm/psr7:^1.8.2' --update-no-dev --no-interaction --no-progress --prefer-dist
 ) > "$report/install.log" 2>&1
 cp "$scratch/host/composer.lock" "$report/host-composer.lock"
 cp "$repo/benchmarks/host-workload.php" "$report/host-workload.fixture"
@@ -36,8 +40,8 @@ cp "$scratch/host-public.pem" "$scratch/host-jwks.json" "$report/"
 for variant in baseline previous candidate; do
   mkdir -p "$scratch/$variant/benchmarks"
   case "$variant" in
-    baseline) git -C "$repo" archive 3.1 src | tar -x -C "$scratch/$variant" ;;
-    previous) git -C "$repo" archive 1b034ec src | tar -x -C "$scratch/$variant" ;;
+    baseline) git -C "$repo" archive "$baseline_sha" src | tar -x -C "$scratch/$variant" ;;
+    previous) git -C "$repo" archive "$borrowed_sha" src | tar -x -C "$scratch/$variant" ;;
     candidate) cp -a "$repo/src" "$scratch/$variant/" ;;
   esac
   cp -a "$scratch/host/vendor" "$scratch/$variant/"

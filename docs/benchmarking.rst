@@ -159,8 +159,14 @@ Each response validates a 64 KiB-class atomic file-protection round trip,
 integrity, JWT verification, and a JWKS cache miss and hit through an in-memory
 PSR-18 fixture. Borrowed calls also verify cancellation and request ownership.
 This measures Epicrypt's remote boundary overhead, not external network latency.
-Unbound calls compare against tag 3.1; borrowed calls compare against the
-pre-remediation Runwire implementation at ``1b034ec``. Every measured response
+Both unbound and borrowed calls compare against the preceding published
+release, tag 3.2, for the Epicrypt 3.3 candidate. ``HOST_BASELINE_REF`` selects
+the unbound reference; ``HOST_BORROWED_BASELINE_REF`` defaults to that same
+reference. Values are locally available Git revision strings (tags, branches
+or commit IDs); unset or empty values use those defaults. Both are validated
+and resolved once to immutable commit IDs before dependency installation and
+recorded in the report; an invalid revision fails the run. To reproduce the historical 3.2 audit, select
+``HOST_BASELINE_REF=3.1 HOST_BORROWED_BASELINE_REF=1b034ec``. Every measured response
 must exactly match the independently defined result. The unchanged 2% median
 RPM and 256 MiB process-tree RSS budgets apply. Evidence includes raw trials,
 latencies, image identities, PHP configuration, the host dependency lock,

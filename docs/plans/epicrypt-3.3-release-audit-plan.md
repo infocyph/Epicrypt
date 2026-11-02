@@ -29,6 +29,7 @@ The [3.2 audit](epicrypt-next-release-audit-plan.md) is historical evidence.
 | Release fixture still installs Runwire 2.1.1 | Install ^3.0 in the common production dependency set used by all comparison variants. Preserve matched dependencies and existing budgets. |
 | Development dependency abandonment | Live Composer audit reports zero advisories and abandoned doctrine/annotations through PHPForge/PHPBench. Report separately; shared-toolchain remediation belongs upstream. |
 | Lowest-dependency PHP deprecations | Hosted run 41456525235 on 436e943 reproduced implicit-nullable deprecations in Nyholm PSR-7 1.8.0 and HTTP mock-client 1.6.0. Isolated PHP 8.4 lowest validation also reproduced the same defect in psr/http-factory 1.0. Raise these minimums to ^1.8.2, ^1.6.1 and ^1.1 respectively, retaining the upstream PHP compatibility fixes. Preserve E_ALL and failure on deprecation. |
+| Release fixture retains historical 3.2 audit baselines | For the 3.3 candidate, compare both modes against published 3.2. On unchanged 5080fad, local historical 3.1 comparison first rejected 5.439% baseline spread; the identical retry measured -3.061% median RPM. A matched diagnostic against published 3.2 passed at -0.762%. Correct the release reference, retain explicit overrides for 3.1/1b034ec, resolve immutable commit IDs and rerun all six comparisons. Keep 2% RPM, 5% spread, 256 MiB RSS, durations and trial counts unchanged. This does not claim a source performance fix. |
 
 ## Validation record
 
@@ -98,6 +99,8 @@ above preserve the relevant evidence independently of temporary files.
   unbound/borrowed comparisons at concurrency 1/4/8, warmup, three trials,
   300-second soak, live process-tree RSS and real FPM worker replacement.
   Retain the **2% median RPM**, **5% trial spread** and **256 MiB RSS** limits.
+  For this 3.3 release, both references default to published 3.2; historical
+  3.2-audit references remain available through the documented overrides.
   This long deployment certification was not run during this audit.
 - The requested dependency minimums are validated locally, but the complete
   lowest-dependency and Windows matrices require fresh execution records.
