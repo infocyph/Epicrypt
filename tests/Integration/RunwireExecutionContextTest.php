@@ -519,3 +519,52 @@ it('preserves cancellation during clock reads before returning cached JWKS', fun
     'stale clock failure' => [false, 1000, true],
     'expired clock failure' => [false, 1200, true],
 ]);
+
+it('preserves cancellation raised by a JOSE host resolver before stale fallback', function (bool $cancelParent, bool $discovery) {
+    $runtime = RuntimeContext::standalone();
+    $request = RequestContext::create($runtime);
+    $context = new RunwireExecutionContext($runtime, $request);
+    $cancelled = $cancelParent ? $request : RequestContext::create($runtime);
+    $resolver = new class($cancelled) implements RemoteJoseHostResolverInterface {
+        public function __construct(private RequestContext $request) {}
+
+        public function resolve(string $hostname): array
+        {
+            unset($hostname);
+            $this->request->cancel(CancellationReason::HOST_CANCELLED);
+            $this->request->cancellation->throwIfCancelled();
+
+            throw new RuntimeException('Cancellation was not raised.');
+        }
+    };
+    $cache = $this->createMock(CacheInterface::class);
+    $cache->method('get')->willReturn([
+        'jwks' => ['keys' => []],
+        'freshUntil' => 999,
+        'staleUntil' => 1200,
+    ]);
+    $client = $this->createMock(ClientInterface::class);
+    $client->expects($this->never())->method('sendRequest');
+    $clock = new class implements ClockInterface {
+        public function now(): DateTimeImmutable
+        {
+            return new DateTimeImmutable('@1000');
+        }
+    };
+    $remote = new RemoteJwks(
+        $client,
+        new Psr17Factory(),
+        new RemoteJwksConfiguration('https://issuer.example', $discovery ? null : 'https://issuer.example/jwks'),
+        $cache,
+        $clock,
+        $resolver,
+    );
+
+    expect(fn () => $remote->load(context: $context))->toThrow(CancelledException::class);
+    expect($request->completed())->toBeFalse();
+})->with([
+    'parent JWKS' => [true, false],
+    'child JWKS' => [false, false],
+    'parent discovery' => [true, true],
+    'child discovery' => [false, true],
+]);

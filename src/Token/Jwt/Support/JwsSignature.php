@@ -80,6 +80,22 @@ final readonly class JwsSignature
     }
 
     /** @param array<array-key, mixed> $details */
+    private function assertEcAlgorithmDetails(AsymmetricJwtAlgorithm $algorithm, array $details): void
+    {
+        $expectedCurves = match ($algorithm) {
+            AsymmetricJwtAlgorithm::ES256 => ['prime256v1', 'secp256r1'],
+            AsymmetricJwtAlgorithm::ES384 => ['secp384r1'],
+            AsymmetricJwtAlgorithm::ES512 => ['secp521r1'],
+            default => [],
+        };
+        $ec = $details['ec'] ?? null;
+        $curve = is_array($ec) ? ($ec['curve_name'] ?? null) : null;
+        if (($details['type'] ?? null) !== OPENSSL_KEYTYPE_EC || !is_string($curve) || !in_array($curve, $expectedCurves, true)) {
+            throw new ConfigurationException('EC JWS key curve does not match the configured algorithm.');
+        }
+    }
+
+    /** @param array<array-key, mixed> $details */
     private function assertOpenSslAlgorithmDetails(AsymmetricJwtAlgorithm $algorithm, array $details): void
     {
         if ($algorithm->isRsa()) {
@@ -87,9 +103,7 @@ final readonly class JwsSignature
                 throw new ConfigurationException('RSA JWS keys must contain at least 2048 bits.');
             }
         } elseif ($algorithm->isEc()) {
-            if (($details['type'] ?? null) !== OPENSSL_KEYTYPE_EC) {
-                throw new ConfigurationException('ECDSA JWS requires an EC key.');
-            }
+            $this->assertEcAlgorithmDetails($algorithm, $details);
         } else {
             throw new ConfigurationException('Unsupported JWS key family.');
         }

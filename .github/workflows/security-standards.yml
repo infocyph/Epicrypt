@@ -385,7 +385,7 @@ jobs:
           - shard: jwe
             classes: 'Infocyph\Epicrypt\Token\Jwt\Jwe'
           - shard: jws
-            classes: 'Infocyph\Epicrypt\Token\Jwt\Jws,Infocyph\Epicrypt\Token\Jwt\Support\JosePolicy,Infocyph\Epicrypt\Token\Jwt\Support\JwtToken'
+            classes: 'Infocyph\Epicrypt\Token\Jwt\Jws,Infocyph\Epicrypt\Token\Jwt\Support\JosePolicy,Infocyph\Epicrypt\Token\Jwt\Support\JwsSignature,Infocyph\Epicrypt\Token\Jwt\Support\JwtToken'
           - shard: validation-policy
             classes: 'Infocyph\Epicrypt\Password\PasswordHasher,Infocyph\Epicrypt\Token\Jwt\JwtValidator,Infocyph\Epicrypt\Security\AsymmetricSigningKeySet,Infocyph\Epicrypt\Security\KeyRing'
           - shard: jwt-policy
@@ -438,6 +438,13 @@ jobs:
             -e "s#<directory suffix=\".php\">./src</directory>#<directory suffix=\".php\">$GITHUB_WORKSPACE/src</directory>#" \
             vendor/infocyph/phpforge/resources/pest.xml > "$RUNNER_TEMP/pest-mutation.xml"
       - name: Enforce the measured mutation-score floor
-        run: >-
-          vendor/bin/pest --configuration="${{ runner.temp }}/pest-mutation.xml" --cache-directory="${{ runner.temp }}/pest-cache" --mutate --parallel --processes=4 --min=66
-          --class="${{ matrix.classes }}"
+        shell: bash
+        run: |
+          umask 077
+          mutation_tmp=$(mktemp -d "$RUNNER_TEMP/epicrypt-mutate.XXXXXX")
+          trap 'rm -rf "$mutation_tmp"' EXIT
+          TMPDIR="$mutation_tmp" vendor/bin/pest \
+            --configuration="${{ runner.temp }}/pest-mutation.xml" \
+            --cache-directory="${{ runner.temp }}/pest-cache" \
+            --mutate --parallel --processes=4 --min=66 \
+            --class="${{ matrix.classes }}"

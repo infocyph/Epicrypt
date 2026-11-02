@@ -27,7 +27,7 @@ cp "$repo/composer.json" "$repo/composer.lock" "$scratch/host/"
 cp -a "$repo/src" "$scratch/host/"
 (
   cd "$scratch/host"
-  composer require infocyph/runwire:2.1.1 'nyholm/psr7:^1.8' --update-no-dev --no-interaction --no-progress --prefer-dist
+  composer require 'infocyph/runwire:^3.0' 'nyholm/psr7:^1.8' --update-no-dev --no-interaction --no-progress --prefer-dist
 ) > "$report/install.log" 2>&1
 cp "$scratch/host/composer.lock" "$report/host-composer.lock"
 cp "$repo/benchmarks/host-workload.php" "$report/host-workload.fixture"

@@ -142,7 +142,7 @@ BusyBox memory units are unsuitable for the RSS guard. Image identities
 and runtime configuration are retained with every report.
 
 The fixture installs one identical production dependency set, including
-host-owned Runwire 2.1.1 and Nyholm PSR-7. It deploys four static FPM workers
+host-owned Runwire ^3.0 and Nyholm PSR-7. It deploys four static FPM workers
 per variant with identical OPcache settings, warms each variant for 60 seconds, then runs
 three alternating 60-second trials at concurrency 1, 4 and 8. CPU affinity
 separates FPM (cores 2,3), the proxy (core 0) and the load generator (core 1);
