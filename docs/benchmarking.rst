@@ -175,6 +175,11 @@ RPM and 256 MiB process-tree RSS budgets apply. Evidence includes raw trials,
 latencies, image identities, PHP configuration, the host dependency lock,
 and the public EC key/JWKS shared by the three variants within that run.
 The comparator rejects trial spreads above 5% before evaluating the RPM budget.
+For each round, it divides candidate successful RPM by the matched baseline
+successful RPM. The median of these paired ratios must be at least 0.98.
+Individual deployment medians remain in the report as diagnostics. Pairing
+preserves the alternating measurement design: independent medians can confuse
+temporal drift with a regression, or mask a real paired regression.
 The same fixture runs independently in CI and preserves its raw evidence as
 an artifact; the Docker-authorized host remains the production-equivalent
 acceptance environment.
@@ -196,7 +201,14 @@ On revision 45a0557, separate FPM pools reported a -2.527% regression for
 identical source while the release comparison reported -2.185%. Those failed
 measurements are retained. Sharing the worker pool removes differences in
 worker placement, network destination and temporary filesystem between
-variants; it does not change the comparator or any acceptance budget.
+variants. The pool change retained the comparator and every acceptance budget.
+The shared-pool control retry on that revision's successor, 2cf0d90, then
+exposed the independent-median error: matched changes of +0.378%, -0.345%
+and -3.304% produced a false -2.657% independent-median result. Their paired
+median is -0.345%. Deterministic regressions retain this observed drift case,
+reject a real loss masked by independent medians, accept the exact 2% boundary,
+and reject a 2.001% loss. The 2% limit, 5% spread guard, trial counts,
+durations and resource limits are unchanged.
 
 For a sustained persistent-process check, set
 ``EPICRYPT_HOST_SOAK_SECONDS=300`` when running
