@@ -186,6 +186,7 @@ try {
     }
     $request->complete();
     header('Content-Type: text/plain');
+    header('X-Epicrypt-Deployment: ' . basename(dirname(__DIR__)));
     header('X-Epicrypt-Worker: ' . getmypid());
     file_put_contents('php://output', 'release-health-ok');
 } catch (Throwable $exception) {

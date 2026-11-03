@@ -142,15 +142,18 @@ BusyBox memory units are unsuitable for the RSS guard. Image identities
 and runtime configuration are retained with every report.
 
 The fixture installs one identical production dependency set, including
-host-owned Runwire ^3.0 and Nyholm PSR-7. It deploys four static FPM workers
-per variant with identical OPcache settings, warms each variant for 60 seconds, then runs
+host-owned Runwire ^3.0 and Nyholm PSR-7. All variants use the same four static
+FPM workers, OPcache configuration, tmpfs and network endpoint. Nginx selects
+the variant's immutable source/dependency tree through an explicit map;
+preflight checks verify the deployment header returned by that tree.
+The fixture warms each variant for 60 seconds, then runs
 three alternating 60-second trials at concurrency 1, 4 and 8. CPU affinity
 separates FPM (cores 2,3), the proxy (core 0) and the load generator (core 1);
 override ``HOST_FPM_CPUS``, ``HOST_PROXY_CPUS`` and ``HOST_CLIENT_CPUS`` for
 the host's available CPU set. ``HOST_PHP_IMAGE`` selects an alternative FPM
 image; ``HOST_TOOLS_IMAGE`` reuses a prepared measurement image. Overrides
 define a separate deployment profile and must be recorded with its evidence.
-Temporary file outputs use an identical bounded 128 MiB tmpfs per variant;
+Temporary file outputs use the same bounded 128 MiB tmpfs;
 request access logs are disabled while error logs remain available. This
 profile measures a Docker deployment with ephemeral memory-backed staging,
 and does not certify disk or external storage throughput.
@@ -189,6 +192,11 @@ followed by the persistent-process soak and worker replacement checks.
 This identical-code comparison helps distinguish deployment or measurement
 bias from a library regression; its result does not replace the complete
 candidate comparison against the preceding release.
+On revision 45a0557, separate FPM pools reported a -2.527% regression for
+identical source while the release comparison reported -2.185%. Those failed
+measurements are retained. Sharing the worker pool removes differences in
+worker placement, network destination and temporary filesystem between
+variants; it does not change the comparator or any acceptance budget.
 
 For a sustained persistent-process check, set
 ``EPICRYPT_HOST_SOAK_SECONDS=300`` when running

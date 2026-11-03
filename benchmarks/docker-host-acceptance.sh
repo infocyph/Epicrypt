@@ -14,8 +14,8 @@ borrowed_ref=${HOST_BORROWED_BASELINE_REF:-$baseline_ref}
 sampler=''
 cleanup() {
   if [[ -n $sampler ]]; then kill "$sampler" 2>/dev/null || :; wait "$sampler" 2>/dev/null || :; fi
-  for role in baseline previous candidate; do docker logs "$prefix-$role" > "$report/$role-fpm.log" 2>&1 || :; done
-  for role in soak client proxy baseline previous candidate; do docker rm -f "$prefix-$role" >/dev/null 2>&1 || :; done
+  docker logs "$prefix-fpm" > "$report/fpm.log" 2>&1 || :
+  for role in soak client proxy fpm; do docker rm -f "$prefix-$role" >/dev/null 2>&1 || :; done
   docker network rm "$prefix" >/dev/null 2>&1 || :
   rm -rf "$scratch"
 }
@@ -72,69 +72,68 @@ if [[ -z ${HOST_TOOLS_IMAGE:-} ]]; then
   docker build -t "$tools_image" "$scratch" > "$report/tools-build.log" 2>&1
 fi
 docker network create "$prefix" >/dev/null
+# Use the same workers, network path and tmpfs for every variant. Separate pools
+# produced a >2% false regression even with identical code in hosted A/A trials.
+docker run -d --name "$prefix-fpm" --network "$prefix" --cpuset-cpus="${HOST_FPM_CPUS:-2,3}" \
+  --tmpfs /tmp:rw,noexec,nosuid,size=128m,mode=1777 \
+  -v "$scratch/baseline:/app/baseline:ro" -v "$scratch/previous:/app/previous:ro" \
+  -v "$scratch/candidate:/app/candidate:ro" -v "$scratch/fpm.conf:/usr/local/etc/php-fpm.d/zz-release.conf:ro" \
+  -v "$scratch/opcache.ini:/usr/local/etc/php/conf.d/zz-release.ini:ro" "$php_image" > /dev/null
+printf 'events {}\nhttp { access_log off;\nmap $arg_variant $epicrypt_script {\ndefault "";\n' > "$scratch/nginx.conf"
 for variant in baseline previous candidate; do
-  docker run -d --name "$prefix-$variant" --network "$prefix" --cpuset-cpus="${HOST_FPM_CPUS:-2,3}" \
-    --tmpfs /tmp:rw,noexec,nosuid,size=128m,mode=1777 \
-    -v "$scratch/$variant:/app:ro" -v "$scratch/fpm.conf:/usr/local/etc/php-fpm.d/zz-release.conf:ro" \
-    -v "$scratch/opcache.ini:/usr/local/etc/php/conf.d/zz-release.ini:ro" "$php_image" > /dev/null
+  printf '%s /app/%s/benchmarks/host-workload.php;\n' "$variant" "$variant" >> "$scratch/nginx.conf"
 done
-printf 'events {}\nhttp { access_log off;\n' > "$scratch/nginx.conf"
-port=8081
-for variant in baseline previous candidate; do
-  printf 'server { listen %d; location / { include /etc/nginx/fastcgi_params; fastcgi_param SCRIPT_FILENAME /app/benchmarks/host-workload.php; fastcgi_pass %s-%s:9000; } }\n' "$port" "$prefix" "$variant" >> "$scratch/nginx.conf"
-  ((port+=1))
-done
-printf '}\n' >> "$scratch/nginx.conf"
+printf '}\nserver { listen 8080; location / { include /etc/nginx/fastcgi_params; fastcgi_param SCRIPT_FILENAME $epicrypt_script; fastcgi_pass %s-fpm:9000; } }\n}\n' "$prefix" >> "$scratch/nginx.conf"
 docker run -d --name "$prefix-proxy" --network "$prefix" --cpuset-cpus="${HOST_PROXY_CPUS:-0}" \
   -v "$scratch/nginx.conf:/etc/nginx/nginx.conf:ro" "$tools_image" > /dev/null
 docker run -d --name "$prefix-client" --network "$prefix" --pid=host --cpuset-cpus="${HOST_CLIENT_CPUS:-1}" \
   -v "$repo/benchmarks:/benchmarks:ro" -v "$report:/report" --entrypoint sleep "$tools_image" infinity > /dev/null
 docker image inspect "$php_image" "$tools_image" > "$report/images.json"
-docker exec "$prefix-candidate" php -i > "$report/php-profile.txt"
+docker exec "$prefix-fpm" php -i > "$report/php-profile.txt"
 docker info > "$report/docker-profile.txt"
 printf 'FPM_CPUS=%s\nPROXY_CPUS=%s\nCLIENT_CPUS=%s\nSOAK_CPUS=%s\nWARMUP=%s\n' \
   "${HOST_FPM_CPUS:-2,3}" "${HOST_PROXY_CPUS:-0}" "${HOST_CLIENT_CPUS:-1}" "${HOST_SOAK_CPUS:-6}" \
   "${HOST_WARMUP_DURATION:-60s}" > "$report/deployment-profile.txt"
+printf 'FPM_POOL=shared\nFPM_WORKERS=4\n' >> "$report/deployment-profile.txt"
 lscpu >> "$report/deployment-profile.txt"
 taskset -pc $$ >> "$report/deployment-profile.txt"
-for variant in baseline previous candidate; do
-  printf '%s FPM master affinity: ' "$variant" >> "$report/deployment-profile.txt"
-  docker exec "$prefix-$variant" sh -c 'grep "^Cpus_allowed_list:" /proc/1/status' >> "$report/deployment-profile.txt"
-done
+printf 'Shared FPM master affinity: ' >> "$report/deployment-profile.txt"
+docker exec "$prefix-fpm" sh -c 'grep "^Cpus_allowed_list:" /proc/1/status' >> "$report/deployment-profile.txt"
 cp "$scratch/fpm.conf" "$scratch/opcache.ini" "$scratch/nginx.conf" "$report/"
-docker top "$prefix-candidate" > "$report/initial-workers.txt"
-for port in 8081 8082 8083; do
+docker top "$prefix-fpm" > "$report/initial-workers.txt"
+for variant in baseline previous candidate; do
   for attempt in {1..30}; do
-    if docker exec "$prefix-client" curl -fsS "http://$prefix-proxy:$port/?scenario=mixed" | grep -Fxq release-health-ok; then break; fi
+    if docker exec "$prefix-client" curl -fsS "http://$prefix-proxy:8080/?variant=$variant&scenario=mixed" | grep -Fxq release-health-ok; then break; fi
     sleep 1
   done
-  docker exec "$prefix-client" curl -fsS "http://$prefix-proxy:$port/?scenario=mixed" | grep -Fxq release-health-ok
+  docker exec "$prefix-client" curl -fsS -D "/report/preflight-$variant.headers" \
+    "http://$prefix-proxy:8080/?variant=$variant&scenario=mixed" | grep -Fxq release-health-ok
+  tr -d '\r' < "$report/preflight-$variant.headers" | grep -Fixq "X-Epicrypt-Deployment: $variant"
 done
 (
   while true; do
     date -u +'%Y-%m-%dT%H:%M:%SZ'
     docker stats --no-stream --format '{{.Name}} {{.CPUPerc}} {{.MemUsage}} {{.PIDs}}' \
-      "$prefix-client" "$prefix-proxy" "$prefix-baseline" "$prefix-previous" "$prefix-candidate"
+      "$prefix-client" "$prefix-proxy" "$prefix-fpm"
   done
 ) > "$report/resources.log" 2>&1 &
 sampler=$!
 for mode in unbound borrowed; do
-  if [[ $mode == unbound ]]; then base=baseline; base_port=8081; bound=0; else base=previous; base_port=8082; bound=1; fi
-  base_pid=$(docker inspect --format '{{.State.Pid}}' "$prefix-$base")
-  candidate_pid=$(docker inspect --format '{{.State.Pid}}' "$prefix-candidate")
+  if [[ $mode == unbound ]]; then base=baseline; bound=0; else base=previous; bound=1; fi
+  shared_pid=$(docker inspect --format '{{.State.Pid}}' "$prefix-fpm")
   for concurrency in ${HOST_CONCURRENCIES:-1 4 8}; do
     # Readiness and warmup precede each measured comparison, including the borrowed path.
-    for port in "$base_port" 8083; do
+    for variant in "$base" candidate; do
       docker exec -e HOST_EXPECTED_BODY=release-health-ok "$prefix-client" wrk -t1 -c"$concurrency" -d"${HOST_WARMUP_DURATION:-60s}" \
-        -s /benchmarks/host-rpm-validate.lua "http://$prefix-proxy:$port/?scenario=mixed&bound=$bound" > "$report/warm-$mode-c$concurrency-$port.log"
+        -s /benchmarks/host-rpm-validate.lua "http://$prefix-proxy:8080/?variant=$variant&scenario=mixed&bound=$bound" > "$report/warm-$mode-c$concurrency-$variant.log"
     done
-    docker exec -e HOST_BASE_PID="$base_pid" -e HOST_CANDIDATE_PID="$candidate_pid" \
+    docker exec -e HOST_BASE_PID="$shared_pid" -e HOST_CANDIDATE_PID="$shared_pid" \
       -e HOST_ROUNDS="${HOST_ROUNDS:-3}" -e HOST_DURATION="${HOST_DURATION:-60s}" \
       -e HOST_THREADS=1 -e HOST_CONNECTIONS="$concurrency" -e HOST_EXPECTED_BODY=release-health-ok \
       -e HOST_MAX_RSS_KIB="${HOST_MAX_RSS_KIB:-262144}" -e HOST_REPORT="/report/$mode-c$concurrency.tsv" \
       "$prefix-client" bash /benchmarks/host-rpm-compare.sh \
-      "http://$prefix-proxy:$base_port/?scenario=mixed&bound=$bound" \
-      "http://$prefix-proxy:8083/?scenario=mixed&bound=$bound" | tee "$report/$mode-c$concurrency.log"
+      "http://$prefix-proxy:8080/?variant=$base&scenario=mixed&bound=$bound" \
+      "http://$prefix-proxy:8080/?variant=candidate&scenario=mixed&bound=$bound" | tee "$report/$mode-c$concurrency.log"
   done
 done
 docker run -d --name "$prefix-soak" --cpuset-cpus="${HOST_SOAK_CPUS:-6}" \
@@ -158,15 +157,15 @@ exit_code=$(docker wait "$prefix-soak")
 docker logs "$prefix-soak" > "$report/persistent-soak.json" 2>&1
 [[ $exit_code == 0 ]] && ((peak > 0 && peak <= ${HOST_MAX_RSS_KIB:-262144})) || { echo 'Persistent host soak/RSS guard failed' >&2; exit 1; }
 printf '%d\n' "$peak" > "$report/persistent-peak-rss-kib"
-old_pid=$(docker inspect --format '{{.State.Pid}}' "$prefix-candidate")
-docker restart "$prefix-candidate" >/dev/null
-new_pid=$(docker inspect --format '{{.State.Pid}}' "$prefix-candidate")
+old_pid=$(docker inspect --format '{{.State.Pid}}' "$prefix-fpm")
+docker restart "$prefix-fpm" >/dev/null
+new_pid=$(docker inspect --format '{{.State.Pid}}' "$prefix-fpm")
 [[ $new_pid != "$old_pid" ]] || { echo 'FPM replacement did not change host PID' >&2; exit 1; }
 for attempt in {1..30}; do
-  if docker exec "$prefix-client" curl -fsS "http://$prefix-proxy:8083/?scenario=mixed&bound=1" | grep -Fxq release-health-ok; then break; fi
+  if docker exec "$prefix-client" curl -fsS "http://$prefix-proxy:8080/?variant=candidate&scenario=mixed&bound=1" | grep -Fxq release-health-ok; then break; fi
   sleep 1
 done
-docker exec "$prefix-client" curl -fsS "http://$prefix-proxy:8083/?scenario=mixed&bound=1" | grep -Fxq release-health-ok
+docker exec "$prefix-client" curl -fsS "http://$prefix-proxy:8080/?variant=candidate&scenario=mixed&bound=1" | grep -Fxq release-health-ok
 printf '%s -> %s\n' "$old_pid" "$new_pid" > "$report/worker-replacement.txt"
-for variant in baseline previous candidate; do docker logs "$prefix-$variant" > "$report/$variant-fpm.log" 2>&1; done
+docker logs "$prefix-fpm" > "$report/fpm.log" 2>&1
 echo "Docker host evidence: $report"
