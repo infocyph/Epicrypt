@@ -91,9 +91,10 @@ docker run -d --name "$prefix-client" --network "$prefix" --pid=host --cpuset-cp
 docker image inspect "$php_image" "$tools_image" > "$report/images.json"
 docker exec "$prefix-fpm" php -i > "$report/php-profile.txt"
 docker info > "$report/docker-profile.txt"
-printf 'FPM_CPUS=%s\nPROXY_CPUS=%s\nCLIENT_CPUS=%s\nSOAK_CPUS=%s\nWARMUP=%s\n' \
+printf 'FPM_CPUS=%s\nPROXY_CPUS=%s\nCLIENT_CPUS=%s\nSOAK_CPUS=%s\nWARMUP=%s\nMODES=%s\nCONCURRENCIES=%s\n' \
   "${HOST_FPM_CPUS:-2,3}" "${HOST_PROXY_CPUS:-0}" "${HOST_CLIENT_CPUS:-1}" "${HOST_SOAK_CPUS:-6}" \
-  "${HOST_WARMUP_DURATION:-60s}" > "$report/deployment-profile.txt"
+  "${HOST_WARMUP_DURATION:-60s}" "${HOST_MODES:-unbound borrowed}" \
+  "${HOST_CONCURRENCIES:-1 4 8}" > "$report/deployment-profile.txt"
 printf 'FPM_POOL=shared\nFPM_WORKERS=4\n' >> "$report/deployment-profile.txt"
 lscpu >> "$report/deployment-profile.txt"
 taskset -pc $$ >> "$report/deployment-profile.txt"
@@ -118,8 +119,12 @@ done
   done
 ) > "$report/resources.log" 2>&1 &
 sampler=$!
-for mode in unbound borrowed; do
-  if [[ $mode == unbound ]]; then base=baseline; bound=0; else base=previous; bound=1; fi
+for mode in ${HOST_MODES:-unbound borrowed}; do
+  case "$mode" in
+    unbound) base=baseline; bound=0 ;;
+    borrowed) base=previous; bound=1 ;;
+    *) echo "Unsupported HOST_MODES value: $mode" >&2; exit 2 ;;
+  esac
   shared_pid=$(docker inspect --format '{{.State.Pid}}' "$prefix-fpm")
   for concurrency in ${HOST_CONCURRENCIES:-1 4 8}; do
     # Readiness and warmup precede each measured comparison, including the borrowed path.

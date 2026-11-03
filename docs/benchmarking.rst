@@ -197,6 +197,13 @@ followed by the persistent-process soak and worker replacement checks.
 This identical-code comparison helps distinguish deployment or measurement
 bias from a library regression; its result does not replace the complete
 candidate comparison against the preceding release.
+CI schedules each mode/concurrency comparison independently, with the full
+soak and replacement checks in every job, so rejected cases can be retried
+without repeating qualified cases. Compare each baseline/candidate pair
+within its recorded deployment; absolute throughput across separate CI hosts
+does not define a single-host concurrency curve. The local default still
+runs every mode and concurrency on one deployment. ``HOST_MODES`` selects
+``unbound`` or ``borrowed``; ``HOST_CONCURRENCIES`` selects concurrency values.
 On revision 45a0557, separate FPM pools reported a -2.527% regression for
 identical source while the release comparison reported -2.185%. Those failed
 measurements are retained. Sharing the worker pool removes differences in

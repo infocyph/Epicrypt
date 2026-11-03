@@ -95,7 +95,7 @@ jobs:
 
   docker-host-acceptance:
     if: github.event_name == 'pull_request'
-    name: "Matched Alpine FPM RPM and persistent-host acceptance (${{ matrix.profile }})"
+    name: "Matched Alpine FPM acceptance (${{ matrix.profile }}, ${{ matrix.mode }}, c${{ matrix.concurrency }})"
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 80
     permissions:
@@ -104,6 +104,13 @@ jobs:
       fail-fast: false
       matrix:
         profile: [candidate, control]
+        mode: [unbound, borrowed]
+        concurrency: [1, 4, 8]
+        exclude:
+          - profile: control
+            concurrency: 4
+          - profile: control
+            concurrency: 8
     steps:
       - uses: actions/checkout@v7
         with:
@@ -133,13 +140,14 @@ jobs:
           HOST_DURATION: "60s"
           HOST_BASELINE_REF: ${{ matrix.profile == 'control' && github.event.pull_request.head.sha || '3.2' }}
           HOST_BORROWED_BASELINE_REF: ${{ matrix.profile == 'control' && github.event.pull_request.head.sha || '3.2' }}
-          HOST_CONCURRENCIES: ${{ matrix.profile == 'control' && '1' || '1 4 8' }}
+          HOST_MODES: ${{ matrix.mode }}
+          HOST_CONCURRENCIES: ${{ matrix.concurrency }}
         run: taskset -c 0,1 bash benchmarks/docker-host-acceptance.sh
       - name: Preserve raw measurements and deployment configuration
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: docker-host-acceptance-${{ matrix.profile }}
+          name: docker-host-acceptance-${{ matrix.profile }}-${{ matrix.mode }}-c${{ matrix.concurrency }}
           path: var/docker-host-acceptance/
           if-no-files-found: error
 
