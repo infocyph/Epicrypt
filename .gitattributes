@@ -1,5 +1,6 @@
 .github export-ignore
 .agents export-ignore
+.aws export-ignore
 .codex export-ignore
 .idea export-ignore
 .psalm-cache export-ignore
@@ -9,7 +10,9 @@
 benchmarks export-ignore
 docs export-ignore
 examples export-ignore
+graphify-out export-ignore
 node_modules export-ignore
+phpforge export-ignore
 tests export-ignore
 vendor export-ignore
 var export-ignore

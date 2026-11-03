@@ -142,15 +142,18 @@ BusyBox memory units are unsuitable for the RSS guard. Image identities
 and runtime configuration are retained with every report.
 
 The fixture installs one identical production dependency set, including
-host-owned Runwire 2.1.1 and Nyholm PSR-7. It deploys four static FPM workers
-per variant with identical OPcache settings, warms each variant for 60 seconds, then runs
+host-owned Runwire ^3.0 and Nyholm PSR-7. All variants use the same four static
+FPM workers, OPcache configuration, tmpfs and network endpoint. Nginx selects
+the variant's immutable source/dependency tree through an explicit map;
+preflight checks verify the deployment header returned by that tree.
+The fixture warms each variant for 60 seconds, then runs
 three alternating 60-second trials at concurrency 1, 4 and 8. CPU affinity
 separates FPM (cores 2,3), the proxy (core 0) and the load generator (core 1);
 override ``HOST_FPM_CPUS``, ``HOST_PROXY_CPUS`` and ``HOST_CLIENT_CPUS`` for
 the host's available CPU set. ``HOST_PHP_IMAGE`` selects an alternative FPM
 image; ``HOST_TOOLS_IMAGE`` reuses a prepared measurement image. Overrides
 define a separate deployment profile and must be recorded with its evidence.
-Temporary file outputs use an identical bounded 128 MiB tmpfs per variant;
+Temporary file outputs use the same bounded 128 MiB tmpfs;
 request access logs are disabled while error logs remain available. This
 profile measures a Docker deployment with ephemeral memory-backed staging,
 and does not certify disk or external storage throughput.
@@ -159,13 +162,24 @@ Each response validates a 64 KiB-class atomic file-protection round trip,
 integrity, JWT verification, and a JWKS cache miss and hit through an in-memory
 PSR-18 fixture. Borrowed calls also verify cancellation and request ownership.
 This measures Epicrypt's remote boundary overhead, not external network latency.
-Unbound calls compare against tag 3.1; borrowed calls compare against the
-pre-remediation Runwire implementation at ``1b034ec``. Every measured response
+Both unbound and borrowed calls compare against the preceding published
+release, tag 3.2, for the Epicrypt 3.3 candidate. ``HOST_BASELINE_REF`` selects
+the unbound reference; ``HOST_BORROWED_BASELINE_REF`` defaults to that same
+reference. Values are locally available Git revision strings (tags, branches
+or commit IDs); unset or empty values use those defaults. Both are validated
+and resolved once to immutable commit IDs before dependency installation and
+recorded in the report; an invalid revision fails the run. To reproduce the historical 3.2 audit, select
+``HOST_BASELINE_REF=3.1 HOST_BORROWED_BASELINE_REF=1b034ec``. Every measured response
 must exactly match the independently defined result. The unchanged 2% median
 RPM and 256 MiB process-tree RSS budgets apply. Evidence includes raw trials,
 latencies, image identities, PHP configuration, the host dependency lock,
 and the public EC key/JWKS shared by the three variants within that run.
 The comparator rejects trial spreads above 5% before evaluating the RPM budget.
+For each round, it divides candidate successful RPM by the matched baseline
+successful RPM. The median of these paired ratios must be at least 0.98.
+Individual deployment medians remain in the report as diagnostics. Pairing
+preserves the alternating measurement design: independent medians can confuse
+temporal drift with a regression, or mask a real paired regression.
 The same fixture runs independently in CI and preserves its raw evidence as
 an artifact; the Docker-authorized host remains the production-equivalent
 acceptance environment.
@@ -175,6 +189,33 @@ and Docker daemon threads to CPUs 0,1, separating them from FPM CPUs 2,3.
 This changes only the ephemeral CI runner; the local script never changes host
 daemon affinity. Interpret each deployment's
 baseline/candidate comparison within its recorded architecture and CPU profile.
+
+CI also runs a control deployment at concurrency 1 in both execution modes,
+using the candidate commit as both references. It retains the same warmup,
+trial lengths, trial counts, correctness, RPM, variance and resource limits,
+followed by the persistent-process soak and worker replacement checks.
+This identical-code comparison helps distinguish deployment or measurement
+bias from a library regression; its result does not replace the complete
+candidate comparison against the preceding release.
+CI schedules each mode/concurrency comparison independently, with the full
+soak and replacement checks in every job, so rejected cases can be retried
+without repeating qualified cases. Compare each baseline/candidate pair
+within its recorded deployment; absolute throughput across separate CI hosts
+does not define a single-host concurrency curve. The local default still
+runs every mode and concurrency on one deployment. ``HOST_MODES`` selects
+``unbound`` or ``borrowed``; ``HOST_CONCURRENCIES`` selects concurrency values.
+On revision 45a0557, separate FPM pools reported a -2.527% regression for
+identical source while the release comparison reported -2.185%. Those failed
+measurements are retained. Sharing the worker pool removes differences in
+worker placement, network destination and temporary filesystem between
+variants. The pool change retained the comparator and every acceptance budget.
+The shared-pool control retry on that revision's successor, 2cf0d90, then
+exposed the independent-median error: matched changes of +0.378%, -0.345%
+and -3.304% produced a false -2.657% independent-median result. Their paired
+median is -0.345%. Deterministic regressions retain this observed drift case,
+reject a real loss masked by independent medians, accept the exact 2% boundary,
+and reject a 2.001% loss. The 2% limit, 5% spread guard, trial counts,
+durations and resource limits are unchanged.
 
 For a sustained persistent-process check, set
 ``EPICRYPT_HOST_SOAK_SECONDS=300`` when running

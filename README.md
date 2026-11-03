@@ -37,14 +37,14 @@ composer require infocyph/epicrypt
 - PHP `>=8.4`
 - `ext-sodium`, `ext-openssl`, `ext-json`, `ext-hash`
 
-Runwire is optional. Install `infocyph/runwire:2.1.1` only when forwarding a
+Runwire is optional. Install `infocyph/runwire:^3.0` only when forwarding a
 host-owned runtime, request and active scope into Epicrypt operations. The
 [Runwire integration guide](https://docs.infocyph.com/projects/Epicrypt/runwire-integration.html)
-covers explicit context forwarding and cancellation. Pathwise 4.2 is used
+covers explicit context forwarding and cancellation. Pathwise 4.2.1 is used
 for development interoperability tests and is not a production dependency.
 
-See the [3.2.0 release notes](https://docs.infocyph.com/projects/Epicrypt/release-notes-3.2.0.html)
-for security acceptance changes and the JWKS cache namespace transition.
+See the [3.3.0 release notes](https://docs.infocyph.com/projects/Epicrypt/release-notes-3.3.0.html)
+for Runwire 3 support, dependency minimums and resolver cancellation hardening.
 
 ## Usage Examples
 

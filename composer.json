@@ -19,24 +19,21 @@
         "ext-json": "*",
         "ext-openssl": "*",
         "ext-sodium": "*",
-        "phpseclib/phpseclib": "^4.0.1",
+        "phpseclib/phpseclib": "^4.0.3",
         "psr/clock": "^1.0",
         "psr/http-client": "^1.0",
-        "psr/http-factory": "^1.0",
+        "psr/http-factory": "^1.1",
         "psr/simple-cache": "^3.0"
     },
     "require-dev": {
-        "infocyph/pathwise": "^4.2",
+        "infocyph/pathwise": "^4.2.1",
         "infocyph/phpforge": "dev-main@dev",
-        "infocyph/runwire": "2.1.1",
-        "nyholm/psr7": "^1.8",
-        "php-http/mock-client": "^1.6"
-    },
-    "conflict": {
-        "infocyph/runwire": "<2.1.1 || >=2.2.0"
+        "infocyph/runwire": "^3.0",
+        "nyholm/psr7": "^1.8.2",
+        "php-http/mock-client": "^1.6.1"
     },
     "suggest": {
-        "infocyph/runwire": "2.1.1: Optional borrowed runtime cancellation and coroutine checkpoints for stream and remote JOSE operations."
+        "infocyph/runwire": "^3.0: Optional borrowed runtime cancellation and coroutine checkpoints for stream and remote JOSE operations."
     },
     "minimum-stability": "stable",
     "prefer-stable": true,

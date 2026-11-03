@@ -111,14 +111,20 @@ done
 awk -F '\t' 'NR>1 { if (!($1 in low) || $3<low[$1]) low[$1]=$3; if ($3>high[$1]) high[$1]=$3 }
   END { for (v in low) { if (low[v]<=0 || high[v]/low[v]>1.05) { print "FAIL: unstable trial spread (>5%):",v; exit 1 } } }' "$report"
 median() {
-  awk -F '\t' -v kind="$1" 'NR>1 && $1==kind {print $3}' "$report" |
-    sort -n | awk '{a[NR]=$1} END {if(NR%2) print a[(NR+1)/2]; else print (a[NR/2]+a[NR/2+1])/2}'
+  sort -n | awk '{a[NR]=$1} END {if(NR%2) printf "%.12f\n", a[(NR+1)/2]; else printf "%.12f\n", (a[NR/2]+a[NR/2+1])/2}'
 }
-base=$(median baseline)
-candidate=$(median candidate)
-awk -v a="$base" -v b="$candidate" 'BEGIN {
-  if(a<=0 || b<=0) exit 2
-  printf "Baseline median successful RPM: %.2f\nCandidate median successful RPM: %.2f\nRegression: %+.3f%%\n",a,b,(b/a-1)*100
-  if(b<a*0.98) {print "FAIL: >2% median successful-RPM regression"; exit 1}
+base=$(awk -F '\t' 'NR>1 && $1=="baseline" {print $3}' "$report" | median)
+candidate=$(awk -F '\t' 'NR>1 && $1=="candidate" {print $3}' "$report" | median)
+# Retain the matching established by each alternating trial pair. Taking
+# independent medians can turn temporal drift into a false code regression.
+paired_ratio=$(awk -F '\t' 'NR>1 {rpm[$2,$1]=$3; rounds[$2]=1}
+  END {for (r in rounds) {
+    if (rpm[r,"baseline"]<=0 || rpm[r,"candidate"]<=0) exit 2
+    printf "%.12f\n", rpm[r,"candidate"]/rpm[r,"baseline"]
+  }}' "$report" | median)
+awk -v a="$base" -v b="$candidate" -v ratio="$paired_ratio" 'BEGIN {
+  if(a<=0 || b<=0 || ratio<=0) exit 2
+  printf "Baseline median successful RPM: %.2f\nCandidate median successful RPM: %.2f\nPaired median RPM ratio: %.9f\nRegression: %+.3f%%\n",a,b,ratio,(ratio-1)*100
+  if(ratio<0.98) {print "FAIL: >2% median successful-RPM regression"; exit 1}
   print "PASS: <=2% median successful-RPM regression (check measured variance and host equivalence)"
 }'

@@ -7,6 +7,7 @@ namespace Infocyph\Epicrypt\Token\Jwt\Support;
 use Infocyph\Epicrypt\Exception\Token\KeyResolutionException;
 use Infocyph\Epicrypt\Integration\Runwire\RunwireExecutionContext;
 use Infocyph\Epicrypt\Token\Jwt\RemoteJoseHostResolverInterface;
+use Infocyph\Runwire\Exception\CancelledException;
 use Psr\Http\Client\ClientExceptionInterface;
 use Psr\Http\Client\ClientInterface;
 use Psr\Http\Message\RequestFactoryInterface;
@@ -73,6 +74,8 @@ final readonly class RemoteJoseResource
             $addresses = filter_var($host, FILTER_VALIDATE_IP) !== false
                 ? [$host]
                 : $this->hostResolver->resolve($host);
+        } catch (CancelledException $exception) {
+            throw $exception;
         } catch (Throwable $exception) {
             throw new KeyResolutionException('Remote JOSE host resolution failed.', 0, $exception);
         }

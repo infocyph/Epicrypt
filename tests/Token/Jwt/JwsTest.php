@@ -95,3 +95,35 @@ it('rejects invalid RFC 7797 header combinations and periods in embedded unencod
         ->and(fn () => $signer->signCompact('payload', ['crit' => ['unknown']]))
         ->toThrow(ConfigurationException::class);
 });
+
+it('rejects JWS EC keys whose curve does not match the selected algorithm', function (string $curve, AsymmetricJwtAlgorithm $algorithm) {
+    $key = openssl_pkey_new(['private_key_type' => OPENSSL_KEYTYPE_EC, 'curve_name' => $curve]);
+    openssl_pkey_export($key, $private);
+    $public = openssl_pkey_get_details($key)['key'];
+
+    expect(fn () => Jws::signer($private, $algorithm))->toThrow(ConfigurationException::class)
+        ->and(fn () => Jws::verifier($public, $algorithm))->toThrow(ConfigurationException::class);
+})->with([
+    'P-256 with ES384' => ['prime256v1', AsymmetricJwtAlgorithm::ES384],
+    'P-256 with ES512' => ['prime256v1', AsymmetricJwtAlgorithm::ES512],
+    'P-384 with ES256' => ['secp384r1', AsymmetricJwtAlgorithm::ES256],
+    'P-384 with ES512' => ['secp384r1', AsymmetricJwtAlgorithm::ES512],
+    'P-521 with ES256' => ['secp521r1', AsymmetricJwtAlgorithm::ES256],
+    'P-521 with ES384' => ['secp521r1', AsymmetricJwtAlgorithm::ES384],
+    'secp256k1 with ES256' => ['secp256k1', AsymmetricJwtAlgorithm::ES256],
+]);
+
+it('round trips JWS with each matching JOSE EC curve', function (string $curve, AsymmetricJwtAlgorithm $algorithm) {
+    $key = openssl_pkey_new(['private_key_type' => OPENSSL_KEYTYPE_EC, 'curve_name' => $curve]);
+    openssl_pkey_export($key, $private);
+    $public = openssl_pkey_get_details($key)['key'];
+    $signer = Jws::signer($private, $algorithm);
+    $verifier = Jws::verifier($public, $algorithm);
+
+    expect($verifier->verifyCompact($signer->signCompact('curve-bound payload')))->toBeTrue()
+        ->and($verifier->verifyCompact($signer->signCompact('curve-bound payload', detached: true), 'altered payload'))->toBeFalse();
+})->with([
+    'P-256 with ES256' => ['prime256v1', AsymmetricJwtAlgorithm::ES256],
+    'P-384 with ES384' => ['secp384r1', AsymmetricJwtAlgorithm::ES384],
+    'P-521 with ES512' => ['secp521r1', AsymmetricJwtAlgorithm::ES512],
+]);

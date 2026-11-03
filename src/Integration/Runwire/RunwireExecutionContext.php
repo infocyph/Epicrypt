@@ -14,7 +14,7 @@ use LogicException;
 use WeakMap;
 
 /**
- * Borrows caller-owned Runwire 2.1.1 execution state.
+ * Borrows caller-owned Runwire 3 execution state.
  *
  * No runtime or task is started, owned or completed by Epicrypt.
  */

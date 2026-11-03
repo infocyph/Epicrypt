@@ -95,11 +95,22 @@ jobs:
 
   docker-host-acceptance:
     if: github.event_name == 'pull_request'
-    name: "Matched Alpine FPM RPM and persistent-host acceptance"
+    name: "Matched Alpine FPM acceptance (${{ matrix.profile }}, ${{ matrix.mode }}, c${{ matrix.concurrency }})"
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 80
     permissions:
       contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        profile: [candidate, control]
+        mode: [unbound, borrowed]
+        concurrency: [1, 4, 8]
+        exclude:
+          - profile: control
+            concurrency: 4
+          - profile: control
+            concurrency: 8
     steps:
       - uses: actions/checkout@v7
         with:
@@ -127,12 +138,16 @@ jobs:
         env:
           HOST_SOAK_CPUS: "2"
           HOST_DURATION: "60s"
+          HOST_BASELINE_REF: ${{ matrix.profile == 'control' && github.event.pull_request.head.sha || '3.2' }}
+          HOST_BORROWED_BASELINE_REF: ${{ matrix.profile == 'control' && github.event.pull_request.head.sha || '3.2' }}
+          HOST_MODES: ${{ matrix.mode }}
+          HOST_CONCURRENCIES: ${{ matrix.concurrency }}
         run: taskset -c 0,1 bash benchmarks/docker-host-acceptance.sh
       - name: Preserve raw measurements and deployment configuration
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: docker-host-acceptance
+          name: docker-host-acceptance-${{ matrix.profile }}-${{ matrix.mode }}-c${{ matrix.concurrency }}
           path: var/docker-host-acceptance/
           if-no-files-found: error
 
@@ -223,8 +238,10 @@ jobs:
           fail-fast: true
       - uses: actions/setup-node@v7
         with:
-          node-version: "26.11.1"
+          node-version: "26.13.0"
           cache: npm
+      - name: Install the pinned npm release
+        run: npm install --global npm@12.2.1 --ignore-scripts
       - name: Install PHP dependencies
         run: composer install --no-interaction --no-progress --prefer-dist
       - name: Install and audit the independent JOSE implementation
@@ -256,8 +273,10 @@ jobs:
           fail-fast: true
       - uses: actions/setup-node@v7
         with:
-          node-version: "26.11.1"
+          node-version: "26.13.0"
           cache: npm
+      - name: Install the pinned npm release
+        run: npm install --global npm@12.2.1 --ignore-scripts
       - name: Install PHP dependencies
         run: composer install --no-interaction --no-progress --prefer-dist
       - name: Install and audit the independent JOSE implementation
@@ -385,7 +404,7 @@ jobs:
           - shard: jwe
             classes: 'Infocyph\Epicrypt\Token\Jwt\Jwe'
           - shard: jws
-            classes: 'Infocyph\Epicrypt\Token\Jwt\Jws,Infocyph\Epicrypt\Token\Jwt\Support\JosePolicy,Infocyph\Epicrypt\Token\Jwt\Support\JwtToken'
+            classes: 'Infocyph\Epicrypt\Token\Jwt\Jws,Infocyph\Epicrypt\Token\Jwt\Support\JosePolicy,Infocyph\Epicrypt\Token\Jwt\Support\JwsSignature,Infocyph\Epicrypt\Token\Jwt\Support\JwtToken'
           - shard: validation-policy
             classes: 'Infocyph\Epicrypt\Password\PasswordHasher,Infocyph\Epicrypt\Token\Jwt\JwtValidator,Infocyph\Epicrypt\Security\AsymmetricSigningKeySet,Infocyph\Epicrypt\Security\KeyRing'
           - shard: jwt-policy
@@ -438,6 +457,13 @@ jobs:
             -e "s#<directory suffix=\".php\">./src</directory>#<directory suffix=\".php\">$GITHUB_WORKSPACE/src</directory>#" \
             vendor/infocyph/phpforge/resources/pest.xml > "$RUNNER_TEMP/pest-mutation.xml"
       - name: Enforce the measured mutation-score floor
-        run: >-
-          vendor/bin/pest --configuration="${{ runner.temp }}/pest-mutation.xml" --cache-directory="${{ runner.temp }}/pest-cache" --mutate --parallel --processes=4 --min=66
-          --class="${{ matrix.classes }}"
+        shell: bash
+        run: |
+          umask 077
+          mutation_tmp=$(mktemp -d "$RUNNER_TEMP/epicrypt-mutate.XXXXXX")
+          trap 'rm -rf "$mutation_tmp"' EXIT
+          TMPDIR="$mutation_tmp" vendor/bin/pest \
+            --configuration="${{ runner.temp }}/pest-mutation.xml" \
+            --cache-directory="${{ runner.temp }}/pest-cache" \
+            --mutate --parallel --processes=4 --min=66 \
+            --class="${{ matrix.classes }}"
