@@ -48,7 +48,33 @@ Applications opting into Runwire should install ^3.0 and follow
 that every Runwire major is certified. Applications using the synchronous
 APIs require no Runwire installation.
 
-The audit and outstanding release checks are recorded in
-``docs/plans/epicrypt-3.3-release-audit-plan.md``. Local results do not certify
-the final committed CI matrix or deployment performance. Merge, tag and
-publication remain maintainer actions.
+Validation record
+------------------
+
+The candidate passed
+`Security & Standards <https://github.com/infocyph/Epicrypt/actions/runs/41561827326>`_
+and `Documentation <https://github.com/infocyph/Epicrypt/actions/runs/41561827066>`_.
+The security matrix recorded 43 successful jobs and two expected conditional
+skips: tag-only publication and the optional Security Report. This snapshot
+certifies that revision; later changes require their own validation.
+
+* PHPForge processing, detailed QA and the release guard passed. Local
+  PHP 8.5.4 ran 401 tests with 1,802 assertions; PHP 8.4.26 with libsodium
+  1.0.22 ran 401 tests with 1,815 assertions, including positive AEGIS coverage.
+  PHP 8.4/8.5 stable and lowest dependencies, all 15 security mutation shards,
+  Windows publication, strict Sphinx and independent interoperability passed
+  in CI. Configured analysis, mutation and style limits remain enforced.
+* The Composer archive contained 297 entries, including all 291 tracked
+  runtime files. Its SHA-256 was
+  ``1f3c00b6f3357db3fb940ff1ae14f6c6cf8e521b56ac905b596922bd37cb1ac6``.
+  An isolated production-only consumer passed platform, core and RSA-PSS
+  smoke checks without optional Runwire, Pathwise or Ctype. Production audit
+  reported zero advisories and zero abandoned packages. Development-only
+  PHPBench/PHPForge dependency abandonment remains an upstream maintenance item.
+* All six matched release comparisons and both identical-code controls passed
+  the unchanged 2% paired median RPM loss, 5% trial spread and 256 MiB
+  process-tree RSS limits. Every case completed its 300-second persistent
+  soak and real FPM replacement. Together, the eight soaks verified 29,417,032
+  isolated requests; maximum FPM process-tree RSS was 114,040 KiB and maximum
+  persistent-process RSS was 19,688 KiB. Invalid noisy attempts were retained
+  separately and excluded from qualified throughput claims.
